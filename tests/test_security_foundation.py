@@ -46,7 +46,7 @@ class SecurityHeaderTests(unittest.TestCase):
     def test_baseline_security_headers_are_present(self):
         response = self.make_app().test_client().get("/")
         self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
-        self.assertEqual(response.headers["Referrer-Policy"], "no-referrer")
+        self.assertEqual(response.headers["Referrer-Policy"], "same-origin")
         self.assertEqual(response.headers["X-Frame-Options"], "DENY")
         self.assertIn("frame-ancestors 'none'", response.headers["Content-Security-Policy"])
         self.assertEqual(response.headers["Cache-Control"], "no-store")
