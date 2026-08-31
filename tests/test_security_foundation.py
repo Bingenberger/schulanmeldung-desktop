@@ -2,8 +2,9 @@ import os
 import unittest
 from unittest.mock import patch
 
-from flask import Flask
+from flask import Flask, request, url_for
 
+from app import create_app
 from config import load_config
 from security import init_security
 
@@ -56,6 +57,40 @@ class SecurityHeaderTests(unittest.TestCase):
         with patch.dict(os.environ, environment, clear=True):
             response = self.make_app("production").test_client().get("/")
         self.assertIn("max-age=31536000", response.headers["Strict-Transport-Security"])
+
+
+class ProxyHeaderTests(unittest.TestCase):
+    """Hinter nginx müssen Schema, Host und Client-Adresse durchgereicht werden.
+
+    Ohne das baut ``url_for(_external=True)`` die Aktivierungslinks der
+    Elternbriefe als http:// mit dem internen Hostnamen -- und mit dem
+    falschen Vertrauen könnte ein Client sie sich selbst ausdenken.
+    """
+
+    HEADERS = {
+        "X-Forwarded-Proto": "https",
+        "X-Forwarded-Host": "anmeldung.example.de",
+        "X-Forwarded-For": "203.0.113.7",
+    }
+
+    def _probe(self, proxies):
+        app = create_app("testing", {"TRUSTED_PROXIES": proxies})
+
+        @app.get("/__probe")
+        def probe():
+            return f"{url_for('parent_portal.start', _external=True)} {request.remote_addr}"
+
+        return app.test_client().get("/__probe", headers=self.HEADERS).get_data(as_text=True)
+
+    def test_behind_a_proxy_the_forwarded_scheme_and_host_are_used(self):
+        result = self._probe(1)
+        self.assertIn("https://anmeldung.example.de/eltern/", result)
+        self.assertIn("203.0.113.7", result)
+
+    def test_without_a_proxy_the_headers_are_ignored(self):
+        result = self._probe(0)
+        self.assertNotIn("anmeldung.example.de", result)
+        self.assertNotIn("203.0.113.7", result)
 
 
 if __name__ == "__main__":
