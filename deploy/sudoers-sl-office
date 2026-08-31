@@ -1,0 +1,7 @@
+# Erlaubt dem Anwendungsbenutzer, genau diesen einen Dienst neu zu starten --
+# nötig für das Git-Deployment, ohne dem Benutzer weitere Rechte zu geben.
+#
+# Einspielen mit (die Prüfung verhindert eine kaputte sudoers-Datei):
+#   sudo visudo -c -f deploy/sudoers-sl-office
+#   sudo install -m 0440 deploy/sudoers-sl-office /etc/sudoers.d/sl-office
+emrichschule ALL=(root) NOPASSWD: /usr/bin/systemctl restart sl-office, /usr/bin/systemctl status sl-office, /usr/bin/systemctl is-active sl-office

@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>Anmeldung: {{ student.vorname }} {{ student.nachname }}</h1>
+<form method="post" class="mb-4"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label class="form-label">Bearbeitungsstatus</label><div class="input-group" style="max-width: 30rem"><select class="form-select" name="status">{% for value, label in [('draft','Entwurf'),('submitted','Übermittelt'),('in_review','In Prüfung'),('completed','Abgeschlossen')] %}<option value="{{ value }}" {% if registration.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><button class="btn btn-primary">Speichern</button></div></form>
+<h2 class="h5">Übermittelte Angaben (Version {{ registration.version }})</h2>
+{% for block_step, entries in summary %}
+<h3 class="h6 mt-3">{{ block_step.title }}</h3>
+<dl class="row mb-0">
+  {% for entry_field, entry_value in entries %}
+  <dt class="col-sm-4 fw-normal text-muted">{{ entry_field.label }}</dt>
+  <dd class="col-sm-8">{{ entry_value }}</dd>
+  {% endfor %}
+</dl>
+{% else %}
+<p class="text-muted">Es wurden noch keine Angaben gemacht.</p>
+{% endfor %}
+<a href="{{ url_for('admin.registrations') }}">Zur Übersicht</a>
+{% endblock %}

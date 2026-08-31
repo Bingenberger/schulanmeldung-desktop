@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+{# ===== MAKRO: Schüler-Karte ===== #}
+{% macro render_card(s, current_klasse) %}
+{% set diag = s.diagnostik %}
+{% set arzt = s.schularzt_untersuchung %}
+{% set spiel = s.schulspiel_diagnostik %}
+
+{% if s.geschlecht == 'm' %}{% set bg = '#ddeeff' %}
+{% elif s.geschlecht == 'w' %}{% set bg = '#ffdded' %}
+{% elif s.geschlecht == 'd' %}{% set bg = '#ddffd5' %}
+{% else %}{% set bg = '#f5f5f5' %}
+{% endif %}
+
+{% set SCORE = {3: '++', 2: '+', 1: 'o', 0: '-'} %}
+{% set SCORE_CLS = {3: 'success', 2: 'success', 1: 'warning', 0: 'danger'} %}
+
+{# Freundschafts-Check #}
+{% set f1_ok = none %}
+{% set f1_neg_bad = false %}
+{% if s.freund1 %}
+  {% if s.freund1_negativ %}
+    {% if current_klasse != '' and s.freund1.klasse == current_klasse %}{% set f1_neg_bad = true %}{% endif %}
+  {% else %}
+    {% if current_klasse != '' and s.freund1.klasse == current_klasse %}{% set f1_ok = true %}{% else %}{% set f1_ok = false %}{% endif %}
+  {% endif %}
+{% endif %}
+{% set f2_ok = none %}
+{% set f2_neg_bad = false %}
+{% if s.freund2 %}
+  {% if s.freund2_negativ %}
+    {% if current_klasse != '' and s.freund2.klasse == current_klasse %}{% set f2_neg_bad = true %}{% endif %}
+  {% else %}
+    {% if current_klasse != '' and s.freund2.klasse == current_klasse %}{% set f2_ok = true %}{% else %}{% set f2_ok = false %}{% endif %}
+  {% endif %}
+{% endif %}
+
+<div class="schueler-card mb-1 p-1 rounded border" data-id="{{ s.id }}"
+     style="background:{{ bg }};cursor:grab;font-size:0.8rem;">
+  <div class="fw-bold text-truncate">{{ s.nachname }}, {{ s.vorname }}</div>
+  <div class="text-muted" style="font-size:0.7rem;">{{ s.geburtsdatum.strftime('%d.%m.%Y') if s.geburtsdatum else '' }}</div>
+
+  <div class="mt-1 d-flex flex-wrap gap-1">
+    {% if s.kann_kind %}<span class="badge bg-info text-dark" style="font-size:0.65rem;">Kann-K.</span>{% endif %}
+    {% if s.has_aosf_verdacht %}<span class="badge bg-warning text-dark" style="font-size:0.65rem;">AO-SF</span>{% endif %}
+    {% if s.has_rueckstellung_empfohlen %}<span class="badge bg-secondary" style="font-size:0.65rem;">Rückst.</span>{% endif %}
+    {% if s.betreuung == 'OGS' %}<span class="badge" style="background:#1a6e1a;color:#fff;font-size:0.65rem;">OGS</span>
+    {% elif s.betreuung == 'ÜMI' %}<span class="badge" style="background:#6a0dad;color:#fff;font-size:0.65rem;">ÜMI</span>
+    {% elif s.betreuung == 'Abholung' %}<span class="badge bg-light text-dark border" style="font-size:0.65rem;">Abh.</span>
+    {% else %}<span class="badge" style="background:#e0e0e0;color:#555;font-size:0.65rem;">?</span>{% endif %}
+  </div>
+
+  <div class="mt-1 d-flex gap-1" style="font-size:0.65rem;">
+    {% if diag %}
+    <span class="badge bg-{{ SCORE_CLS.get(diag.gesamteindruck_kognitiv, 'light') }} text-dark">K:{{ SCORE.get(diag.gesamteindruck_kognitiv, '?') }}</span>
+    <span class="badge bg-{{ SCORE_CLS.get(diag.gesamteindruck_verhalten, 'light') }} text-dark">V:{{ SCORE.get(diag.gesamteindruck_verhalten, '?') }}</span>
+    {% endif %}
+    {% if spiel %}
+    <span class="badge bg-{{ SCORE_CLS.get(spiel.gesamttendenz, 'light') }} text-dark">S:{{ SCORE.get(spiel.gesamttendenz, '?') }}</span>
+    {% endif %}
+    {% if arzt %}
+    <span class="badge bg-{{ SCORE_CLS.get(arzt.gesamteinschaetzung, 'light') }} text-dark">A:{{ SCORE.get(arzt.gesamteinschaetzung, '?') }}</span>
+    {% endif %}
+  </div>
+
+  {% if s.freund1 or s.freund2 %}
+  <div class="mt-1" style="font-size:0.65rem;">
+    {% if s.freund1 %}
+      {% if f1_neg_bad %}
+      <span class="badge" style="background:#ffc0c0;color:#000;">✗ {{ s.freund1.vorname[0] }}.{{ s.freund1.nachname[:6] }}</span>
+      {% elif f1_ok == true %}
+      <span class="badge" style="background:#c8f0c8;color:#000;">✓ {{ s.freund1.vorname[0] }}.{{ s.freund1.nachname[:6] }}</span>
+      {% elif f1_ok == false %}
+      <span class="badge" style="background:#ffd6a0;color:#000;">? {{ s.freund1.vorname[0] }}.{{ s.freund1.nachname[:6] }}</span>
+      {% endif %}
+    {% endif %}
+    {% if s.freund2 %}
+      {% if f2_neg_bad %}
+      <span class="badge" style="background:#ffc0c0;color:#000;">✗ {{ s.freund2.vorname[0] }}.{{ s.freund2.nachname[:6] }}</span>
+      {% elif f2_ok == true %}
+      <span class="badge" style="background:#c8f0c8;color:#000;">✓ {{ s.freund2.vorname[0] }}.{{ s.freund2.nachname[:6] }}</span>
+      {% elif f2_ok == false %}
+      <span class="badge" style="background:#ffd6a0;color:#000;">? {{ s.freund2.vorname[0] }}.{{ s.freund2.nachname[:6] }}</span>
+      {% endif %}
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if s.kita %}
+  <div class="text-muted text-truncate" style="font-size:0.65rem;">{{ s.kita }}</div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# ===== SEITEN-INHALT ===== #}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2><i class="bi bi-grid-3x3-gap-fill"></i> Klassenzusammensetzung</h2>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('export_klassenlisten') }}" class="btn btn-outline-success btn-sm">
+      <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+    </a>
+    <div class="dropdown">
+      <button class="btn btn-outline-danger btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+        <i class="bi bi-file-pdf"></i> Klassenmappe
+      </button>
+      <ul class="dropdown-menu">
+        <li><a class="dropdown-item" href="{{ url_for('export_klassenmappe') }}" target="_blank">Alle Klassen</a></li>
+        {% for k in klassen_namen %}
+        <li><a class="dropdown-item" href="{{ url_for('export_klassenmappe', klasse=k) }}" target="_blank">Klasse {{ k }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div id="save-indicator" class="alert alert-success d-none py-1 mb-2">
+  <i class="bi bi-check-circle"></i> Gespeichert
+</div>
+<div id="error-indicator" class="alert alert-danger d-none py-1 mb-2">
+  <i class="bi bi-x-circle"></i> Fehler beim Speichern
+</div>
+
+<!-- Legende -->
+<div class="d-flex flex-wrap gap-2 mb-3 small">
+  <span class="badge" style="background:#ddeeff;color:#000;border:1px solid #ccc;">Junge</span>
+  <span class="badge" style="background:#ffdded;color:#000;border:1px solid #ccc;">Mädchen</span>
+  <span class="badge" style="background:#ddffd5;color:#000;border:1px solid #ccc;">Divers</span>
+  <span class="badge bg-info text-dark">Kann-Kind</span>
+  <span class="badge bg-warning text-dark">AO-SF</span>
+  <span class="badge bg-secondary">Rückst.</span>
+  <span class="badge" style="background:#c8f0c8;color:#000;">✓ Freundschaftswunsch erfüllt</span>
+  <span class="badge" style="background:#ffd6a0;color:#000;">? Freund noch nicht zugeteilt</span>
+  <span class="badge" style="background:#ffc0c0;color:#000;">✗ Negativwunsch verletzt</span>
+  <span class="badge" style="background:#1a6e1a;color:#fff;">OGS</span>
+  <span class="badge" style="background:#6a0dad;color:#fff;">ÜMI</span>
+  <span class="badge bg-light text-dark border">Abh.</span>
+  <span class="badge" style="background:#e0e0e0;color:#555;">? = Betreuung unbekannt</span>
+  <small class="text-muted">K=Kognitiv V=Verhalten S=Schulspiel A=Arzt</small>
+</div>
+
+<!-- Kanban Board -->
+<div class="d-flex gap-2 pb-3" id="kanban-board" style="align-items: flex-start; overflow-x: auto;">
+
+  <!-- Nicht zugeteilt -->
+  <div class="kanban-col flex-shrink-0" style="width:200px;">
+    <div class="card shadow-sm">
+      <div class="card-header bg-secondary text-white p-2">
+        <div class="d-flex justify-content-between align-items-center">
+          <strong>Nicht zugeteilt</strong>
+          <span class="badge bg-light text-dark" id="stat-">{{ stats[''].gesamt }}</span>
+        </div>
+        <input type="search" id="unassigned-search" class="form-control form-control-sm mt-2"
+               placeholder="Name suchen…" autocomplete="off">
+      </div>
+      <div class="card-body p-1 kanban-list" id="col-" data-klasse=""
+           style="min-height:300px;max-height:75vh;overflow-y:auto;">
+        {% for s in gruppen[''] %}
+        {{ render_card(s, '') }}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Klassen-Spalten -->
+  {% for k in klassen_namen %}
+  <div class="kanban-col flex-shrink-0" style="width:200px;">
+    <div class="card shadow-sm">
+      <div class="card-header bg-primary text-white p-2">
+        <div class="d-flex justify-content-between align-items-center">
+          <strong>Klasse {{ k }}</strong>
+          <span class="badge bg-light text-dark" id="stat-{{ k }}">{{ stats[k].gesamt }}</span>
+        </div>
+        <div class="mt-1" style="font-size:0.72rem;">
+          &#9650; {{ stats[k].m }} &#9660; {{ stats[k].w }}
+          {% if stats[k].kann %} · <span class="text-warning">K:{{ stats[k].kann }}</span>{% endif %}
+          {% if stats[k].aosf %} · <span class="text-warning fw-bold">AO:{{ stats[k].aosf }}</span>{% endif %}
+          {% if stats[k].rst %} · <span class="text-warning fw-bold">R:{{ stats[k].rst }}</span>{% endif %}
+        </div>
+        <div class="mt-1" style="font-size:0.7rem;">
+          <span style="background:#1a6e1a;color:#fff;padding:1px 5px;border-radius:3px;">OGS {{ stats[k].ogs }}</span>
+          <span style="background:#6a0dad;color:#fff;padding:1px 5px;border-radius:3px;">ÜMI {{ stats[k].uemi }}</span>
+          <span style="background:#888;color:#fff;padding:1px 5px;border-radius:3px;">Abh. {{ stats[k].abholung }}</span>
+        </div>
+      </div>
+      <div class="card-body p-1 kanban-list" id="col-{{ k }}" data-klasse="{{ k }}"
+           style="min-height:300px;max-height:75vh;overflow-y:auto;">
+        {% for s in gruppen[k] %}
+        {{ render_card(s, k) }}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script>
+const saveEl = document.getElementById('save-indicator');
+const errEl  = document.getElementById('error-indicator');
+let saveTimer = null;
+
+function showSaved() {
+  saveEl.classList.remove('d-none');
+  errEl.classList.add('d-none');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => saveEl.classList.add('d-none'), 2000);
+}
+function showError() { errEl.classList.remove('d-none'); }
+
+async function assign(schuelerId, klasse) {
+  try {
+    const r = await fetch('/api/klassen/assign', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+      },
+      body: JSON.stringify({schueler_id: parseInt(schuelerId), klasse: klasse})
+    });
+    const data = await r.json();
+    if (data.ok) showSaved(); else showError();
+  } catch(e) { showError(); }
+}
+
+function updateColCount(col) {
+  const klasse = col.dataset.klasse;
+  const count = col.querySelectorAll('.schueler-card').length;
+  const badge = document.getElementById('stat-' + klasse);
+  if (badge) badge.textContent = count;
+}
+
+document.getElementById('unassigned-search').addEventListener('input', function() {
+  const q = this.value.trim().toLowerCase();
+  document.querySelectorAll('#col- .schueler-card').forEach(card => {
+    const name = card.querySelector('.fw-bold').textContent.toLowerCase();
+    card.style.display = (!q || name.includes(q)) ? '' : 'none';
+  });
+});
+
+document.querySelectorAll('.kanban-list').forEach(col => {
+  Sortable.create(col, {
+    group: 'klassen',
+    animation: 150,
+    ghostClass: 'sortable-ghost',
+    onEnd(evt) {
+      const card = evt.item;
+      const schuelerId = card.dataset.id;
+      const klasse = evt.to.dataset.klasse;
+      assign(schuelerId, klasse);
+      updateColCount(evt.from);
+      updateColCount(evt.to);
+    }
+  });
+});
+</script>
+
+<style>
+.sortable-ghost { opacity: 0.35; background: #b8d4ff !important; }
+.schueler-card:hover { box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+</style>
+{% endblock %}

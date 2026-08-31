@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Benutzerverwaltung</h2>
+<a href="{{ url_for('admin.add_user') }}" class="btn btn-success mb-3">
+  <i class="bi bi-person-plus"></i> Neuen Benutzer anlegen
+</a>
+
+<table class="table table-striped align-middle">
+  <thead>
+    <tr>
+      <th>Benutzername</th>
+      <th>Rolle</th>
+      <th>Zwei-Faktor</th>
+      <th>Zuletzt angemeldet</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for user in users %}
+    <tr>
+      <td>{{ user.username }}</td>
+      <td>{{ user.role }}</td>
+      <td>
+        {% if user.two_factor_active %}
+        <span class="badge bg-success"><i class="bi bi-shield-check"></i> aktiv</span>
+        {% else %}
+        <span class="badge bg-warning text-dark">noch nicht eingerichtet</span>
+        {% endif %}
+        {% if user.locked_until %}
+        <span class="badge bg-danger ms-1" title="Nach zu vielen Fehlversuchen gesperrt">gesperrt</span>
+        {% endif %}
+      </td>
+      <td class="small text-muted">
+        {{ user.last_login_at.strftime('%d.%m.%Y %H:%M') if user.last_login_at else '–' }}
+      </td>
+      <td class="text-end">
+        {% if user.two_factor_active or user.locked_until %}
+        <form method="post" action="{{ url_for('admin.reset_user_two_factor', user_id=user.id) }}"
+              onsubmit="return confirm('Zwei-Faktor-Anmeldung für {{ user.username }} zurücksetzen? Die Person richtet sie beim nächsten Login neu ein.')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-outline-danger">
+            <i class="bi bi-arrow-counterclockwise"></i> 2FA zurücksetzen
+          </button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="alert alert-info small">
+  <i class="bi bi-info-circle"></i> Zurücksetzen ist für den Fall gedacht, dass jemand sein Gerät
+  verliert und keine Notfallcodes mehr hat. Es hebt zugleich eine Sperre nach Fehlversuchen auf.
+</div>
+{% endblock %}

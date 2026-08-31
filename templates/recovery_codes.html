@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="card shadow-sm">
+      <div class="card-header bg-warning">
+        <h5 class="mb-0"><i class="bi bi-key"></i> Ihre Notfallcodes</h5>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-danger">
+          <strong>Diese Codes werden nur jetzt angezeigt.</strong> Sie lassen sich später nicht
+          erneut aufrufen — bitte ausdrucken oder sicher notieren.
+        </div>
+        <p class="text-muted small">
+          Jeder Code funktioniert genau einmal und ersetzt den Code aus der App, falls Sie
+          keinen Zugriff auf Ihr Gerät haben.
+        </p>
+        <div class="row row-cols-2 g-2 my-3">
+          {% for code in codes %}
+          <div class="col">
+            <div class="border rounded text-center py-2 font-monospace fs-6 bg-light">{{ code }}</div>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="d-flex gap-2 d-print-none">
+          <button class="btn btn-outline-secondary" onclick="window.print()">
+            <i class="bi bi-printer"></i> Drucken
+          </button>
+          <a class="btn btn-primary ms-auto" href="{{ url_for('index') }}">
+            Codes gesichert, weiter
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

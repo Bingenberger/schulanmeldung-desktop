@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block content %}
+<a href="{{ url_for('appointments.detail', event_id=event.id) }}" class="text-decoration-none">
+  <i class="bi bi-arrow-left"></i> Planer
+</a>
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-1 mb-3">
+  <h2 class="mb-0">Termine: {{ event.title }}</h2>
+  <a class="btn btn-outline-secondary" href="{{ url_for('appointments.bookings_calendar', event_id=event.id) }}">
+    <i class="bi bi-calendar-plus"></i> Alle Termine als ICS
+  </a>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-striped align-middle">
+    <thead>
+      <tr>
+        <th>Termin</th>
+        <th>Kind</th>
+        <th>Vergabe</th>
+        <th>Elternteil</th>
+        <th>E-Mail</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for booking, slot, student, access in rows %}
+      <tr {% if booking.status != 'confirmed' %}class="text-muted"{% endif %}>
+        <td>{{ slot_label(slot, event) }}</td>
+        <td>{{ student.nachname }}, {{ student.vorname }}</td>
+        <td>
+          {% if booking.source == 'staff' %}
+          <span class="badge bg-secondary"><i class="bi bi-person-badge"></i> zugewiesen</span>
+          {% else %}
+          <span class="badge bg-primary"><i class="bi bi-house-door"></i> selbst gebucht</span>
+          {% endif %}
+        </td>
+        <td>{{ access.display_name if access else '–' }}</td>
+        <td>{{ access.email_normalized if access else '–' }}</td>
+        <td>{{ booking.status }}</td>
+        <td class="text-end">
+          {% if booking.status == 'confirmed' %}
+          <form method="post" action="{{ url_for('appointments.cancel', booking_id=booking.id) }}"
+                onsubmit="return confirm('Termin für {{ student.vorname }} {{ student.nachname }} wirklich stornieren?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="next" value="{{ url_for('appointments.bookings', event_id=event.id) }}">
+            <button class="btn btn-sm btn-outline-danger">Stornieren</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="text-muted">Noch keine Termine vergeben.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

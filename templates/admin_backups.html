@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block content %}
+<h2 class="mb-3"><i class="bi bi-hdd-stack"></i> Datensicherung</h2>
+
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+
+<div class="row g-3 mb-4">
+  <div class="col-md-7">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5><i class="bi bi-archive"></i> Vollständige Sicherung</h5>
+        <p class="text-muted small">
+          Legt Datenbank <em>und</em> alle hochgeladenen Dokumente auf dem Server ab.
+          Das kann bei vielen Dokumenten einen Moment dauern.
+        </p>
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="create">
+          <button class="btn btn-primary"><i class="bi bi-play-circle"></i> Sicherung jetzt erstellen</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-5">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5><i class="bi bi-download"></i> Datenbank herunterladen</h5>
+        <p class="text-muted small">
+          Nur die Datenbank, klein und schnell — zum Mitnehmen auf einen Stick oder in
+          einen anderen Speicherort. Ohne die hochgeladenen Dokumente.
+        </p>
+        <a class="btn btn-outline-primary" href="{{ url_for('admin.download_database') }}">
+          <i class="bi bi-file-earmark-arrow-down"></i> Herunterladen
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h5>Vorhandene Sicherungen</h5>
+<div class="table-responsive">
+  <table class="table table-sm table-striped align-middle">
+    <thead><tr><th>Zeitpunkt</th><th>Umfang</th><th>Größe</th><th></th></tr></thead>
+    <tbody>
+      {% for entry in backups %}
+      <tr>
+        <td>{{ entry.created.strftime('%d.%m.%Y  %H:%M') }}</td>
+        <td class="small">
+          {% if entry.has_database %}<span class="badge bg-success">Datenbank</span>{% endif %}
+          {% if entry.has_uploads %}<span class="badge bg-info text-dark">Dokumente</span>
+          {% else %}<span class="badge bg-warning text-dark">ohne Dokumente</span>{% endif %}
+        </td>
+        <td>{{ human_size(entry.size) }}</td>
+        <td class="text-end">
+          <form method="post" onsubmit="return confirm('Sicherung vom {{ entry.created.strftime('%d.%m.%Y %H:%M') }} endgültig löschen?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="name" value="{{ entry.name }}">
+            <button class="btn btn-sm btn-outline-danger">Löschen</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="text-muted">Noch keine Sicherung vorhanden.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="alert alert-warning small mt-3">
+  <i class="bi bi-exclamation-triangle"></i>
+  Sicherungen liegen auf <strong>demselben Server</strong> wie die Anwendung. Bei einem
+  Plattenausfall oder Diebstahl wären sie mit weg — bitte regelmäßig zusätzlich die Datenbank
+  herunterladen und außerhalb ablegen.
+</div>
+{% endblock %}

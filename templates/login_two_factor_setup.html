@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="bi bi-shield-plus"></i> Zwei-Faktor-Anmeldung einrichten</h5>
+      </div>
+      <div class="card-body">
+        <p>
+          Diese Anwendung enthält sensible Daten und ist über das Netz erreichbar. Deshalb ist
+          neben dem Passwort ein zweiter Faktor nötig — ein Code, der sich alle 30 Sekunden ändert.
+        </p>
+
+        <div class="row g-4 align-items-start">
+          <div class="col-md-5 text-center">
+            <div class="border rounded p-2 d-inline-block bg-white">{{ qr_svg | safe }}</div>
+          </div>
+          <div class="col-md-7">
+            <h6>1. App installieren</h6>
+            <p class="small text-muted mb-3">
+              Zum Beispiel <strong>Aegis</strong> oder <strong>FreeOTP</strong> (Android),
+              <strong>Tofu</strong> (iPhone), oder ein Passwortmanager wie KeePassXC oder Bitwarden.
+              Es geht auch am Rechner — ein Smartphone ist nicht zwingend nötig.
+            </p>
+
+            <h6>2. QR-Code scannen</h6>
+            <p class="small text-muted mb-2">Falls das Scannen nicht möglich ist, den Schlüssel von Hand eintragen:</p>
+            <div class="input-group input-group-sm mb-3">
+              <input class="form-control font-monospace" value="{{ secret }}" readonly aria-label="Geheimer Schlüssel">
+            </div>
+
+            <h6>3. Code bestätigen</h6>
+            <form method="POST">
+              {{ form.hidden_tag() }}
+              <div class="input-group">
+                {{ form.code(class="form-control text-center", autocomplete="one-time-code",
+                             inputmode="numeric", placeholder="000000") }}
+                <button class="btn btn-primary">Abschließen</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="alert alert-warning mt-4 mb-0 small">
+          <i class="bi bi-exclamation-triangle"></i>
+          Nach dem Abschließen erhalten Sie <strong>Notfallcodes</strong>. Bewahren Sie diese
+          ausgedruckt auf — damit kommen Sie auch dann noch hinein, wenn das Gerät verloren geht.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

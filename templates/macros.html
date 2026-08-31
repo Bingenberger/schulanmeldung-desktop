@@ -1,0 +1,13 @@
+{% macro render_score(score) %}
+{% if score == 3 %}
+<span class="badge bg-success" title="Sehr gut (3)">++</span>
+{% elif score == 2 %}
+<span class="badge bg-info text-dark" title="Gut (2)">+</span>
+{% elif score == 1 %}
+<span class="badge bg-warning text-dark" title="Mittel (1)">o</span>
+{% elif score == 0 %}
+<span class="badge bg-danger" title="Förderbedarf (0)">-</span>
+{% else %}
+<span class="text-muted">-</span>
+{% endif %}
+{% endmacro %}

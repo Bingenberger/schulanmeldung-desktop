@@ -1,0 +1,62 @@
+#!/bin/bash
+# Git-Hook des nackten Repositorys: spielt einen Push auf den laufenden Dienst.
+#
+# Ablauf: Arbeitsverzeichnis aktualisieren, Abhängigkeiten nachziehen,
+# Datenbank sichern, Migrationen laufen lassen, Dienst neu starten.
+# Bricht ein Schritt ab, bricht das ganze Deployment ab -- der alte Stand
+# läuft dann weiter, weil der Dienst noch gar nicht neu gestartet wurde.
+
+set -euo pipefail
+
+WORK_TREE="${SL_OFFICE_WORK_TREE:-/home/emrichschule/SL-Office}"
+GIT_DIR="${SL_OFFICE_GIT_DIR:-/home/emrichschule/sl-office.git}"
+BRANCH="${SL_OFFICE_BRANCH:-main}"
+SERVICE="${SL_OFFICE_SERVICE:-sl-office}"
+
+log() { echo "  ➜ $*"; }
+
+while read -r _old new ref; do
+    if [ "$ref" != "refs/heads/$BRANCH" ]; then
+        echo "Übergangen: $ref (nur $BRANCH wird ausgerollt)"
+        continue
+    fi
+
+    echo "SL-Office: ${new:0:8} wird ausgerollt"
+
+    log "Dateien aktualisieren"
+    git --work-tree="$WORK_TREE" --git-dir="$GIT_DIR" checkout -f "$BRANCH"
+    git --work-tree="$WORK_TREE" --git-dir="$GIT_DIR" clean -fd \
+        -e venv -e instance -e uploads -e backups -e .env
+
+    cd "$WORK_TREE"
+
+    # .env liefert SL_OFFICE_ENV, den Schlüssel und die Datenbankadresse --
+    # ohne sie liefen Migrationen gegen die falsche Datenbank.
+    if [ -f .env ]; then
+        log "Konfiguration aus .env laden"
+        set -a; . ./.env; set +a
+    fi
+
+    log "Abhängigkeiten prüfen"
+    ./venv/bin/pip install --quiet --disable-pip-version-check -r requirements.txt
+
+    log "Datenbank sichern"
+    ./venv/bin/python backup_db.py "vor_${new:0:8}"
+
+    log "Migrationen ausführen"
+    ./venv/bin/flask --app app db upgrade
+
+    log "Tests"
+    ./venv/bin/python -m unittest discover -s tests -t . -q
+
+    log "Dienst neu starten"
+    sudo systemctl restart "$SERVICE"
+    sleep 2
+    if sudo systemctl is-active --quiet "$SERVICE"; then
+        echo "SL-Office: läuft mit ${new:0:8}"
+    else
+        echo "SL-Office: Dienst ist nach dem Neustart nicht aktiv!" >&2
+        sudo systemctl status "$SERVICE" --no-pager --lines=20 >&2 || true
+        exit 1
+    fi
+done

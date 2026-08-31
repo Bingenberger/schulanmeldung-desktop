@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">Schüler auswählen</h4>
+            </div>
+            <div class="card-body">
+                <p class="lead">Bitte wählen Sie das Kind aus, für das Sie {{ 'eine Diagnostik' if target ==
+                    'diagnostik' else 'ein Schulspiel' if target == 'schulspiel' else 'einen Arztbericht' }} erfassen
+                    möchten.</p>
+
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="schueler_id" class="form-label">Name des Kindes:</label>
+                        <select class="form-select form-select-lg" name="schueler_id" id="schueler_id" required>
+                            <option value="" selected disabled>Bitte wählen...</option>
+                            {% for s in schueler_list %}
+                            <option value="{{ s.id }}">{{ s.nachname }}, {{ s.vorname }} ({{ s.geburtsdatum }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary btn-lg">Weiter <i
+                                class="bi bi-arrow-right"></i></button>
+                        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Abbrechen</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

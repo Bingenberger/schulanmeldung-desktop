@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Terminverwaltung</h2>
+<form method="post" class="card card-body mb-4">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="row g-2">
+    <div class="col-md-7"><label class="form-label">Bezeichnung</label><input name="title" class="form-control" required></div>
+    <div class="col-md-3"><label class="form-label">Einschulungsjahr</label><input name="school_year" type="number" min="2020" max="2100" class="form-control" required></div>
+    <div class="col-md-2 d-flex align-items-end"><button class="btn btn-primary w-100">Anlegen</button></div>
+  </div>
+</form>
+<div class="list-group">
+{% for event in events %}<a class="list-group-item list-group-item-action" href="{{ url_for('appointments.detail', event_id=event.id) }}">{{ event.title }} · {{ event.school_year }} <span class="badge bg-secondary">{{ event.status }}</span></a>
+{% else %}<div class="alert alert-info">Noch keine Terminveranstaltung vorhanden.</div>{% endfor %}
+</div>
+{% endblock %}

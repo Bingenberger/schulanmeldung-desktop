@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% from "macros.html" import render_score %}
+
+{% block content %}
+<div class="row align-items-center mb-3">
+    <div class="col-md-6">
+        <h2 class="text-primary fw-bold">Schülerliste</h2>
+    </div>
+    <div class="col-md-6 text-end">
+        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary me-2"><i class="bi bi-house"></i> Hub</a>
+        <a href="{{ url_for('students.add') }}" class="btn btn-success"><i class="bi bi-person-plus-fill"></i> Neu</a>
+    </div>
+</div>
+
+<!-- Filter Section -->
+<div class="card mb-4 bg-light shadow-sm">
+    <div class="card-body py-3">
+        <form method="GET" action="{{ url_for('students.list_students') }}" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label for="kita" class="form-label fw-bold small text-muted">Kita Filter</label>
+                <select class="form-select form-select-sm" id="kita" name="kita" onchange="this.form.submit()">
+                    <option value="">-- Alle Kitas --</option>
+                    {% for k in kita_options %}
+                    <option value="{{ k }}" {% if current_filters.kita==k %}selected{% endif %}>{{ k }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-auto">
+                <div class="form-check form-switch pt-4">
+                    <input class="form-check-input" type="checkbox" id="kann_kind" name="kann_kind" {% if
+                        current_filters.kann_kind %}checked{% endif %} onchange="this.form.submit()">
+                    <label class="form-check-label small" for="kann_kind">Nur Kann-Kinder</label>
+                </div>
+            </div>
+
+            <div class="col-auto">
+                <div class="form-check form-switch pt-4">
+                    <input class="form-check-input" type="checkbox" id="aosf" name="aosf" {% if current_filters.aosf
+                        %}checked{% endif %} onchange="this.form.submit()">
+                    <label class="form-check-label small" for="aosf">Nur AO-SF Verdacht</label>
+                </div>
+            </div>
+
+            <div class="col-auto">
+                <div class="form-check form-switch pt-4">
+                    <input class="form-check-input" type="checkbox" id="rueckstellung" name="rueckstellung" {% if
+                        current_filters.rueckstellung %}checked{% endif %} onchange="this.form.submit()">
+                    <label class="form-check-label small" for="rueckstellung">Nur Rückstellung</label>
+                </div>
+            </div>
+
+            <div class="col-auto">
+                <div class="form-check form-switch pt-4">
+                    <input class="form-check-input" type="checkbox" id="missing_arzt" name="missing_arzt" {% if
+                        current_filters.missing_arzt %}checked{% endif %} onchange="this.form.submit()">
+                    <label class="form-check-label small text-danger" for="missing_arzt">Fehlt: Arzt</label>
+                </div>
+            </div>
+
+            <div class="col-auto">
+                <div class="form-check form-switch pt-4">
+                    <input class="form-check-input" type="checkbox" id="missing_diag" name="missing_diag" {% if
+                        current_filters.missing_diag %}checked{% endif %} onchange="this.form.submit()">
+                    <label class="form-check-label small text-warning" for="missing_diag">Fehlt: Diag.</label>
+                </div>
+            </div>
+
+            <div class="col-auto">
+                <div class="form-check form-switch pt-4">
+                    <input class="form-check-input" type="checkbox" id="schulspiel" name="schulspiel" value="on" {% if
+                        current_filters.schulspiel %}checked{% endif %} onchange="this.form.submit()">
+                    <label class="form-check-label small" for="schulspiel">Nur Schulspiel</label>
+                </div>
+            </div>
+
+            <div class="col-auto ms-auto d-flex align-items-center">
+                <a href="{{ url_for('students.export_excel') }}?{{ request.query_string.decode() }}"
+                    class="btn btn-sm btn-success me-2" title="Aktuelle Auswahl exportieren">
+                    <i class="bi bi-file-earmark-excel"></i> Export
+                </a>
+                <a href="{{ url_for('students.list_students') }}" class="btn btn-sm btn-outline-secondary">Filter
+                    zurücksetzen</a>
+            </div>
+        </form>
+    </div>
+</div>
+<table class="table table-hover align-middle">
+    <thead>
+        <tr>
+            <th>Name, Vorname</th>
+            <th>Päd. Diagnostik</th>
+            <th>Schularzt</th>
+            <th>Aktionen</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for s in schueler %}
+        <tr {% if s.rueckstellung_prozess and s.rueckstellung_prozess.status=='Beschlossen'
+            %}class="table-secondary text-muted" style="opacity: 0.7;" {% endif %}>
+            <td>
+                {{ s.nachname }}, {{ s.vorname }}
+                {% if s.kann_kind %}
+                <span class="badge bg-info text-dark ms-2" title="Kann-Kind">K</span>
+                {% endif %}
+                {% if s.has_aosf_verdacht %}
+                <span class="badge bg-warning text-dark ms-2" title="AO-SF Verdacht">AO-SF</span>
+                {% endif %}
+                {% if s.has_rueckstellung_empfohlen %}
+                <span class="badge bg-secondary text-white ms-2" title="Rückstellung">R</span>
+                {% endif %}
+            </td>
+            <td>
+                <div class="mb-1">
+                    <span
+                        class="badge {% if s.diag_status == 'Abgeschlossen' %}bg-success{% else %}bg-warning{% endif %}">
+                        {{ s.diag_status }}
+                    </span>
+                </div>
+                {% if s.diagnostik %}
+                <small class="d-block">
+                    Kogn.: {{ render_score(s.diagnostik.gesamteindruck_kognitiv) }}
+                    Verh.: {{ render_score(s.diagnostik.gesamteindruck_verhalten) }}
+                </small>
+                {% if s.diagnostik.schulspiel %}
+                <div class="mt-1">
+                    <a href="{{ url_for('schulspiel', id=s.id) }}"
+                        class="btn btn-sm {% if s.schulspiel_status == 'Abgeschlossen' %}btn-success{% else %}btn-outline-success{% endif %}">
+                        Schulspiel
+                        {% if s.schulspiel_diagnostik %}
+                        <span class="ms-1">{{ render_score(s.schulspiel_diagnostik.gesamttendenz) }}</span>
+                        {% endif %}
+                    </a>
+                </div>
+                {% endif %}
+                {% endif %}
+            </td>
+            <td>
+                <div class="mb-1">
+                    <span
+                        class="badge {% if s.arzt_status == 'Abgeschlossen' %}bg-success{% elif s.arzt_status == 'Rückmeldung erhalten' %}bg-info{% else %}bg-secondary{% endif %}">
+                        {{ s.arzt_status }}
+                    </span>
+                </div>
+                {% if s.schularzt_untersuchung %}
+                <small>Gesamt: {{ render_score(s.schularzt_untersuchung.gesamteinschaetzung) }}</small>
+                {% endif %}
+            </td>
+            <td>
+                <div class="mb-1">
+                    <a href="{{ url_for('students.detail', student_id=s.id) }}" class="btn btn-sm btn-outline-primary w-100">
+                        Details
+                    </a>
+                </div>
+                {% if s.has_aosf_verdacht %}
+                <div>
+                    <a href="{{ url_for('aosf_prozess', id=s.id) }}" class="btn btn-sm btn-warning w-100 fw-bold">
+                        AO-SF Prozess
+                    </a>
+                </div>
+                {% endif %}
+                {% if s.has_rueckstellung_empfohlen %}
+                <div class="mt-1">
+                    <a href="{{ url_for('rueckstellung_prozess', id=s.id) }}" class="btn btn-sm btn-info w-100 fw-bold">
+                        Rückstellung
+                    </a>
+                </div>
+                {% endif %}
+                <div class="mt-1">
+                    <a href="{{ url_for('freunde_bearbeiten', id=s.id) }}"
+                        class="btn btn-sm {% if s.freund1_id or s.freund2_id or s.keine_freunde %}btn-outline-success{% else %}btn-outline-danger{% endif %} w-100">
+                        <i class="bi bi-people"></i> Freunde
+                    </a>
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

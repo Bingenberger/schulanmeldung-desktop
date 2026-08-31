@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card shadow-sm">
+            <div class="card-header bg-success text-white">
+                <h4 class="mb-0"><i class="bi bi-heart-pulse"></i> Schulärztliche Untersuchung: {{ schueler.vorname }}
+                    {{ schueler.nachname }}</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    {{ form.hidden_tag() }}
+
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            {{ form.datum.label(class="form-label") }}
+                            {{ form.datum(class="form-control", type="date") }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.erstsprache.label(class="form-label") }}
+                            {{ form.erstsprache(class="form-control") }}
+                        </div>
+                    </div>
+
+                    <h5 class="border-bottom pb-2">Körperliche Untersuchung</h5>
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            {{ form.hoerfaehigkeit.label(class="form-label") }}
+                            {{ form.hoerfaehigkeit(class="form-select") }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.sehfaehigkeit.label(class="form-label") }}
+                            {{ form.sehfaehigkeit(class="form-select") }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.haendigkeit.label(class="form-label") }}
+                            {{ form.haendigkeit(class="form-select") }}
+                        </div>
+                    </div>
+
+                    <h5 class="border-bottom pb-2 mt-4">Ergebnis & Förderbedarf</h5>
+                    <div class="mb-3">
+                        {{ form.ergebnis.label(class="form-label") }}
+                        {{ form.ergebnis(class="form-select") }}
+                    </div>
+
+                    <label class="form-label fw-bold">Förderempfehlungen:</label>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-check">{{ form.foerder_grobmotorik(class="form-check-input") }} {{
+                                form.foerder_grobmotorik.label(class="form-check-label") }}</div>
+                            <div class="form-check">{{ form.foerder_fein_visuomotorik(class="form-check-input") }} {{
+                                form.foerder_fein_visuomotorik.label(class="form-check-label") }}</div>
+                            <div class="form-check">{{ form.foerder_visuelle_wahrnehmung(class="form-check-input") }} {{
+                                form.foerder_visuelle_wahrnehmung.label(class="form-check-label") }}</div>
+                            <div class="form-check">{{ form.foerder_auditive_wahrnehmung(class="form-check-input") }} {{
+                                form.foerder_auditive_wahrnehmung.label(class="form-check-label") }}</div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">{{ form.foerder_deutschkenntnisse(class="form-check-input") }} {{
+                                form.foerder_deutschkenntnisse.label(class="form-check-label") }}</div>
+                            <div class="form-check">{{ form.foerder_zahlen_mengen(class="form-check-input") }} {{
+                                form.foerder_zahlen_mengen.label(class="form-check-label") }}</div>
+                            <div class="form-check">{{ form.foerder_konzentration(class="form-check-input") }} {{
+                                form.foerder_konzentration.label(class="form-check-label") }}</div>
+                            <div class="form-check">{{ form.foerder_psychosozial(class="form-check-input") }} {{
+                                form.foerder_psychosozial.label(class="form-check-label") }}</div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3 mt-3">
+                        <label class="form-label fw-bold">{{ form.foerder_sprache.label.text }}</label>
+                        <div class="card p-2 bg-light border-0">
+                            <div>
+                                {% for subfield in form.foerder_sprache %}
+                                <div class="form-check form-check-inline me-3">
+                                    {{ subfield(class="form-check-input language-check") }}
+                                    {{ subfield.label(class="form-check-label") }}
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <small class="text-muted mt-1">Bitte spezifizieren Sie hier den Sprachförderbedarf
+                                genauer.</small>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Weitere Optionen</label>
+                        <div class="form-check">
+                            {{ form.aosf_verdacht(class="form-check-input") }}
+                            {{ form.aosf_verdacht.label(class="form-check-label text-danger fw-bold") }}
+                        </div>
+                    </div>
+
+
+
+                    <div class="mb-3 mt-3">
+                        {{ form.bemerkung.label(class="form-label") }}
+                        {{ form.bemerkung(class="form-control", rows="3") }}
+                    </div>
+
+                    <div class="mb-3 mt-3">
+                        {{ form.pdf_datei.label(class="form-label fw-bold") }}
+                        {{ form.pdf_datei(class="form-control") }}
+                        {% if form.obj and form.obj.pdf_dateiname %}
+                        <div class="mt-2 text-muted">Aktuell hinterlegt: <a
+                                href="{{ url_for('uploaded_file', filename=form.obj.pdf_dateiname) }}"
+                                target="_blank">{{ form.obj.pdf_dateiname }}</a></div>
+                        {% endif %}
+                    </div>
+
+                    <h5 class="border-bottom pb-2 mt-4">Gesamteinschätzung (Automatisch berechnet)</h5>
+                    <div class="mb-4 text-center">
+                        <div class="btn-group" role="group" id="gesamteinschaetzung-group">
+                            {% for subfield in form.gesamteinschaetzung %}
+                            {% set btn_cls = 'btn-outline-primary' %}
+                            {% if subfield.data == 3 %}{% set btn_cls = 'btn-outline-success' %}{% endif %}
+                            {% if subfield.data == 2 %}{% set btn_cls = 'btn-outline-info' %}{% endif %}
+                            {% if subfield.data == 1 %}{% set btn_cls = 'btn-outline-warning' %}{% endif %}
+                            {% if subfield.data == 0 %}{% set btn_cls = 'btn-outline-danger' %}{% endif %}
+                            <input type="radio" class="btn-check" name="{{ subfield.name }}" id="{{ subfield.id }}"
+                                value="{{ subfield.data }}" {% if subfield.checked %}checked{% endif %}>
+                            <label class="btn {{ btn_cls }}" for="{{ subfield.id }}">{{ subfield.label.text }}</label>
+                            {% endfor %}
+                        </div>
+                        <div class="form-text">Wird basierend auf Ergebnis und Förderempfehlungen berechnet.</div>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        {{ form.submit(class="btn btn-primary btn-lg") }}
+                        <a href="{{ url_for('index') }}" class="btn btn-secondary">Zurück zur Übersicht</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const ergebnisSelect = document.getElementById('ergebnis');
+        const languageCheckboxes = document.querySelectorAll('.language-check');
+        const radios = document.querySelectorAll('input[name="gesamteinschaetzung"]');
+
+        function calculateAssessment() {
+            let score = 3; // Start with ++ (3)
+            let count = 0;
+
+            // Helper: Check if ANY language box is checked
+            let languageChecked = false;
+            languageCheckboxes.forEach(cb => {
+                if (cb.checked) languageChecked = true;
+            });
+
+            // Count other checkboxes (excluding language ones)
+            const otherCheckboxes = document.querySelectorAll('input[type="checkbox"][name^="foerder_"]:not([name^="foerder_sprache"])');
+            otherCheckboxes.forEach(cb => {
+                if (cb.checked) count++;
+            });
+
+            if (languageChecked) count++; // All language checks count as 1 total
+
+            const ergebnis = ergebnisSelect.value;
+
+            if (ergebnis === 'keine Bedenken') {
+                if (count === 0) score = 3; // ++
+                else if (count <= 2) score = 2; // +
+                else if (count <= 4) score = 1; // o
+                else score = 0; // - (>4 needs)
+            } else if (ergebnis === 'erhebliche Bedenken') {
+                score = 1; // o
+            } else {
+                // Prüfung Sonderpäd. or vorzeitige Aufnahme denied
+                score = 0; // -
+            }
+
+            radios.forEach(r => {
+                if (parseInt(r.value) === score) {
+                    r.checked = true;
+                }
+            });
+        }
+
+        if (ergebnisSelect) {
+            ergebnisSelect.addEventListener('change', calculateAssessment);
+        }
+        document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+            cb.addEventListener('change', calculateAssessment);
+        });
+    });
+</script>
+{% endblock %}

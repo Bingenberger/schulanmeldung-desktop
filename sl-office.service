@@ -1,0 +1,38 @@
+[Unit]
+Description=SL-Office (Schulanmeldung)
+After=network.target
+
+[Service]
+User=emrichschule
+Group=emrichschule
+WorkingDirectory=/home/emrichschule/SL-Office
+
+# Zugangsdaten und Betriebsart. Ohne diese Datei läuft die Anwendung im
+# Entwicklungsprofil; erst SL_OFFICE_ENV=production darin schaltet um.
+EnvironmentFile=-/home/emrichschule/SL-Office/.env
+
+# Nur noch über nginx erreichbar: gunicorn hört auf der Loopback-Adresse,
+# nicht mehr auf allen Schnittstellen. Damit ist die Anwendung nicht länger
+# unverschlüsselt aus dem Netz erreichbar.
+ExecStart=/home/emrichschule/SL-Office/venv/bin/gunicorn \
+    --workers 3 \
+    --timeout 120 \
+    --graceful-timeout 30 \
+    --bind 127.0.0.1:5000 \
+    --access-logfile - \
+    --error-logfile - \
+    app:app
+
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=always
+RestartSec=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

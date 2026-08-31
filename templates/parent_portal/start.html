@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mx-auto" style="max-width: 42rem">
+  <h1>Schulanmeldung</h1>
+  <p>Bitte öffnen Sie den persönlichen Zugangslink aus Ihrem Brief oder Ihrer E-Mail.</p>
+  <p class="text-muted">Sie benötigen keinen Benutzernamen und kein Passwort.</p>
+  <a href="{{ url_for('parent_portal.request_login_link') }}">Neuen Zugangslink per E-Mail anfordern</a>
+</div>
+{% endblock %}

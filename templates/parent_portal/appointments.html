@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mx-auto" style="max-width: 52rem">
+  <h1>Termin auswählen</h1>
+  {% if slots %}<div class="list-group">
+  {% for slot, booked_count in slots %}<div class="list-group-item d-flex justify-content-between align-items-center gap-3">
+    <span>{{ slot_label(slot, event) }}{% if slot.location %}, {{ slot.location }}{% endif %}</span>
+    <form method="post" action="{{ url_for('parent_portal.book', slot_id=slot.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-primary">Buchen</button></form>
+  </div>{% endfor %}</div>{% else %}<p>Zurzeit sind keine freien Termine verfügbar.</p>{% endif %}
+  <a class="btn btn-link mt-3" href="{{ url_for('parent_portal.dashboard') }}">Zurück</a>
+</div>
+{% endblock %}

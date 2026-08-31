@@ -1,0 +1,445 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+  <div>
+    <a href="{{ url_for('appointments.index') }}" class="text-decoration-none"><i class="bi bi-arrow-left"></i> Terminverwaltung</a>
+    <h2 class="mt-1 mb-0">{{ event.title }} <span class="text-muted fs-5">{{ event.school_year }}</span></h2>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <span id="save-indicator" class="badge bg-success d-none"><i class="bi bi-check-lg"></i> Gespeichert</span>
+    <a class="btn btn-outline-secondary" href="{{ url_for('appointments.bookings', event_id=event.id) }}">
+      <i class="bi bi-list-check"></i> Buchungen
+    </a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-5">
+    <div class="card card-body h-100">
+      <h5><i class="bi bi-calendar-range"></i> Anmeldezeitraum</h5>
+      <p class="text-muted small mb-2">Legt fest, welche Tage der Planer zeigt und wann Eltern buchen können.</p>
+      <form method="post" class="row g-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="event_settings">
+        <div class="col-sm-6">
+          <label class="form-label small">Beginn</label>
+          <input class="form-control form-control-sm" type="datetime-local" name="booking_opens_at" required
+                 value="{{ event.booking_opens_at.strftime('%Y-%m-%dT%H:%M') if event.booking_opens_at else '' }}">
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label small">Ende</label>
+          <input class="form-control form-control-sm" type="datetime-local" name="booking_closes_at" required
+                 value="{{ event.booking_closes_at.strftime('%Y-%m-%dT%H:%M') if event.booking_closes_at else '' }}">
+        </div>
+        <div class="col-12"><button class="btn btn-sm btn-outline-primary">Zeitraum speichern</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="col-lg-3">
+    <div class="card card-body h-100">
+      <h5><i class="bi bi-broadcast"></i> Status</h5>
+      <p class="text-muted small mb-2">Eltern sehen Termine erst bei <strong>published</strong>.</p>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="status">
+        <select name="status" class="form-select form-select-sm mb-2">
+          {% for value in ['draft', 'published', 'closed', 'cancelled'] %}
+          <option value="{{ value }}" {% if event.status == value %}selected{% endif %}>{{ value }}</option>
+          {% endfor %}
+        </select>
+        <button class="btn btn-sm btn-outline-primary">Status speichern</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card card-body h-100">
+      <h5><i class="bi bi-magic"></i> Serie anlegen</h5>
+      <p class="text-muted small mb-2">Erzeugt aufeinanderfolgende Fenster ab einem Startzeitpunkt.</p>
+      <form method="post" class="row g-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="bulk_slots">
+        <div class="col-12">
+          <label class="form-label small">Erstes Fenster</label>
+          <input name="first_start" type="datetime-local" class="form-control form-control-sm" required>
+        </div>
+        <div class="col-4">
+          <label class="form-label small">Anzahl</label>
+          <input name="count" type="number" min="1" max="500" value="8" class="form-control form-control-sm" required>
+        </div>
+        <div class="col-4">
+          <label class="form-label small">Dauer</label>
+          <select name="duration_minutes" class="form-select form-select-sm">
+            {% for value in planner.durations %}<option value="{{ value }}">{{ value }} Min</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-4">
+          <label class="form-label small">Plätze</label>
+          <input name="capacity" type="number" min="1" max="{{ planner.max_capacity }}" value="1" class="form-control form-control-sm">
+        </div>
+        <div class="col-12"><button class="btn btn-sm btn-success">Serie erzeugen</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% if not planner.days %}
+<div class="alert alert-warning">
+  <i class="bi bi-exclamation-triangle"></i> Lege zuerst einen <strong>Anmeldezeitraum</strong> fest — daraus ergeben sich die Tage im Planer.
+</div>
+{% else %}
+
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div class="d-flex align-items-center gap-3 flex-wrap">
+      <strong><i class="bi bi-calendar-week"></i> Planer</strong>
+      <div class="btn-group btn-group-sm" role="group" id="duration-picker">
+        {% for value in planner.durations %}
+        <button type="button" class="btn btn-outline-primary {% if loop.first %}active{% endif %}" data-duration="{{ value }}">{{ value }} Min</button>
+        {% endfor %}
+      </div>
+      <div class="d-flex align-items-center gap-1">
+        <label class="small text-muted mb-0" for="new-capacity">Plätze</label>
+        <input id="new-capacity" type="number" min="1" max="{{ planner.max_capacity }}" value="1" class="form-control form-control-sm" style="width:4.5rem">
+      </div>
+    </div>
+    <span class="small text-muted">
+      Klick auf freie Fläche legt an · Ziehen verschiebt · <i class="bi bi-lock-fill"></i> vergeben = gesperrt
+    </span>
+  </div>
+  <div class="card-body p-0">
+    <div id="planner-error" class="alert alert-danger m-2 d-none"></div>
+    <div id="planner" class="planner"></div>
+  </div>
+</div>
+
+<style>
+  .planner { display: flex; overflow-x: auto; user-select: none; }
+  .planner-times { flex: 0 0 4rem; position: sticky; left: 0; background: #fff; z-index: 3; border-right: 1px solid #dee2e6; }
+  .planner-col { flex: 1 1 11rem; min-width: 11rem; border-right: 1px solid #dee2e6; }
+  .planner-head { height: 2rem; display: flex; align-items: center; justify-content: center;
+                  font-size: .8rem; font-weight: 600; background: #f8f9fa; border-bottom: 1px solid #dee2e6;
+                  position: sticky; top: 0; z-index: 2; }
+  .planner-body { position: relative; }
+  .planner-times .planner-body { background: #fff; }
+  .planner-hour { position: absolute; left: 0; right: 0; border-top: 1px solid #e9ecef; }
+  .planner-hour.half { border-top-style: dotted; }
+  .planner-time-label { position: absolute; right: .35rem; font-size: .7rem; color: #6c757d; transform: translateY(-.5em); }
+  .planner-slot { position: absolute; border-radius: .25rem; padding: .2rem .35rem;
+                  font-size: .75rem; line-height: 1.15; color: #fff; background: #0d6efd; overflow: hidden;
+                  cursor: grab; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+  .planner-slot.locked { background: #6c757d; cursor: default; }
+  .planner-slot.full { background: #198754; }
+  .planner-slot.dragging { opacity: .65; cursor: grabbing; z-index: 5; }
+  .planner-slot .slot-actions { position: absolute; top: 1px; right: 2px; display: none; gap: .1rem; }
+  .planner-slot:hover .slot-actions { display: flex; }
+  .planner-slot .slot-actions button { border: 0; background: rgba(0,0,0,.25); color: #fff; border-radius: .2rem;
+                                       font-size: .65rem; line-height: 1; padding: .15rem .25rem; cursor: pointer; }
+  .planner-ghost { position: absolute; left: 2px; right: 2px; border: 2px dashed #0d6efd;
+                   border-radius: .25rem; background: rgba(13,110,253,.12); pointer-events: none; }
+</style>
+
+<script>
+(function () {
+  const state = {{ planner | tojson }};
+  const eventId = {{ event.id }};
+  const csrf = document.querySelector('meta[name="csrf-token"]').content;
+  const root = document.getElementById('planner');
+  const errorBox = document.getElementById('planner-error');
+  const saveBadge = document.getElementById('save-indicator');
+  const capacityInput = document.getElementById('new-capacity');
+  const PX_PER_MIN = 1.1;
+  let newDuration = state.durations[0];
+  let saveTimer = null;
+  // A finished drag also emits a click on the column underneath, which would
+  // otherwise be read as "create a slot here".
+  let suppressClick = false;
+
+  document.querySelectorAll('#duration-picker button').forEach(button => {
+    button.addEventListener('click', () => {
+      document.querySelectorAll('#duration-picker button').forEach(other => other.classList.remove('active'));
+      button.classList.add('active');
+      newDuration = Number(button.dataset.duration);
+    });
+  });
+
+  const toMinutes = text => {
+    const [h, m] = text.split(':').map(Number);
+    return h * 60 + m;
+  };
+  const toClock = minutes =>
+    String(Math.floor(minutes / 60)).padStart(2, '0') + ':' + String(minutes % 60).padStart(2, '0');
+
+  function showSaved() {
+    errorBox.classList.add('d-none');
+    saveBadge.classList.remove('d-none');
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => saveBadge.classList.add('d-none'), 1800);
+  }
+  function showError(message) {
+    errorBox.textContent = message;
+    errorBox.classList.remove('d-none');
+  }
+
+  async function call(url, body) {
+    let response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify(body || {})
+      });
+    } catch (err) {
+      showError('Keine Verbindung zum Server.');
+      return false;
+    }
+    let data = null;
+    try { data = await response.json(); } catch (err) { /* non-JSON error page */ }
+    if (response.ok && data && data.ok) {
+      state.slots = data.planner.slots;
+      state.days = data.planner.days;
+      state.day_start = data.planner.day_start;
+      state.day_end = data.planner.day_end;
+      render();
+      showSaved();
+      return true;
+    }
+    showError((data && data.error) || 'Die Änderung war nicht möglich (Status ' + response.status + ').');
+    render();
+    return false;
+  }
+
+  function render() {
+    const dayStart = toMinutes(state.day_start);
+    const dayEnd = toMinutes(state.day_end);
+    const height = (dayEnd - dayStart) * PX_PER_MIN;
+    root.innerHTML = '';
+
+    const times = document.createElement('div');
+    times.className = 'planner-times';
+    times.innerHTML = '<div class="planner-head"></div>';
+    const timesBody = document.createElement('div');
+    timesBody.className = 'planner-body';
+    timesBody.style.height = height + 'px';
+    for (let minute = Math.ceil(dayStart / 30) * 30; minute <= dayEnd; minute += 30) {
+      const top = (minute - dayStart) * PX_PER_MIN;
+      const line = document.createElement('div');
+      line.className = 'planner-hour' + (minute % 60 ? ' half' : '');
+      line.style.top = top + 'px';
+      timesBody.appendChild(line);
+      if (minute % 60 === 0) {
+        const label = document.createElement('div');
+        label.className = 'planner-time-label';
+        label.style.top = top + 'px';
+        label.textContent = toClock(minute);
+        timesBody.appendChild(label);
+      }
+    }
+    times.appendChild(timesBody);
+    root.appendChild(times);
+
+    state.days.forEach(day => {
+      const column = document.createElement('div');
+      column.className = 'planner-col';
+      column.innerHTML = '<div class="planner-head">' + day.label + '</div>';
+      const body = document.createElement('div');
+      body.className = 'planner-body';
+      body.style.height = height + 'px';
+      body.dataset.day = day.date;
+      for (let minute = Math.ceil(dayStart / 30) * 30; minute <= dayEnd; minute += 30) {
+        const line = document.createElement('div');
+        line.className = 'planner-hour' + (minute % 60 ? ' half' : '');
+        line.style.top = (minute - dayStart) * PX_PER_MIN + 'px';
+        body.appendChild(line);
+      }
+      layoutDay(state.slots.filter(slot => slot.day === day.date)).forEach(entry => {
+        body.appendChild(renderSlot(entry, dayStart));
+      });
+      column.appendChild(body);
+      root.appendChild(column);
+    });
+  }
+
+  // Windows may overlap, so each cluster of mutually overlapping windows is
+  // split into lanes and drawn side by side -- otherwise they would hide each
+  // other. Purely presentational: lanes carry no meaning for the data.
+  function layoutDay(slots) {
+    const sorted = slots.slice().sort((a, b) =>
+      (toMinutes(a.start) - toMinutes(b.start)) || (a.duration - b.duration) || (a.id - b.id));
+    const placed = [];
+    let cluster = [];
+    let clusterEnd = -1;
+
+    function closeCluster() {
+      if (!cluster.length) return;
+      const laneEnds = [];
+      cluster.forEach(entry => {
+        const start = toMinutes(entry.slot.start);
+        let lane = laneEnds.findIndex(end => end <= start);
+        if (lane === -1) lane = laneEnds.length;
+        laneEnds[lane] = start + entry.slot.duration;
+        entry.lane = lane;
+      });
+      cluster.forEach(entry => { entry.lanes = laneEnds.length; });
+      cluster = [];
+    }
+
+    sorted.forEach(slot => {
+      const start = toMinutes(slot.start);
+      const end = start + slot.duration;
+      if (cluster.length && start >= clusterEnd) {
+        closeCluster();
+        clusterEnd = end;
+      } else {
+        clusterEnd = Math.max(clusterEnd, end);
+      }
+      const entry = {slot: slot, lane: 0, lanes: 1};
+      cluster.push(entry);
+      placed.push(entry);
+    });
+    closeCluster();
+    return placed;
+  }
+
+  function renderSlot(entry, dayStart) {
+    const slot = entry.slot;
+    const element = document.createElement('div');
+    const full = slot.booked >= slot.capacity;
+    element.className = 'planner-slot' + (slot.locked ? ' locked' : '') + (full && !slot.locked ? ' full' : '');
+    element.style.top = (toMinutes(slot.start) - dayStart) * PX_PER_MIN + 'px';
+    element.style.height = Math.max(slot.duration * PX_PER_MIN - 2, 16) + 'px';
+    const laneWidth = 100 / entry.lanes;
+    element.style.left = 'calc(' + (entry.lane * laneWidth) + '% + 2px)';
+    element.style.width = 'calc(' + laneWidth + '% - 4px)';
+    element.dataset.slotId = slot.id;
+
+    const names = slot.students.map(student => student.name).join(', ');
+    const title = document.createElement('div');
+    title.innerHTML =
+      '<strong>' + slot.start + '–' + slot.end + '</strong> ' +
+      (slot.locked ? '<i class="bi bi-lock-fill"></i> ' : '') +
+      slot.booked + '/' + slot.capacity;
+    element.appendChild(title);
+    if (names) {
+      const who = document.createElement('div');
+      who.textContent = names;
+      who.style.opacity = '.9';
+      element.appendChild(who);
+    }
+    element.title = slot.locked
+      ? 'Vergeben an: ' + names + ' — zum Verschieben zuerst stornieren.'
+      : slot.start + '–' + slot.end + ' · ' + slot.booked + ' von ' + slot.capacity + ' Plätzen belegt';
+
+    const actions = document.createElement('div');
+    actions.className = 'slot-actions';
+    actions.appendChild(actionButton('bi-plus', 'Platz hinzufügen', () =>
+      call('/admin/appointments/' + eventId + '/slots/' + slot.id + '/capacity', {capacity: slot.capacity + 1})));
+    if (slot.capacity > 1) {
+      actions.appendChild(actionButton('bi-dash', 'Platz entfernen', () =>
+        call('/admin/appointments/' + eventId + '/slots/' + slot.id + '/capacity', {capacity: slot.capacity - 1})));
+    }
+    if (!slot.locked) {
+      actions.appendChild(actionButton('bi-trash', 'Fenster löschen', () =>
+        call('/admin/appointments/' + eventId + '/slots/' + slot.id + '/delete')));
+    }
+    element.appendChild(actions);
+
+    if (!slot.locked) enableDrag(element, slot, dayStart);
+    return element;
+  }
+
+  function actionButton(icon, label, handler) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.title = label;
+    button.innerHTML = '<i class="bi ' + icon + '"></i>';
+    button.addEventListener('pointerdown', e => e.stopPropagation());
+    button.addEventListener('click', e => { e.stopPropagation(); handler(); });
+    return button;
+  }
+
+  function enableDrag(element, slot, dayStart) {
+    element.addEventListener('pointerdown', down => {
+      if (down.button !== 0) return;
+      down.preventDefault();
+      const startY = down.clientY;
+      const startX = down.clientX;
+      const originalTop = parseFloat(element.style.top);
+      let ghost = null;
+      let target = {day: slot.day, minute: toMinutes(slot.start)};
+      let moved = false;
+
+      const columns = Array.from(root.querySelectorAll('.planner-body[data-day]'));
+      const dayEnd = toMinutes(state.day_end);
+
+      function onMove(move) {
+        if (!moved && Math.abs(move.clientY - startY) < 3 && Math.abs(move.clientX - startX) < 3) return;
+        moved = true;
+        element.classList.add('dragging');
+
+        // Which day column is the pointer over?
+        let column = columns.find(candidate => {
+          const box = candidate.getBoundingClientRect();
+          return move.clientX >= box.left && move.clientX <= box.right;
+        }) || element.parentElement;
+
+        const raw = originalTop + (move.clientY - startY);
+        let minute = Math.round((raw / PX_PER_MIN + dayStart) / state.grid_minutes) * state.grid_minutes;
+        minute = Math.max(dayStart, Math.min(minute, dayEnd - slot.duration));
+        target = {day: column.dataset.day, minute: minute};
+
+        if (!ghost) {
+          ghost = document.createElement('div');
+          ghost.className = 'planner-ghost';
+          ghost.style.height = element.style.height;
+        }
+        if (ghost.parentElement !== column) column.appendChild(ghost);
+        ghost.style.top = (minute - dayStart) * PX_PER_MIN + 'px';
+        element.style.top = (minute - dayStart) * PX_PER_MIN + 'px';
+      }
+
+      function onUp() {
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        element.classList.remove('dragging');
+        if (ghost && ghost.parentElement) ghost.parentElement.removeChild(ghost);
+        if (!moved) return;
+        suppressClick = true;
+        if (target.day === slot.day && target.minute === toMinutes(slot.start)) {
+          render();
+          return;
+        }
+        call('/admin/appointments/' + eventId + '/slots/' + slot.id + '/move', {
+          local_start: target.day + 'T' + toClock(target.minute),
+          duration: slot.duration
+        });
+      }
+
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+    });
+  }
+
+  // Click on empty space creates a slot at that time.
+  root.addEventListener('click', click => {
+    if (suppressClick) { suppressClick = false; return; }
+    const body = click.target.closest('.planner-body[data-day]');
+    if (!body || click.target.closest('.planner-slot')) return;
+    const dayStart = toMinutes(state.day_start);
+    const offset = click.clientY - body.getBoundingClientRect().top;
+    let minute = Math.round((offset / PX_PER_MIN + dayStart) / state.grid_minutes) * state.grid_minutes;
+    minute = Math.max(dayStart, Math.min(minute, toMinutes(state.day_end) - newDuration));
+    call('/admin/appointments/' + eventId + '/slots', {
+      local_start: body.dataset.day + 'T' + toClock(minute),
+      duration: newDuration,
+      capacity: Number(capacityInput.value) || 1
+    });
+  });
+
+  render();
+})();
+</script>
+{% endif %}
+{% endblock %}

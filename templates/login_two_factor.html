@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5">
+    <div class="card shadow-sm">
+      <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="bi bi-shield-lock"></i> Bestätigung</h5>
+      </div>
+      <div class="card-body">
+        <p class="text-muted">
+          Angemeldet als <strong>{{ user.username }}</strong>. Bitte geben Sie den
+          sechsstelligen Code aus Ihrer Authenticator-App ein.
+        </p>
+        <form method="POST">
+          {{ form.hidden_tag() }}
+          <div class="mb-3">
+            <label class="form-label" for="code">Code</label>
+            {{ form.code(class="form-control form-control-lg text-center", id="code",
+                         autocomplete="one-time-code", inputmode="numeric",
+                         autofocus=true, placeholder="000000") }}
+            <div class="form-text">Alternativ können Sie einen Ihrer Notfallcodes eingeben.</div>
+          </div>
+          <button class="btn btn-primary w-100">Anmelden</button>
+        </form>
+        <hr>
+        <a href="{{ url_for('auth.login') }}" class="small text-muted">Abbrechen und neu anmelden</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

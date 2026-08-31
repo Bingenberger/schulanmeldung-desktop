@@ -1,0 +1,1 @@
+"""SL-Office application package."""

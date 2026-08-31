@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0"><i class="bi bi-file-earmark-spreadsheet"></i> Schüler importieren</h4>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <h5><i class="bi bi-info-circle"></i> Hinweise zum Import</h5>
+                    <p>Bitte laden Sie eine Excel-Datei (.xlsx) mit folgenden Spalten hoch:</p>
+                    <ul>
+                        <li><strong>Name</strong> oder <strong>Nachname</strong></li>
+                        <li><strong>Vorname</strong></li>
+                        <li><strong>Geburtsdatum</strong> (Format: TT.MM.JJJJ oder Excel-Datum)</li>
+                        <li><strong>Geschlecht</strong> (Optional. Werte: m/w/d, männl./weibl., etc.)</li>
+                        <li><strong>Kita</strong> oder <strong>abgebende Kita</strong></li>
+                    </ul>
+                </div>
+
+                <form method="POST" enctype="multipart/form-data">
+                    {{ form.hidden_tag() }}
+
+                    <div class="mb-3">
+                        {{ form.file.label(class="form-label") }}
+                        {{ form.file(class="form-control") }}
+                        {% for error in form.file.errors %}
+                        <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        {{ form.submit(class="btn btn-primary") }}
+                        <a href="{{ url_for('index') }}" class="btn btn-secondary">Abbrechen</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

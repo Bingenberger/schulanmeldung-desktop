@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+{% from "macros.html" import render_score %}
+
+{% block content %}
+
+{% set kurs_colors = {
+  'foerderkurs_lrs':     '#b5451b',
+  'foerderkurs_mathe':   '#0a5299',
+  'foerderkurs_sport':   '#2a7a2a',
+  'foerderkurs_deutsch': '#6a0dad'
+} %}
+{% set kurs_labels = {
+  'foerderkurs_lrs':     'LRS',
+  'foerderkurs_mathe':   'Mathe',
+  'foerderkurs_sport':   'Sport',
+  'foerderkurs_deutsch': 'Deutsch'
+} %}
+
+{# ---- Shortcuts ---- #}
+{% set diag  = s.diagnostik %}
+{% set arzt  = s.schularzt_untersuchung %}
+{% set spiel = s.schulspiel_diagnostik %}
+{% set kita  = s.kita_bericht %}
+
+{# ---- Fortschrittsleiste ---- #}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <a href="{{ url_for('foerderkurse_bulk') }}" class="btn btn-outline-secondary btn-sm me-2">
+      <i class="bi bi-table"></i> Übersicht
+    </a>
+    {% if idx > 0 %}
+    <a href="{{ url_for('foerderkurse_einzel', idx=idx-1) }}" class="btn btn-outline-dark btn-sm">
+      <i class="bi bi-arrow-left"></i> Vorherige
+    </a>
+    {% endif %}
+  </div>
+  <div class="text-center">
+    <span class="fw-bold">Kind {{ idx + 1 }} von {{ total }}</span>
+    <div class="progress mt-1" style="height:6px;width:200px;">
+      <div class="progress-bar bg-primary" style="width:{{ ((idx+1)/total*100)|round|int }}%"></div>
+    </div>
+  </div>
+  <div>
+    <a href="{{ url_for('foerderkurse_einzel', idx=idx+1 if idx+1 < total else idx) }}"
+       class="btn btn-outline-dark btn-sm {% if idx+1 >= total %}disabled{% endif %}">
+      Überspringen <i class="bi bi-arrow-right"></i>
+    </a>
+  </div>
+</div>
+
+{# ---- Kopfkarte ---- #}
+<div class="card shadow-sm mb-3 border-primary border-top border-4">
+  <div class="card-body py-2">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <h3 class="mb-0 fw-bold text-primary">{{ s.nachname }}, {{ s.vorname }}</h3>
+        <span class="text-muted small">
+          {{ s.geburtsdatum.strftime('%d.%m.%Y') if s.geburtsdatum else '–' }}
+          &nbsp;|&nbsp; Kita: {{ s.kita or '–' }}
+          &nbsp;|&nbsp; {% if s.klasse %}Klasse {{ s.klasse }}{% else %}ohne Klasse{% endif %}
+        </span>
+      </div>
+      <div class="d-flex gap-1 flex-wrap">
+        {% if s.kann_kind %}<span class="badge bg-info text-dark">Kann-Kind</span>{% endif %}
+        {% if s.betreuung %}<span class="badge bg-secondary">{{ s.betreuung }}</span>{% endif %}
+        {% if s.has_aosf_verdacht %}<span class="badge bg-warning text-dark">AO-SF</span>{% endif %}
+        {% if s.has_rueckstellung_empfohlen %}<span class="badge bg-danger">Rückstellung</span>{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ---- Formular ---- #}
+<form method="POST">
+  {{ form.hidden_tag() }}
+
+  {# Förderkurs-Buttons #}
+  <div class="card shadow-sm mb-3">
+    <div class="card-header bg-light fw-bold"><i class="bi bi-mortarboard-fill"></i> Förderkurse</div>
+    <div class="card-body d-flex gap-3 flex-wrap py-3">
+      {% for field, label, color in kurse %}
+      <div>
+        <input type="checkbox" class="btn-check" name="{{ field }}" id="btn_{{ field }}"
+               {% if s|attr(field) %}checked{% endif %}>
+        <label class="btn btn-lg fw-bold" for="btn_{{ field }}"
+               style="min-width:120px;border:2px solid {{ color }};color:{{ color }};"
+               id="lbl_{{ field }}">
+          {{ label }}
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# ---- Diagnostik-Übersicht (2 Spalten) ---- #}
+  <div class="row g-3 mb-3">
+
+    {# Sprache & Schriftsprache → LRS / Deutsch #}
+    <div class="col-md-6">
+      <div class="card h-100 shadow-sm">
+        <div class="card-header py-2" style="background:#fff0eb;">
+          <strong style="color:#b5451b;"><i class="bi bi-chat-text"></i> Sprache & Schriftsprache</strong>
+          <small class="text-muted float-end">→ LRS / Deutsch</small>
+        </div>
+        <div class="card-body p-2">
+          {% if diag %}
+          <table class="table table-sm table-borderless mb-0" style="font-size:.85rem;">
+            {% for label, val in [
+              ('Wortschatz',         diag.wortschatz),
+              ('Grammatik',          diag.grammatik),
+              ('Aussprache',         diag.aussprache),
+              ('Gesprächsverhalten', diag.gespraechsverhalten),
+              ('Sätze nachsprechen', diag.saetze_nachsprechen),
+              ('Reimen',             diag.reimen),
+              ('Pluralbildung',      diag.pluralbildung),
+              ('Wörter segmentieren',diag.woerter_segmentieren),
+            ] %}
+            <tr>
+              <td class="py-0 text-muted">{{ label }}</td>
+              <td class="py-0 text-end fw-bold">{{ render_score(val) }}</td>
+            </tr>
+            {% endfor %}
+          </table>
+          {% if arzt %}
+          <hr class="my-1">
+          <div class="small">
+            <span class="text-muted">Deutsch (Arzt):</span>
+            {% if arzt.foerder_deutschkenntnisse %}<span class="badge bg-danger">Förderbedarf</span>{% else %}<span class="text-success">–</span>{% endif %}
+            {% if arzt.foerder_auditive_wahrnehmung %}<span class="badge bg-danger ms-1">Audit. Wahrn.</span>{% endif %}
+            {% if arzt.foerder_sprache %}
+              {% for item in arzt.foerder_sprache.split(',') %}
+              <span class="badge bg-warning text-dark ms-1">{{ item.strip() }}</span>
+              {% endfor %}
+            {% endif %}
+          </div>
+          {% endif %}
+          {% else %}
+          <span class="text-muted fst-italic small">Keine Diagnostik erfasst.</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {# Mathematik → Mathe #}
+    <div class="col-md-6">
+      <div class="card h-100 shadow-sm">
+        <div class="card-header py-2" style="background:#e8f0fb;">
+          <strong style="color:#0a5299;"><i class="bi bi-calculator"></i> Mathematik</strong>
+          <small class="text-muted float-end">→ Mathe</small>
+        </div>
+        <div class="card-body p-2">
+          {% if diag %}
+          <table class="table table-sm table-borderless mb-0" style="font-size:.85rem;">
+            {% for label, val in [
+              ('Mengenerfassung',   diag.mengenerfassung),
+              ('Menge herstellen',  diag.menge_herstellen),
+              ('Zahlen erkennen',   diag.zahlen_erkennen),
+              ('Rückwärts zählen',  diag.rueckwaerts_zaehlen),
+              ('Zahlreihe erzeugen',diag.zahlreihe_erzeugen),
+              ('Logische Reihe',    diag.logische_reihe),
+            ] %}
+            <tr>
+              <td class="py-0 text-muted">{{ label }}</td>
+              <td class="py-0 text-end fw-bold">{{ render_score(val) }}</td>
+            </tr>
+            {% endfor %}
+          </table>
+          {% if arzt and arzt.foerder_zahlen_mengen %}
+          <hr class="my-1">
+          <span class="badge bg-danger small">Arzt: Zahlen/Mengen Förderbedarf</span>
+          {% endif %}
+          {% else %}
+          <span class="text-muted fst-italic small">Keine Diagnostik erfasst.</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {# Motorik & Wahrnehmung → Sport #}
+    <div class="col-md-6">
+      <div class="card h-100 shadow-sm">
+        <div class="card-header py-2" style="background:#edfaed;">
+          <strong style="color:#2a7a2a;"><i class="bi bi-activity"></i> Motorik & Wahrnehmung</strong>
+          <small class="text-muted float-end">→ Sport</small>
+        </div>
+        <div class="card-body p-2">
+          {% if diag %}
+          <table class="table table-sm table-borderless mb-0" style="font-size:.85rem;">
+            {% for label, val in [
+              ('Bild malen',     diag.bild_malen),
+              ('Komplexe Figur', diag.komplexe_figur),
+            ] %}
+            <tr>
+              <td class="py-0 text-muted">{{ label }}</td>
+              <td class="py-0 text-end fw-bold">{{ render_score(val) }}</td>
+            </tr>
+            {% endfor %}
+          </table>
+          {% endif %}
+          {% if spiel %}
+          <hr class="my-1">
+          <table class="table table-sm table-borderless mb-0" style="font-size:.85rem;">
+            {% for label, val in [
+              ('Körperkoordination', spiel.koerperkoordination),
+              ('Fingerkoordination', spiel.fingerkoordination),
+            ] %}
+            <tr>
+              <td class="py-0 text-muted">{{ label }}</td>
+              <td class="py-0 text-end fw-bold">{{ render_score(val) }}</td>
+            </tr>
+            {% endfor %}
+          </table>
+          {% endif %}
+          {% if arzt %}
+          <hr class="my-1">
+          <div class="small">
+            <span class="text-muted">Arzt:</span>
+            {% if arzt.foerder_grobmotorik %}<span class="badge bg-danger ms-1">Grobmotorik</span>{% endif %}
+            {% if arzt.foerder_fein_visuomotorik %}<span class="badge bg-danger ms-1">Feinmotorik</span>{% endif %}
+            {% if arzt.foerder_visuelle_wahrnehmung %}<span class="badge bg-danger ms-1">Visuell</span>{% endif %}
+            {% if not arzt.foerder_grobmotorik and not arzt.foerder_fein_visuomotorik and not arzt.foerder_visuelle_wahrnehmung %}
+            <span class="text-success">kein Förderbedarf</span>
+            {% endif %}
+          </div>
+          {% endif %}
+          {% if not diag and not spiel and not arzt %}
+          <span class="text-muted fst-italic small">Keine Daten erfasst.</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {# Gesamteindrücke #}
+    <div class="col-md-6">
+      <div class="card h-100 shadow-sm">
+        <div class="card-header py-2 bg-light">
+          <strong><i class="bi bi-bar-chart-fill"></i> Gesamteindrücke</strong>
+        </div>
+        <div class="card-body p-2" style="font-size:.85rem;">
+          {% if diag %}
+          <div class="d-flex gap-3 mb-2">
+            <span>Kognitiv: <strong>{{ render_score(diag.gesamteindruck_kognitiv) }}</strong></span>
+            <span>Verhalten: <strong>{{ render_score(diag.gesamteindruck_verhalten) }}</strong></span>
+          </div>
+          {% endif %}
+          {% if spiel %}
+          <div class="mb-2">
+            Schulspiel: <strong>{{ render_score(spiel.gesamttendenz) }}</strong>
+            <span class="text-muted small">({{ spiel.gesamtwert }}/75)</span>
+          </div>
+          {% endif %}
+          {% if arzt %}
+          <div class="mb-2">Schularzt: <strong>{{ render_score(arzt.gesamteinschaetzung) }}</strong></div>
+          {% endif %}
+          {% if kita %}
+          <hr class="my-1">
+          <div class="d-flex gap-3">
+            <span>Kita Kognitiv: <strong>{{ render_score(kita.kognitiv) }}</strong></span>
+            <span>Kita Verhalten: <strong>{{ render_score(kita.verhalten) }}</strong></span>
+          </div>
+          {% if kita.bemerkung %}
+          <div class="mt-1 text-muted fst-italic small">{{ kita.bemerkung }}</div>
+          {% endif %}
+          {% endif %}
+          {% if not diag and not spiel and not arzt and not kita %}
+          <span class="text-muted fst-italic">Keine Daten erfasst.</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+  </div>{# end row #}
+
+  {# ---- Aktionsleiste ---- #}
+  <div class="d-flex justify-content-between align-items-center mt-2">
+    {% if idx > 0 %}
+    <a href="{{ url_for('foerderkurse_einzel', idx=idx-1) }}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left"></i> Vorherige
+    </a>
+    {% else %}
+    <span></span>
+    {% endif %}
+
+    <button type="submit" class="btn btn-success btn-lg px-5 fw-bold">
+      {% if idx + 1 < total %}
+      <i class="bi bi-save"></i> Speichern & Weiter
+      {% else %}
+      <i class="bi bi-check-circle"></i> Speichern & Abschließen
+      {% endif %}
+    </button>
+
+    <a href="{{ url_for('foerderkurse_bulk') }}" class="btn btn-outline-secondary">
+      <i class="bi bi-table"></i> Zur Übersicht
+    </a>
+  </div>
+
+</form>
+
+<script>
+// Visuelle Rückmeldung für Toggle-Buttons
+document.querySelectorAll('.btn-check').forEach(cb => {
+  const lbl = cb.nextElementSibling;
+  const color = lbl.style.color;
+  function update() {
+    if (cb.checked) {
+      lbl.style.background = color;
+      lbl.style.color = '#fff';
+    } else {
+      lbl.style.background = '';
+      lbl.style.color = color;
+    }
+  }
+  update();
+  cb.addEventListener('change', update);
+});
+</script>
+
+{% endblock %}

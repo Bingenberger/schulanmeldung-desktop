@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <h2 class="mb-0"><i class="bi bi-envelope-paper"></i> Elternschreiben erzeugen</h2>
+  <div class="d-flex gap-2">
+    {% if current_user.role in ['Administrator', 'Schulleitung'] %}
+    <a class="btn btn-outline-secondary" href="{{ url_for('admin.parent_letter_text') }}">
+      <i class="bi bi-pencil-square"></i> Brieftext bearbeiten
+    </a>
+    {% endif %}
+    <a class="btn btn-outline-secondary" href="{{ url_for('admin.parent_accesses') }}">
+      <i class="bi bi-envelope-lock"></i> Elternzugänge
+    </a>
+  </div>
+</div>
+
+<div class="alert alert-info">
+  Jedes Kind bekommt die vollständige <strong>Einladung zur Schulanmeldung</strong> im Briefkopf der
+  Schule — mit <strong>zwei persönlichen Zugängen</strong>, je einer pro Erziehungsberechtigten,
+  jeweils als Link und als QR-Code. Getrennt lebende Eltern können den jeweils eigenen Abschnitt
+  nutzen. Schuljahr und Anschrift kommen aus den erfassten Daten, Zeitraum und Frist aus den
+  Feldern unten.
+  <br>
+  <span class="small text-muted">Beim erneuten Drucken bleiben bereits ausgegebene Links gültig; neue werden nur
+  erzeugt, wo noch keiner existiert — im Brief steht dann statt des QR-Codes ein Hinweis auf das
+  frühere Schreiben. Wurde dieses nie verschickt, setzen Sie <strong>Zugänge neu ausstellen</strong>.
+  Ein bereits eingelöster Zugang wird nie neu ausgestellt.</span>
+</div>
+
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="card mb-3">
+    <div class="card-body d-flex flex-wrap gap-3 align-items-end">
+      <div>
+        <label class="form-label small mb-1" for="period">Anmeldezeitraum (optional)</label>
+        <input id="period" name="period" class="form-control form-control-sm" style="width:14rem"
+               placeholder="z. B. 27. bis 30. Oktober">
+      </div>
+      <div>
+        <label class="form-label small mb-1" for="deadline">Frist für die Terminbuchung (optional)</label>
+        <input id="deadline" name="deadline" class="form-control form-control-sm" style="width:14rem"
+               placeholder="z. B. 6. Oktober 2026">
+      </div>
+      <div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="reissue" name="reissue" value="1">
+          <label class="form-check-label small" for="reissue">
+            Zugänge neu ausstellen
+            <span class="text-muted d-block" style="max-width:22rem">
+              Nötig, wenn frühere Briefe nicht verschickt wurden: die offenen Links werden
+              gesperrt und ersetzt. Bereits eingelöste Zugänge bleiben bestehen.
+            </span>
+          </label>
+        </div>
+      </div>
+      <div class="btn-group btn-group-sm">
+        <button class="btn btn-outline-secondary" type="button" data-select="all">Alle</button>
+        <button class="btn btn-outline-secondary" type="button" data-select="pending">Nur ohne Zugang</button>
+        <button class="btn btn-outline-secondary" type="button" data-select="none">Keine</button>
+      </div>
+      <div class="ms-auto">
+        <button class="btn btn-primary"><i class="bi bi-file-earmark-pdf"></i> Briefe als PDF erzeugen</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-responsive" style="max-height:60vh">
+    <table class="table table-striped table-sm align-middle">
+      <thead class="table-light position-sticky top-0">
+        <tr>
+          <th style="width:2.5rem"></th>
+          <th>Kind</th>
+          <th>Anschrift</th>
+          <th>Erziehungsberechtigte</th>
+          <th>Zugang</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for student in students %}
+        <tr>
+          <td>
+            <input class="form-check-input student-box" type="checkbox" name="student_ids" value="{{ student.id }}"
+                   data-pending="{{ 1 if student.id in pending else 0 }}">
+          </td>
+          <td>
+            <strong>{{ student.nachname }}, {{ student.vorname }}</strong><br>
+            <span class="small text-muted">{{ student.geburtsdatum.strftime('%d.%m.%Y') if student.geburtsdatum else '' }}</span>
+          </td>
+          <td class="small">
+            {% if student.strasse or student.ort %}
+            {{ student.strasse or '' }}<br>{{ student.plz or '' }} {{ student.ort or '' }}
+            {% else %}
+            <span class="text-danger"><i class="bi bi-exclamation-triangle"></i> keine Anschrift</span>
+            {% endif %}
+          </td>
+          <td class="small">
+            {{ student.erzb_1_name or '—' }}<br>{{ student.erzb_2_name or '—' }}
+          </td>
+          <td>
+            {% set done = redeemed.get(student.id) or [] %}
+            {% if 'first_access' in done and 'second_access' in done %}
+            <span class="badge bg-success">beide eingelöst</span>
+            {% elif done %}
+            <span class="badge bg-info text-dark">1 von 2 eingelöst</span>
+            {% elif student.id in pending %}
+            <span class="badge bg-secondary">noch offen</span>
+            {% else %}
+            <span class="badge bg-light text-dark border">Zugang vorhanden</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-muted">Noch keine Kinder erfasst.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</form>
+
+<script>
+document.querySelectorAll('[data-select]').forEach(button => {
+  button.addEventListener('click', () => {
+    const mode = button.dataset.select;
+    document.querySelectorAll('.student-box').forEach(box => {
+      box.checked = mode === 'all' ? true
+                  : mode === 'none' ? false
+                  : box.dataset.pending === '1';
+    });
+  });
+});
+</script>
+{% endblock %}

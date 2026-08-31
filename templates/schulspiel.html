@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .rating-row {
+        transition: background-color 0.3s ease;
+    }
+
+    .bg-rating-3 {
+        background-color: #a5d6a7;
+    }
+
+    /* Dezent Dunkelgrün */
+    .bg-rating-2 {
+        background-color: #dcedc8;
+    }
+
+    /* Hellgrün */
+    .bg-rating-1 {
+        background-color: #fff9c4;
+    }
+
+    /* Gelb */
+    .bg-rating-0 {
+        background-color: #ffe0b2;
+    }
+
+    /* Orange */
+</style>
+
+<div class="container mt-4">
+    <div class="row mb-3">
+        <div class="col">
+            <h2 class="text-success"><i class="bi bi-dice-5"></i> Schulspiel-Diagnostik</h2>
+            <h4 class="text-muted">{{ schueler.nachname }}, {{ schueler.vorname }}</h4>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('students.detail', student_id=schueler.id) }}" class="btn btn-outline-secondary">Zurück zur
+                Schülerakte</a>
+        </div>
+    </div>
+
+    {% if schulspiel and schulspiel.gesamtwert %}
+    <div class="alert alert-success d-flex justify-content-between align-items-center">
+        <div>
+            <strong>Erfasster Status:</strong> Abgeschlossen
+        </div>
+        {% if schulspiel.pdf_dateiname %}
+        <a href="{{ url_for('uploaded_file', filename=schulspiel.pdf_dateiname) }}" target="_blank"
+            class="btn btn-sm btn-danger"><i class="bi bi-file-pdf"></i> Gescannten Bogen ansehen</a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="card shadow-sm mb-5 border-success border-top border-4">
+        <div class="card-header bg-success text-white">
+            <h3 class="mb-0">Pädagogische Diagnostik: {{ schueler.vorname }} {{ schueler.nachname }}</h3>
+        </div>
+
+        <div class="card-body">
+            <form method="POST" enctype="multipart/form-data">
+                {{ form.hidden_tag() }}
+
+                <p class="text-muted">Bitte bewerten Sie die folgenden Punkte auf der Skala.</p>
+
+                {% macro render_item_group(title, item_fields) %}
+                <h5 class="text-success mt-4 mb-3 border-bottom pb-2">{{ title }}</h5>
+                <div class="row">
+                    {% for field in item_fields %}
+                    <div class="col-md-6 mb-3 border-bottom pb-2 rating-row" id="row-{{ field.id }}">
+                        <div class="d-flex justify-content-between align-items-center p-2 rounded">
+                            <label class="form-label fw-bold mb-0" style="width: 50%;">{{ field.label.text
+                                }}</label>
+                            <div class="btn-group" role="group">
+                                {% for subfield in field %}
+                                <input type="radio" class="btn-check rating-input" name="{{ field.name }}"
+                                    id="{{ subfield.id }}" value="{{ subfield.data }}" {% if subfield.checked
+                                    %}checked{% endif %} autocomplete="off" data-row="row-{{ field.id }}" required>
+                                <label class="btn btn-outline-dark" for="{{ subfield.id }}">
+                                    {{ subfield.label.text }}
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endmacro %}
+
+                {% set grp1 = [form.aufgabenverstaendnis, form.konzentration, form.anstrengungsbereitschaft,
+                form.merkfaehigkeit, form.ausdauer, form.selbstbewusstsein, form.kontaktfaehigkeit,
+                form.regelverhalten]
+                %}
+                {{ render_item_group('Allgemeines / Verhalten', grp1) }}
+
+                {% set grp2 = [form.versteht_anweisungen, form.ausdruck_altersangemessen,
+                form.vollstaendige_saetze,
+                form.richtige_verbformen, form.richtige_artikel] %}
+                {{ render_item_group('Sprache & Anweisungen', grp2) }}
+
+                {% set grp3 = [form.konzept_von_schrift, form.schreibt_eigenen_namen,
+                form.koerperkoordination,
+                form.fingerkoordination] %}
+                {{ render_item_group('Schrift & Motorik', grp3) }}
+
+                {% set grp4 = [form.farben_und_formen, form.figur_grund_wahrnehmung, form.mengeninvarianz,
+                form.kognition, form.raum_lage_beziehung, form.auditive_wahrnehmung,
+                form.silben_segmentieren,
+                form.reime_erkennen] %}
+                {{ render_item_group('Kognition & Wahrnehmung', grp4) }}
+
+                <hr class="my-4">
+
+                <!-- Upload & Bemerkungen -->
+                <div class="mb-3 mt-3">
+                    {{ form.bemerkung.label(class="form-label fw-bold") }}
+                    {{ form.bemerkung(class="form-control", rows="3", placeholder="Zusätzliche
+                    Beobachtungen...") }}
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="mb-2">
+                            {{ form.pdf_datei.label(class="form-label fw-bold") }}
+                            {{ form.pdf_datei(class="form-control") }}
+                            {% if schulspiel and schulspiel.pdf_dateiname %}
+                            <div class="mt-2">
+                                aktuell: <a href="{{ url_for('uploaded_file', filename=schulspiel.pdf_dateiname) }}"
+                                    target="_blank"><i class="bi bi-file-earmark-pdf text-danger"></i> {{
+                                    schulspiel.pdf_dateiname
+                                    }}</a>
+                            </div>
+                            {% endif %}
+                            <div class="form-text">Optional: Laden Sie den gescannten Diagnosebogen hoch.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Evaluation Box -->
+                <div class="bg-light border rounded p-3 mb-4">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-0 text-success"><i class="bi bi-calculator"></i> Gesamtwertung</h5>
+                        </div>
+                        <div class="text-end">
+                            <span id="live-score-badge" class="badge bg-secondary fs-5">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-success btn-lg"><i class="bi bi-save"></i>
+                        Schulspiel speichern</button>
+                    <a href="{{ url_for('students.detail', student_id=schueler.id) }}"
+                        class="btn btn-outline-secondary btn-lg"><i class="bi bi-x-circle"></i>
+                        Abbrechen</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Function to update row color
+        function updateRowColor(input) {
+            const rowId = input.getAttribute('data-row');
+            if (!rowId) return;
+            const row = document.getElementById(rowId);
+            const val = parseInt(input.value);
+
+            // Remove old classes
+            row.classList.remove('bg-rating-3', 'bg-rating-2', 'bg-rating-1', 'bg-rating-0');
+
+            // Add new class
+            if (!isNaN(val)) {
+                row.classList.add('bg-rating-' + val);
+            }
+        }
+
+        // Initialize colors
+        document.querySelectorAll('input.rating-input:checked').forEach(input => {
+            updateRowColor(input);
+        });
+
+        // Event Listeners for color change
+        document.querySelectorAll('input.rating-input').forEach(input => {
+            input.addEventListener('change', function () {
+                updateRowColor(this);
+                calculateLiveScore();
+            });
+        });
+
+        function calculateLiveScore() {
+            const inputs = document.querySelectorAll('input.rating-input:checked');
+            let sum = 0;
+            inputs.forEach(input => {
+                sum += parseInt(input.value) || 0;
+            });
+
+            const badge = document.getElementById('live-score-badge');
+
+            const avg = sum / 25;
+            let text = '-';
+            let classStr = 'badge fs-5 me-2 ';
+
+            if (avg >= 2.5) { text = '++'; classStr += 'bg-success'; }
+            else if (avg >= 1.5) { text = '+'; classStr += 'bg-info text-dark'; }
+            else if (avg >= 0.5) { text = 'o'; classStr += 'bg-warning text-dark'; }
+            else { text = '-'; classStr += 'bg-danger'; }
+
+            badge.innerText = text;
+            badge.className = classStr;
+
+            // Add a subtle pulse animation when updated
+            badge.classList.remove('pulse-animation');
+            void badge.offsetWidth; // trigger reflow
+            badge.classList.add('pulse-animation');
+        }
+
+        // Initial calculation
+        calculateLiveScore();
+    });
+</script>
+<style>
+    @keyframes pulse {
+        0% {
+            transform: scale(1);
+        }
+
+        50% {
+            transform: scale(1.1);
+        }
+
+        100% {
+            transform: scale(1);
+        }
+    }
+
+    .pulse-animation {
+        animation: pulse 0.3s ease-in-out;
+    }
+</style>
+{% endblock %}

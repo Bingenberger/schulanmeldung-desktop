@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-5 text-center">
+    <div class="col-12">
+        <h1 class="display-4 fw-bold text-primary">Schulanfänger Manager</h1>
+        <p class="lead text-muted">Zentraler Verwaltungsbereich für Diagnostik und Einschulung</p>
+    </div>
+</div>
+
+<!-- Statistik Karten -->
+
+<!-- Statistik Karten -->
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white h-100 shadow-sm">
+            <div class="card-body text-center px-1">
+                <h6 class="card-title text-uppercase small mb-2"><i class="bi bi-people-fill"></i> Gesamt</h6>
+                <p class="display-6 fw-bold mb-0">{{ stats.count_total }}</p>
+                <small class="text-white-50">(ohne Rückstellungen)</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white h-100 shadow-sm">
+            <div class="card-body text-center px-1">
+                <h6 class="card-title text-uppercase small mb-2"><i class="bi bi-dice-5"></i> Schulspiel</h6>
+                <p class="display-6 fw-bold mb-0">{{ stats.count_schulspiel }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-dark h-100 shadow-sm">
+            <div class="card-body text-center px-1">
+                <h6 class="card-title text-uppercase small mb-2"><i class="bi bi-clipboard-x"></i> Offene Diag.</h6>
+                <p class="display-6 fw-bold mb-0">{{ stats.count_missing_diag }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-danger text-white h-100 shadow-sm">
+            <div class="card-body text-center px-1">
+                <h6 class="card-title text-uppercase small mb-2"><i class="bi bi-heart-pulse"></i> Offene Ärzte</h6>
+                <p class="display-6 fw-bold mb-0">{{ stats.count_missing_arzt }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-5">
+    <!-- AO-SF Stats Combined -->
+    <div class="col-md-6">
+        <div class="card bg-info text-dark h-100 shadow-sm">
+            <div class="card-body px-2">
+                <h6 class="card-title text-uppercase small mb-3 text-center"><i class="bi bi-folder-fill"></i> AO-SF
+                    Übersicht</h6>
+                <div class="row text-center">
+                    <div class="col-6 border-end border-dark">
+                        <p class="display-6 fw-bold mb-0">{{ stats.count_aosf_verdacht }}</p>
+                        <small>Verdacht</small>
+                    </div>
+                    <div class="col-6">
+                        <p class="display-6 fw-bold mb-0">{{ stats.count_aosf_fall }}</p>
+                        <small>Verfahren</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Rückstellung Stats -->
+    <div class="col-md-6">
+        <div class="card text-white h-100 shadow-sm" style="background-color: #6610f2;">
+            <div class="card-body px-2">
+                <h6 class="card-title text-uppercase small mb-3 text-center"><i class="bi bi-arrow-return-left"></i>
+                    Rückstellungen</h6>
+                <div class="row text-center">
+                    <div class="col-6 border-end border-white">
+                        <p class="display-6 fw-bold mb-0">{{ stats.count_rst_empfohlen }}</p>
+                        <small>Empfohlen / Prozess</small>
+                    </div>
+                    <div class="col-6">
+                        <p class="display-6 fw-bold mb-0">{{ stats.count_rst_beschlossen }}</p>
+                        <small>Beschlossen</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Arbeitsbereiche: gleiche Gliederung wie das Menü oben -->
+
+{% macro tile(url, icon, title, text, colour='primary', blank=false) -%}
+<div class="col-md-4 col-lg-3">
+  <a href="{{ url }}" class="card text-decoration-none h-100 shadow-sm hover-effect"{% if blank %} target="_blank"{% endif %}>
+    <div class="card-body text-center p-4">
+      <i class="bi {{ icon }} display-6 text-{{ colour }} mb-2"></i>
+      <h5 class="card-title text-dark mb-1">{{ title }}</h5>
+      <p class="card-text text-muted small mb-0">{{ text }}</p>
+    </div>
+  </a>
+</div>
+{%- endmacro %}
+
+{% set may_manage = current_user.role in ['Administrator', 'Schulleitung', 'Sekretariat'] %}
+
+<h4 class="text-muted border-bottom pb-2 mb-3"><i class="bi bi-people-fill"></i> Schüler</h4>
+<div class="row g-3 mb-5">
+  {{ tile(url_for('students.list_students'), 'bi-list-ul', 'Gesamtliste', 'Alle Kinder einsehen und bearbeiten.') }}
+  {% if may_manage %}
+  {{ tile(url_for('students.add'), 'bi-person-plus-fill', 'Neues Kind', 'Stammdaten einzeln anlegen.', 'success') }}
+  {{ tile(url_for('students.import_city'), 'bi-building', 'Liste der Stadt', 'Schulpflichtige mit Anschrift und Eltern einlesen.', 'secondary') }}
+  {% endif %}
+  {{ tile(url_for('export_cards'), 'bi-card-heading', 'Schülerkarten', 'A4-PDF mit drei Karten pro Seite.', 'danger', true) }}
+</div>
+
+{% if may_manage %}
+<h4 class="text-muted border-bottom pb-2 mb-3"><i class="bi bi-envelope-paper"></i> Anmeldung</h4>
+<div class="row g-3 mb-5">
+  {{ tile(url_for('admin.parent_letters'), 'bi-envelope-paper-fill', 'Elternbriefe', 'Zugangsschreiben mit Link und QR-Code drucken.', 'danger') }}
+  {{ tile(url_for('appointments.index'), 'bi-calendar-week', 'Termine', 'Gesprächsfenster planen und vergeben.', 'primary') }}
+  {{ tile(url_for('admin.registrations'), 'bi-file-earmark-person', 'Anmeldungen', 'Eingegangene Formulare der Eltern prüfen.', 'info') }}
+  {{ tile(url_for('admin.parent_accesses'), 'bi-envelope-lock', 'Elternzugänge', 'Zugänge einsehen, sperren oder freigeben.', 'secondary') }}
+</div>
+{% endif %}
+
+<h4 class="text-muted border-bottom pb-2 mb-3"><i class="bi bi-activity"></i> Diagnostik</h4>
+<div class="row g-3 mb-5">
+  {{ tile(url_for('students.select', target='diagnostik'), 'bi-journal-plus', 'Pädagogische Diagnostik', 'Diagnostik für ein Kind erfassen.', 'info') }}
+  {{ tile(url_for('students.select', target='schulspiel'), 'bi-dice-5', 'Schulspiel', 'Diagnostikbogen Schulspiel erfassen.', 'success') }}
+  {{ tile(url_for('students.select', target='schularzt'), 'bi-file-medical-fill', 'Bericht Schularzt', 'Ergebnisse der Untersuchung eintragen.', 'danger') }}
+  {{ tile(url_for('students.select', target='kita_bericht'), 'bi-house-heart-fill', 'Bericht Kita', 'Einschätzung der Kita erfassen.', 'warning') }}
+</div>
+
+<h4 class="text-muted border-bottom pb-2 mb-3"><i class="bi bi-grid-3x3-gap-fill"></i> Klassenbildung</h4>
+<div class="row g-3 mb-4">
+  {{ tile(url_for('klassenzusammensetzung'), 'bi-grid-3x3-gap-fill', 'Klassen zusammenstellen', 'Kinder per Drag &amp; Drop den Klassen zuteilen.') }}
+  {{ tile(url_for('students.select', target='freunde'), 'bi-people-fill', 'Freundeswünsche', 'Freunde und Negativwünsche erfassen.', 'dark') }}
+  {{ tile(url_for('betreuung_bulk'), 'bi-clock-history', 'Betreuungsformen', 'OGS / ÜMI / Abholung festlegen.', 'success') }}
+  {{ tile(url_for('foerderkurse_bulk'), 'bi-mortarboard-fill', 'Förderkurse', 'LRS / Mathe / Sport / Deutsch zuordnen.', 'primary') }}
+</div>
+
+<style>
+    .hover-effect:hover {
+        transform: translateY(-4px);
+        transition: transform 0.2s;
+        border-color: #0055a5;
+    }
+</style>
+{% endblock %}

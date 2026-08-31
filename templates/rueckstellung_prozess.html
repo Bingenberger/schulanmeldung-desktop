@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row mb-3">
+        <div class="col">
+            <h2 class="text-primary">Rückstellungsverfahren: {{ schueler.vorname }} {{ schueler.nachname }}</h2>
+            <p>Aktueller Status:
+                <span
+                    class="badge {% if rueckstellung and rueckstellung.status == 'Beschlossen' %}bg-success{% elif rueckstellung and rueckstellung.status == 'Abgelehnt' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                    {{ rueckstellung.status if rueckstellung else 'Empfohlen' }}
+                </span>
+            </p>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('students.detail', student_id=schueler.id) }}" class="btn btn-outline-secondary">Zurück zur
+                Akte</a>
+        </div>
+    </div>
+
+    <!-- Prereqs Check -->
+    <div class="card mb-4">
+        <div class="card-header bg-light"><strong>Voraussetzungen prüfen</strong></div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    Pädagogische Diagnostik:
+                    {% if schueler.diag_status == 'Abgeschlossen' %}
+                    <span class="text-success"><i class="bi bi-check-circle-fill"></i> Vorhanden</span>
+                    {% else %}
+                    <span class="text-danger"><i class="bi bi-x-circle-fill"></i> Fehlt (Status: {{ schueler.diag_status
+                        }})</span>
+                    {% endif %}
+                </div>
+                <div class="col-md-6">
+                    Schulärztliche Untersuchung:
+                    {% if schueler.arzt_status == 'Abgeschlossen' %}
+                    <span class="text-success"><i class="bi bi-check-circle-fill"></i> Vorhanden</span>
+                    {% else %}
+                    <span class="text-danger"><i class="bi bi-x-circle-fill"></i> Fehlt (Status: {{ schueler.arzt_status
+                        }})</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form method="POST" enctype="multipart/form-data">
+        {{ form.hidden_tag() }}
+
+        <!-- 1. Zuständigkeit & Unterlagen -->
+        <div class="card mb-4 border-primary">
+            <div class="card-header bg-primary text-white">1. Verfahrenseinleitung & Unterlagen</div>
+            <div class="card-body">
+                <div class="mb-3">
+                    {{ form.leitung_user_id.label(class="form-label") }}
+                    {{ form.leitung_user_id(class="form-select") }}
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ form.bericht_medizin.label(class="form-label") }}
+                        {{ form.bericht_medizin(class="form-control") }}
+                        {% if rueckstellung and rueckstellung.bericht_medizin_dateiname %}
+                        <small class="text-muted">Aktuell: <a
+                                href="{{ url_for('uploaded_file', filename=rueckstellung.bericht_medizin_dateiname) }}"
+                                target="_blank">PDF ansehen</a></small>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        {{ form.bericht_therapie.label(class="form-label") }}
+                        {{ form.bericht_therapie(class="form-control") }}
+                        {% if rueckstellung and rueckstellung.bericht_therapie_dateiname %}
+                        <small class="text-muted">Aktuell: <a
+                                href="{{ url_for('uploaded_file', filename=rueckstellung.bericht_therapie_dateiname) }}"
+                                target="_blank">PDF ansehen</a></small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Förderkonferenz & Entscheidung -->
+        <div class="card mb-4 border-info">
+            <div class="card-header bg-info text-dark">2. Förderkonferenz & Entscheidung</div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ form.konferenz_datum.label(class="form-label") }}
+                        {{ form.konferenz_datum(class="form-control", type="date") }}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        {{ form.konferenz_ergebnis.label(class="form-label") }}
+                        {{ form.konferenz_ergebnis(class="form-select") }}
+                        <div class="form-text">Bei "Stattgegeben" gilt die Rückstellung als
+                            <strong>Beschlossen</strong>.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Elternschreiben -->
+        <div class="card mb-4 border-warning">
+            <div class="card-header bg-warning text-dark">3. Elternschreiben</div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ form.elternschreiben_datum.label(class="form-label") }}
+                        {{ form.elternschreiben_datum(class="form-control", type="date") }}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        {{ form.elternschreiben_datei.label(class="form-label") }}
+                        {{ form.elternschreiben_datei(class="form-control") }}
+                        {% if rueckstellung and rueckstellung.elternschreiben_dateiname %}
+                        <small class="text-muted">Aktuell: <a
+                                href="{{ url_for('uploaded_file', filename=rueckstellung.elternschreiben_dateiname) }}"
+                                target="_blank">PDF ansehen</a></small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            {{ form.bemerkung.label(class="form-label") }}
+            {{ form.bemerkung(class="form-control", rows=3) }}
+        </div>
+
+        <div class="d-grid gap-2">
+            {{ form.submit(class="btn btn-primary btn-lg") }}
+        </div>
+
+    </form>
+</div>
+{% endblock %}

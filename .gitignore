@@ -1,0 +1,15 @@
+# Laufzeitdaten -- gehören nie ins Repository
+venv/
+instance/
+uploads/
+backups/
+*.db
+*.sqlite3
+
+# Konfiguration mit Zugangsdaten
+.env
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store

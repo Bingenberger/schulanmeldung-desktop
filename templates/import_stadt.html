@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-10">
+    <div class="card shadow-sm">
+      <div class="card-header bg-primary text-white">
+        <h4 class="mb-0"><i class="bi bi-building"></i> Schulpflichtigenliste der Stadt einlesen</h4>
+      </div>
+      <div class="card-body">
+
+        {% if not headers %}
+        <div class="alert alert-info">
+          <h5 class="mb-2"><i class="bi bi-1-circle"></i> Schritt 1: Datei hochladen</h5>
+          <p class="mb-1">Lade die Excel-Datei (.xlsx) der Stadt hoch, so wie du sie bekommen hast.</p>
+          <p class="mb-0 small">Die Spaltenüberschriften ordnest du im nächsten Schritt zu — sie dürfen
+            also jedes Jahr anders heißen. Enthalten sein sollten Name, Vorname und Geburtsdatum des Kindes,
+            möglichst auch Anschrift und die Namen der Erziehungsberechtigten.</p>
+        </div>
+        <form method="POST" enctype="multipart/form-data">
+          {{ form.hidden_tag() }}
+          <div class="mb-3">
+            {{ form.file.label(class="form-label") }}
+            {{ form.file(class="form-control") }}
+            {% for error in form.file.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="d-flex gap-2 align-items-center">
+            <button class="btn btn-primary"><i class="bi bi-upload"></i> Datei einlesen</button>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Abbrechen</a>
+            <a href="{{ url_for('students.import_excel') }}" class="ms-auto small text-muted">
+              Einfacher Import ohne Anschrift &rsaquo;
+            </a>
+          </div>
+        </form>
+
+        {% else %}
+        <div class="alert alert-info">
+          <h5 class="mb-2"><i class="bi bi-2-circle"></i> Schritt 2: Spalten zuordnen</h5>
+          <p class="mb-0">Ordne jeder Angabe die passende Spalte aus der Datei zu.
+            Felder mit <span class="text-danger">*</span> sind Pflicht, der Rest ist optional.</p>
+        </div>
+
+        <form method="POST" action="{{ url_for('students.import_city_apply') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="row g-3">
+            {% for name, label, required, _ in fields %}
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">
+                {{ label }}{% if required %} <span class="text-danger">*</span>{% endif %}
+              </label>
+              <select name="map_{{ name }}" class="form-select form-select-sm" {% if required %}required{% endif %}>
+                <option value="">— nicht übernehmen —</option>
+                {% for header in headers %}
+                <option value="{{ header }}" {% if mapping.get(name) == header %}selected{% endif %}>{{ header }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            {% endfor %}
+          </div>
+
+          <h6 class="mt-4"><i class="bi bi-table"></i> Vorschau der ersten Zeilen</h6>
+          <div class="table-responsive border rounded" style="max-height:18rem">
+            <table class="table table-sm table-striped mb-0" style="font-size:.8rem">
+              <thead class="table-light position-sticky top-0">
+                <tr>{% for header in headers %}<th class="text-nowrap">{{ header }}</th>{% endfor %}</tr>
+              </thead>
+              <tbody>
+                {% for row in preview %}
+                <tr>{% for header in headers %}<td class="text-nowrap">{{ row.get(header) if row.get(header) is not none else '' }}</td>{% endfor %}</tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="alert alert-warning mt-3 mb-3 small">
+            <i class="bi bi-info-circle"></i> Kinder, die es schon gibt (gleicher Name und gleiches Geburtsdatum),
+            werden <strong>nicht doppelt angelegt</strong>, sondern um Anschrift und Elternnamen ergänzt.
+          </div>
+
+          <div class="d-flex gap-2">
+            <button class="btn btn-success"><i class="bi bi-check2-circle"></i> Import starten</button>
+            <a href="{{ url_for('students.import_city') }}" class="btn btn-outline-secondary">Andere Datei wählen</a>
+          </div>
+        </form>
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

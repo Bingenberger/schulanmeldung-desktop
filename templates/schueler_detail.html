@@ -1,0 +1,708 @@
+{% extends "base.html" %}
+{% from "macros.html" import render_score %}
+
+{% block content %}
+
+<div class="container mt-4">
+    <!-- Back Button -->
+    <div class="mb-3">
+        <a href="{{ url_for('students.list_students') }}" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> Zurück zur
+            Liste</a>
+    </div>
+
+    <!-- Header Card: Stammdaten & Actions -->
+    <div class="card shadow-sm mb-4 border-primary border-top border-4">
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h2 class="card-title text-primary fw-bold mb-1">{{ schueler.nachname }}, {{ schueler.vorname }}
+                    </h2>
+                    <p class="text-muted mb-2">
+                        <i class="bi bi-calendar-event"></i> Geb: {{ schueler.geburtsdatum.strftime('%d.%m.%Y') if
+                        schueler.geburtsdatum else '-' }}
+                        <span class="mx-2">|</span>
+                        {% if schueler.geschlecht == 'm' %}<i class="bi bi-gender-male text-primary"
+                            title="Männlich"></i>
+                        {% elif schueler.geschlecht == 'w' %}<i class="bi bi-gender-female text-danger"
+                            title="Weiblich"></i>
+                        {% elif schueler.geschlecht == 'd' %}<i class="bi bi-gender-ambiguous text-success"
+                            title="Divers"></i>
+                        {% else %}<span class="text-muted" title="Unbekannt">?</span>{% endif %}
+                        <span class="mx-2">|</span>
+                        <i class="bi bi-building"></i> {{ schueler.kita }}
+                    </p>
+                    <p class="text-muted mb-2 small">
+                        <i class="bi bi-house-door"></i>
+                        {% if schueler.strasse or schueler.ort %}
+                        {{ schueler.strasse or '' }}{% if schueler.strasse and (schueler.plz or schueler.ort) %}, {% endif %}{{ schueler.plz or '' }} {{ schueler.ort or '' }}
+                        {% else %}
+                        <span class="text-danger">keine Anschrift erfasst</span>
+                        {% endif %}
+                        <br>
+                        <i class="bi bi-people"></i>
+                        {{ schueler.erzb_1_name or '—' }}{% if schueler.erzb_2_name %}, {{ schueler.erzb_2_name }}{% endif %}
+                    </p>
+                    <div>
+                        {% if schueler.kann_kind %}
+                        <span class="badge bg-info text-dark me-1">Kann-Kind</span>
+                        {% else %}
+                        <span class="badge bg-secondary me-1">Schulpflichtig</span>
+                        {% endif %}
+
+                        {% if schueler.betreuung == 'OGS' %}
+                        <span class="badge me-1" style="background:#1a6e1a;color:#fff;">OGS</span>
+                        {% elif schueler.betreuung == 'ÜMI' %}
+                        <span class="badge me-1" style="background:#6a0dad;color:#fff;">ÜMI</span>
+                        {% elif schueler.betreuung == 'Abholung' %}
+                        <span class="badge bg-light text-dark border me-1">Abholung</span>
+                        {% endif %}
+
+                        <!-- Mini Status Indicators -->
+                        <span
+                            class="badge {{ 'bg-success' if schueler.diag_status == 'Abgeschlossen' else 'bg-warning text-dark' }} me-1">Diag:
+                            {{ schueler.diag_status }}</span>
+                        <span
+                            class="badge {{ 'bg-success' if schueler.arzt_status == 'Abgeschlossen' else 'bg-secondary' }} me-1">Arzt:
+                            {{ schueler.arzt_status }}</span>
+
+                        {% if has_aosf_suspicion %}
+                        <span
+                            class="badge {% if aosf and aosf.status == 'Abgeschlossen' %}bg-success{% elif aosf and aosf.status == 'Fall' %}bg-danger{% else %}bg-warning text-dark{% endif %} me-1">
+                            AO-SF: {{ aosf.status if aosf else 'Verdacht' }}
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-6 text-md-end mt-3 mt-md-0">
+                    {% if current_user.role in ['Administrator', 'Schulleitung', 'Sekretariat'] %}
+                    <a href="{{ url_for('students.edit', student_id=schueler.id) }}" class="btn btn-outline-primary me-2">
+                        <i class="bi bi-pencil"></i> Stammdaten
+                    </a>
+                    <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal"
+                        data-bs-target="#deleteModal">
+                        <i class="bi bi-trash"></i> Löschen
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Anmeldegespräch -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 text-dark"><i class="bi bi-calendar-check text-primary"></i> Anmeldegespräch</h5>
+            {% if appointment_event %}
+            <a class="btn btn-sm btn-outline-secondary"
+               href="{{ url_for('appointments.detail', event_id=appointment_event.id) }}">Planer öffnen</a>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            {% if appointment %}
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <span class="fs-5 fw-semibold">{{ appointment_label }}</span>
+                    {% if appointment.source == 'staff' %}
+                    <span class="badge bg-secondary ms-2"><i class="bi bi-person-badge"></i> von uns zugewiesen</span>
+                    {% else %}
+                    <span class="badge bg-primary ms-2"><i class="bi bi-house-door"></i> selbst gebucht</span>
+                    {% endif %}
+                </div>
+                {% if current_user.role in ['Administrator', 'Schulleitung', 'Sekretariat'] %}
+                <form method="post" action="{{ url_for('appointments.cancel', booking_id=appointment.id) }}"
+                      onsubmit="return confirm('Termin wirklich stornieren?')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="next" value="{{ url_for('students.detail', student_id=schueler.id) }}">
+                    <button class="btn btn-sm btn-outline-danger">Termin stornieren</button>
+                </form>
+                {% endif %}
+            </div>
+            {% elif not appointment_event %}
+            <p class="text-muted mb-0">Es ist noch keine Terminveranstaltung angelegt.</p>
+            {% elif current_user.role in ['Administrator', 'Schulleitung', 'Sekretariat'] %}
+            <form method="post" action="{{ url_for('appointments.assign', student_id=schueler.id) }}"
+                  class="row g-2 align-items-end">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="next" value="{{ url_for('students.detail', student_id=schueler.id) }}">
+                <div class="col-md-8">
+                    <label class="form-label small text-muted mb-1">Freies Zeitfenster zuweisen</label>
+                    <select name="slot_id" class="form-select" {% if not free_slots %}disabled{% endif %} required>
+                        {% for slot in free_slots %}
+                        <option value="{{ slot.id }}">{{ slot.label }} ({{ slot.free }} frei)</option>
+                        {% else %}
+                        <option>Keine freien Zeitfenster vorhanden</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <button class="btn btn-primary w-100" {% if not free_slots %}disabled{% endif %}>
+                        <i class="bi bi-calendar-plus"></i> Termin vergeben
+                    </button>
+                </div>
+            </form>
+            {% else %}
+            <p class="text-muted mb-0">Noch kein Termin vergeben.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Tabs Navigation -->
+    <ul class="nav nav-tabs mb-4" id="studentTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active fw-bold" id="overview-tab" data-bs-toggle="tab" data-bs-target="#overview"
+                type="button" role="tab" aria-controls="overview" aria-selected="true">
+                <i class="bi bi-person-lines-fill me-2"></i> Übersicht & Soziales
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link fw-bold" id="diagnostics-tab" data-bs-toggle="tab" data-bs-target="#diagnostics"
+                type="button" role="tab" aria-controls="diagnostics" aria-selected="false">
+                <i class="bi bi-activity me-2"></i> Diagnostik
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link fw-bold" id="process-tab" data-bs-toggle="tab" data-bs-target="#process"
+                type="button" role="tab" aria-controls="process" aria-selected="false">
+                <i class="bi bi-folder-symlink me-2"></i> Verfahren
+            </button>
+        </li>
+    </ul>
+
+    <!-- Tabs Content -->
+    <div class="tab-content" id="studentTabsContent">
+
+        <!-- === TAB 1: ÜBERSICHT & SOZIALES === -->
+        <div class="tab-pane fade show active" id="overview" role="tabpanel" aria-labelledby="overview-tab">
+            <div class="row">
+                <!-- Spalte 1: Freunde -->
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0 text-dark"><i class="bi bi-people text-info"></i> Freundeswünsche</h5>
+                            <a href="{{ url_for('freunde_bearbeiten', id=schueler.id) }}"
+                                class="btn btn-sm btn-outline-dark">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                        </div>
+                        <div class="card-body">
+                            <!-- Freund 1 -->
+                            <div class="mb-3">
+                                <h6 class="text-info fw-bold small">1. Wunsch</h6>
+                                {% if schueler.freund1 %}
+                                <div
+                                    class="p-2 border rounded bg-light d-flex justify-content-between align-items-center">
+                                    <span>{{ schueler.freund1.vorname }} {{ schueler.freund1.nachname }}</span>
+                                    {% if schueler.freund1_negativ %}
+                                    <span class="badge bg-danger">Negativ</span>
+                                    {% else %}
+                                    <span class="badge bg-success">Positiv</span>
+                                    {% endif %}
+                                </div>
+                                {% else %}
+                                <span class="text-muted fst-italic">Keine Auswahl</span>
+                                {% endif %}
+                            </div>
+
+                            <!-- Freund 2 -->
+                            <div class="mb-3">
+                                <h6 class="text-info fw-bold small">2. Wunsch</h6>
+                                {% if schueler.freund2 %}
+                                <div
+                                    class="p-2 border rounded bg-light d-flex justify-content-between align-items-center">
+                                    <span>{{ schueler.freund2.vorname }} {{ schueler.freund2.nachname }}</span>
+                                    {% if schueler.freund2_negativ %}
+                                    <span class="badge bg-danger">Negativ</span>
+                                    {% else %}
+                                    <span class="badge bg-success">Positiv</span>
+                                    {% endif %}
+                                </div>
+                                {% else %}
+                                <span class="text-muted fst-italic">Keine Auswahl</span>
+                                {% endif %}
+                            </div>
+
+                            {% if schueler.freunde_bemerkung %}
+                            <div class="alert alert-info py-2 small mb-0">
+                                <strong><i class="bi bi-chat-left-text"></i> Bemerkung:</strong><br>
+                                {{ schueler.freunde_bemerkung }}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Förderkurse -->
+                {% set fk = [
+                  (schueler.foerderkurs_lrs,     'LRS',     '#b5451b'),
+                  (schueler.foerderkurs_mathe,   'Mathe',   '#0a5299'),
+                  (schueler.foerderkurs_sport,   'Sport',   '#2a7a2a'),
+                  (schueler.foerderkurs_deutsch, 'Deutsch', '#6a0dad'),
+                ] %}
+                {% if fk|selectattr('0')|list %}
+                <div class="col-12 mb-4">
+                  <div class="card shadow-sm">
+                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                      <h5 class="mb-0 text-dark"><i class="bi bi-mortarboard-fill text-primary"></i> Förderkurse</h5>
+                      <a href="{{ url_for('foerderkurse_bulk') }}" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-pencil"></i>
+                      </a>
+                    </div>
+                    <div class="card-body d-flex gap-2 flex-wrap">
+                      {% for aktiv, label, color in fk %}
+                      {% if aktiv %}
+                      <span class="badge fs-6 px-3 py-2" style="background:{{ color }};color:#fff;">{{ label }}</span>
+                      {% endif %}
+                      {% endfor %}
+                    </div>
+                  </div>
+                </div>
+                {% endif %}
+
+                <!-- Spalte 2: Kita -->
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100 shadow-sm border-warning" style="border-left-width: 4px;">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0 text-dark"><i class="bi bi-house-heart text-warning"></i> Bericht Kita</h5>
+                            <a href="{{ url_for('kita_bericht', id=schueler.id) }}"
+                                class="btn btn-sm btn-outline-warning text-dark">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                        </div>
+                        <div class="card-body">
+                            {% if schueler.kita_bericht %}
+                            <div class="row mb-3">
+                                <div class="col-6">
+                                    <small class="text-muted fw-bold">ELEMENT</small><br>
+                                    <span class="fw-bold">Kognitiv</span>
+                                </div>
+                                <div class="col-6 text-end">
+                                    <small class="text-muted fw-bold">WERTUNG</small><br>
+                                    {% set k = schueler.kita_bericht.kognitiv %}
+                                    {% if k == 3 %}<span class="badge bg-success">++ (Sehr gut)</span>
+                                    {% elif k == 2 %}<span class="badge bg-success" style="opacity:0.8">+ (Gut)</span>
+                                    {% elif k == 1 %}<span class="badge bg-warning text-dark">o (Mittel)</span>
+                                    {% elif k == 0 %}<span class="badge bg-danger">- (Auffällig)</span>
+                                    {% else %}<span class="text-muted">-</span>{% endif %}
+                                </div>
+                            </div>
+                            <div class="row mb-3 border-bottom pb-3">
+                                <div class="col-6">
+                                    <span class="fw-bold">Sozialverhalten</span>
+                                </div>
+                                <div class="col-6 text-end">
+                                    {% set v = schueler.kita_bericht.verhalten %}
+                                    {% if v == 3 %}<span class="badge bg-success">++ (Sehr gut)</span>
+                                    {% elif v == 2 %}<span class="badge bg-success" style="opacity:0.8">+ (Gut)</span>
+                                    {% elif v == 1 %}<span class="badge bg-warning text-dark">o (Mittel)</span>
+                                    {% elif v == 0 %}<span class="badge bg-danger">- (Auffällig)</span>
+                                    {% else %}<span class="text-muted">-</span>{% endif %}
+                                </div>
+                            </div>
+
+                            {% if schueler.kita_bericht.bemerkung %}
+                            <div class="alert alert-warning py-2 small mb-0">
+                                <strong><i class="bi bi-chat-quote"></i> Kita Bemerkung:</strong><br>
+                                {{ schueler.kita_bericht.bemerkung }}
+                            </div>
+                            {% endif %}
+
+                            {% else %}
+                            <div class="text-center py-4 text-muted">
+                                <i class="bi bi-file-earmark-x display-6"></i><br>
+                                Noch kein Bericht vorhanden.
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- === TAB 2: DIAGNOSTIK === -->
+        <div class="tab-pane fade" id="diagnostics" role="tabpanel" aria-labelledby="diagnostics-tab">
+
+            <!-- 1. Schuldiagnostik -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 text-primary"><i class="bi bi-clipboard-data"></i> Schuldiagnostik</h5>
+                    <div>
+                        {% if diagnostik and diagnostik.pdf_dateiname %}
+                        <button onclick="openPdf('{{ url_for('uploaded_file', filename=diagnostik.pdf_dateiname) }}')"
+                            class="btn btn-sm btn-danger me-1">
+                            <i class="bi bi-file-pdf"></i> PDF
+                        </button>
+                        {% endif %}
+                        <a href="{{ url_for('diagnostik', id=schueler.id) }}" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-pencil"></i> Bearbeiten
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if diagnostik %}
+                    <div class="row g-4">
+                        <div class="col-md-4">
+                            <h6 class="border-bottom pb-2">Sprache</h6>
+                            <ul class="list-unstyled">
+                                <li>Wortschatz: <strong>{{ render_score(diagnostik.wortschatz) }}</strong></li>
+                                <li>Grammatik: <strong>{{ render_score(diagnostik.grammatik) }}</strong></li>
+                                <li>Aussprache: <strong>{{ render_score(diagnostik.aussprache) }}</strong></li>
+                                <li>Gespräch: <strong>{{ render_score(diagnostik.gespraechsverhalten) }}</strong></li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4">
+                            <h6 class="border-bottom pb-2">Phonologische Bewusstheit</h6>
+                            <ul class="list-unstyled">
+                                <li>Sätze nachspr.: <strong>{{ render_score(diagnostik.saetze_nachsprechen) }}</strong>
+                                </li>
+                                <li>Reimen: <strong>{{ render_score(diagnostik.reimen) }}</strong></li>
+                                <li>Pluralbildung: <strong>{{ render_score(diagnostik.pluralbildung) }}</strong></li>
+                                <li>Wörter segm.: <strong>{{ render_score(diagnostik.woerter_segmentieren) }}</strong>
+                                </li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4">
+                            <h6 class="border-bottom pb-2">Mathematik & Sonstiges</h6>
+                            <ul class="list-unstyled">
+                                <li>Mengen erfassen: <strong>{{ render_score(diagnostik.mengenerfassung) }}</strong>
+                                </li>
+                                <li>Menge herstellen: <strong>{{ render_score(diagnostik.menge_herstellen) }}</strong>
+                                </li>
+                                <li>Zahlen erkennen: <strong>{{ render_score(diagnostik.zahlen_erkennen) }}</strong>
+                                </li>
+                                <li>Zählen (rück): <strong>{{ render_score(diagnostik.rueckwaerts_zaehlen) }}</strong>
+                                </li>
+                                <li>Zahlreihe erz.: <strong>{{ render_score(diagnostik.zahlreihe_erzeugen) }}</strong>
+                                </li>
+                                <li>Logische Reihe: <strong>{{ render_score(diagnostik.logische_reihe) }}</strong></li>
+                                <li>Bild malen: <strong>{{ render_score(diagnostik.bild_malen) }}</strong></li>
+                                <li>Komplexe Figur: <strong>{{ render_score(diagnostik.komplexe_figur) }}</strong></li>
+                            </ul>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>Gesamteindruck Kognitiv:</strong> {{
+                            render_score(diagnostik.gesamteindruck_kognitiv) }}
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Gesamteindruck Verhalten:</strong> {{
+                            render_score(diagnostik.gesamteindruck_verhalten) }}
+                        </div>
+                    </div>
+                    {% if diagnostik.bemerkung %}
+                    <div class="alert alert-light border mt-3 mb-0">
+                        <small><strong>Bemerkung:</strong> {{ diagnostik.bemerkung }}</small>
+                    </div>
+                    {% endif %}
+                    {% else %}
+                    <p class="text-muted">Keine Schuldiagnostik durchgeführt.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- 1.5 Schulspiel -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 text-white"><i class="bi bi-dice-5"></i> Schulspiel</h5>
+                    <div>
+                        {% if schueler.schulspiel_diagnostik and schueler.schulspiel_diagnostik.pdf_dateiname %}
+                        <button
+                            onclick="openPdf('{{ url_for('uploaded_file', filename=schueler.schulspiel_diagnostik.pdf_dateiname) }}')"
+                            class="btn btn-sm btn-danger me-1">
+                            <i class="bi bi-file-pdf"></i> PDF
+                        </button>
+                        {% endif %}
+                        <a href="{{ url_for('schulspiel', id=schueler.id) }}" class="btn btn-sm btn-outline-success">
+                            <i class="bi bi-pencil"></i> Bearbeiten
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if schueler.schulspiel_diagnostik %}
+                    <div class="row text-center mb-3">
+                        <div class="col-12">
+                            <div class="p-3 bg-light border rounded">
+                                <h6 class="text-muted mb-1">Gesamtwertung</h6>
+                                <h3 class="fw-bold mb-0">{{ render_score(schueler.schulspiel_diagnostik.gesamttendenz)
+                                    }}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    {% if schueler.schulspiel_diagnostik.bemerkung %}
+                    <div class="alert alert-light border mt-3 mb-0">
+                        <small><strong>Bemerkung:</strong> {{ schueler.schulspiel_diagnostik.bemerkung }}</small>
+                    </div>
+                    {% endif %}
+                    {% else %}
+                    <p class="text-muted">Noch kein Schulspielbogen erfasst.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- 2. Schularzt -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 text-success"><i class="bi bi-heart-pulse"></i> Schularzt</h5>
+                    <div>
+                        {% if schularzt and schularzt.pdf_dateiname %}
+                        <button onclick="openPdf('{{ url_for('uploaded_file', filename=schularzt.pdf_dateiname) }}')"
+                            class="btn btn-sm btn-danger me-1">
+                            <i class="bi bi-file-pdf"></i> PDF
+                        </button>
+                        {% endif %}
+                        <a href="{{ url_for('schularzt', id=schueler.id) }}" class="btn btn-sm btn-outline-success">
+                            <i class="bi bi-pencil"></i> Bearbeiten
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if schularzt %}
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p class="mb-1"><strong>Untersucht am:</strong> {{ schularzt.datum.strftime('%d.%m.%Y') if
+                                schularzt.datum else '-' }}</p>
+                            <p class="mb-1"><strong>Ergebnis:</strong> {{ schularzt.ergebnis }}</p>
+                            <div class="mt-2">
+                                <span class="badge bg-light text-dark border">Hören: {{ schularzt.hoerfaehigkeit
+                                    }}</span>
+                                <span class="badge bg-light text-dark border">Sehen: {{ schularzt.sehfaehigkeit
+                                    }}</span>
+                            </div>
+                            <div class="mt-3 pt-2 border-top">
+                                <strong>Gesamteinschätzung:</strong> {{ render_score(schularzt.gesamteinschaetzung) }}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="small fw-bold text-uppercase text-muted">Förderbedarf</h6>
+                            <div class="d-flex flex-wrap gap-2">
+                                {% if schularzt.foerder_grobmotorik %}<span class="badge bg-danger">Grobmotorik</span>{%
+                                endif %}
+                                {% if schularzt.foerder_fein_visuomotorik %}<span
+                                    class="badge bg-danger">Feinmotorik</span>{% endif %}
+                                {% if schularzt.foerder_visuelle_wahrnehmung %}<span
+                                    class="badge bg-danger">Visuell</span>{% endif %}
+                                {% if schularzt.foerder_auditive_wahrnehmung %}<span
+                                    class="badge bg-danger">Auditiv</span>{% endif %}
+                                {% if schularzt.foerder_deutschkenntnisse %}<span
+                                    class="badge bg-danger">Deutsch</span>{% endif %}
+                                {% if schularzt.foerder_zahlen_mengen %}<span class="badge bg-danger">Zahlen</span>{%
+                                endif %}
+                                {% if schularzt.foerder_konzentration %}<span
+                                    class="badge bg-danger">Konzentration</span>{% endif %}
+                                {% if schularzt.foerder_psychosozial %}<span
+                                    class="badge bg-danger">Psychosozial</span>{% endif %}
+
+                                {% if schularzt.foerder_sprache %}
+                                {% for item in schularzt.foerder_sprache.split(',') %}
+                                <span class="badge bg-danger">Sprache: {{ item }}</span>
+                                {% endfor %}
+                                {% endif %}
+
+                                {% if not schularzt.foerder_grobmotorik and not schularzt.foerder_fein_visuomotorik and
+                                not schularzt.foerder_deutschkenntnisse and not schularzt.foerder_sprache %}
+                                <span class="text-muted small"><i>Kein spezifischer Förderbedarf vermerkt.</i></span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <p class="text-muted">Keine schulärztliche Untersuchung erfasst.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+        </div>
+
+        <!-- === TAB 3: VERFAHREN === -->
+        <div class="tab-pane fade" id="process" role="tabpanel" aria-labelledby="process-tab">
+
+            <div class="row">
+                <!-- AO-SF -->
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100 shadow-sm border-warning" style="border-top-width: 4px;">
+                        <div
+                            class="card-header bg-warning bg-opacity-10 d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0 text-dark"><i class="bi bi-exclamation-diamond-fill text-warning"></i> AO-SF
+                                Verfahren</h5>
+                            <a href="{{ url_for('aosf_prozess', id=schueler.id) }}" class="btn btn-sm btn-primary">
+                                <i class="bi bi-pencil-square"></i>
+                            </a>
+                        </div>
+                        <div class="card-body">
+                            {% if not has_aosf_suspicion %}
+                            <div class="text-center py-5">
+                                <i class="bi bi-check-circle text-success display-4"></i>
+                                <p class="mt-3 text-muted">Kein Verdacht auf sonderpädagogischen Förderbedarf.</p>
+                            </div>
+                            {% else %}
+                            <!-- AO-SF Status List (Simplified) -->
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item d-flex justify-content-between">
+                                    <span>Status</span>
+                                    <span class="fw-bold">{{ aosf.status if aosf else 'Verdacht' }}</span>
+                                </li>
+                                <li class="list-group-item">
+                                    <small class="text-muted d-block">1. Unterlagen</small>
+                                    {% if aosf and aosf.bericht_medizin_dateiname %}
+                                    <a href="#"
+                                        onclick="openPdf('{{ url_for('uploaded_file', filename=aosf.bericht_medizin_dateiname) }}'); return false;"
+                                        class="badge bg-success text-decoration-none" title="PDF ansehen">Medizin</a>
+                                    {% else %}
+                                    <span class="badge bg-light text-muted border">Medizin</span>
+                                    {% endif %}
+
+                                    {% if aosf and aosf.bericht_therapie_dateiname %}
+                                    <a href="#"
+                                        onclick="openPdf('{{ url_for('uploaded_file', filename=aosf.bericht_therapie_dateiname) }}'); return false;"
+                                        class="badge bg-success text-decoration-none" title="PDF ansehen">Therapie</a>
+                                    {% else %}
+                                    <span class="badge bg-light text-muted border">Therapie</span>
+                                    {% endif %}
+
+                                    {% if aosf and aosf.antrag_dateiname %}
+                                    <a href="#"
+                                        onclick="openPdf('{{ url_for('uploaded_file', filename=aosf.antrag_dateiname) }}'); return false;"
+                                        class="badge bg-primary text-decoration-none" title="PDF ansehen">Antrag</a>
+                                    {% endif %}
+                                </li>
+                                <li class="list-group-item">
+                                    <small class="text-muted d-block">2. Konferenz</small>
+                                    {{ aosf.konferenz_ergebnis if aosf and aosf.konferenz_ergebnis else '-' }}
+                                </li>
+                                <li class="list-group-item">
+                                    <small class="text-muted d-block">3. Entscheidung Amt</small>
+                                    {{ aosf.schulamt_entscheidung if aosf and aosf.schulamt_entscheidung else '-' }}
+                                </li>
+                            </ul>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Rückstellung -->
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100 shadow-sm border-info" style="border-top-width: 4px;">
+                        <div
+                            class="card-header bg-info bg-opacity-10 d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0 text-dark"><i class="bi bi-arrow-return-left text-info"></i> Rückstellung
+                            </h5>
+                            <a href="{{ url_for('rueckstellung_prozess', id=schueler.id) }}"
+                                class="btn btn-sm btn-primary">
+                                <i class="bi bi-pencil-square"></i>
+                            </a>
+                        </div>
+                        <div class="card-body">
+                            {% if not has_rueckstellung_empfohlen %}
+                            <div class="text-center py-5">
+                                <i class="bi bi-backpack text-success display-4"></i>
+                                <p class="mt-3 text-muted">Reguläre Einschulung vorgesehen.</p>
+                            </div>
+                            {% else %}
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item d-flex justify-content-between">
+                                    <span>Status</span>
+                                    <span class="fw-bold">{{ rueckstellung.status if rueckstellung else 'Empfohlen'
+                                        }}</span>
+                                </li>
+                                <li class="list-group-item">
+                                    <small class="text-muted d-block">Konferenz</small>
+                                    {{ rueckstellung.konferenz_ergebnis if rueckstellung and
+                                    rueckstellung.konferenz_ergebnis else '-' }}
+                                </li>
+                                <li class="list-group-item">
+                                    <small class="text-muted d-block">Unterlagen</small>
+                                    {% if rueckstellung and rueckstellung.bericht_medizin_dateiname %}
+                                    <a href="#"
+                                        onclick="openPdf('{{ url_for('uploaded_file', filename=rueckstellung.bericht_medizin_dateiname) }}'); return false;"
+                                        class="badge bg-success text-decoration-none">Medizin</a>
+                                    {% else %}
+                                    <span class="badge bg-light text-muted border">Medizin</span>
+                                    {% endif %}
+                                    {% if rueckstellung and rueckstellung.bericht_therapie_dateiname %}
+                                    <a href="#"
+                                        onclick="openPdf('{{ url_for('uploaded_file', filename=rueckstellung.bericht_therapie_dateiname) }}'); return false;"
+                                        class="badge bg-success text-decoration-none">Therapie</a>
+                                    {% else %}
+                                    <span class="badge bg-light text-muted border">Therapie</span>
+                                    {% endif %}
+                                </li>
+                                <li class="list-group-item">
+                                    <small class="text-muted d-block">Elternschreiben</small>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span>{{ rueckstellung.elternschreiben_datum.strftime('%d.%m.%Y') if
+                                            rueckstellung and rueckstellung.elternschreiben_datum else 'Ausstehend'
+                                            }}</span>
+                                        {% if rueckstellung and rueckstellung.elternschreiben_dateiname %}
+                                        <a href="#"
+                                            onclick="openPdf('{{ url_for('uploaded_file', filename=rueckstellung.elternschreiben_dateiname) }}'); return false;"
+                                            class="btn btn-sm btn-outline-primary py-0 px-1" title="PDF ansehen"><i
+                                                class="bi bi-file-earmark-pdf"></i></a>
+                                        {% endif %}
+                                    </div>
+                                </li>
+                            </ul>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div> <!-- End Tab Content -->
+
+</div>
+
+<!-- Modal for PDF -->
+<div class="modal fade" id="pdfModal" tabindex="-1" aria-labelledby="pdfModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" style="height: 90vh;">
+        <div class="modal-content h-100">
+            <div class="modal-header">
+                <h5 class="modal-title" id="pdfModalLabel">Dokumentenansicht</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Schließen"></button>
+            </div>
+            <div class="modal-body p-0" style="background: #e9ecef;">
+                <iframe id="pdfFrame" src="" style="width:100%; height:100%; border:none;"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal for Delete Confirmation -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="deleteModalLabel">Schüler löschen bestätigen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Schließen"></button>
+            </div>
+            <div class="modal-body">
+                <p>Möchten Sie den Datensatz von <strong>{{ schueler.vorname }} {{ schueler.nachname }}</strong>
+                    wirklich unwiderruflich löschen?</p>
+                <p class="text-danger"><small>Diese Aktion kann nicht rückgängig gemacht werden. Alle Diagnostiken und
+                        Berichte werden ebenfalls gelöscht.</small></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <form action="{{ url_for('students.delete', student_id=schueler.id) }}" method="POST">
+                    <button type="submit" class="btn btn-danger">Löschen</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openPdf(url) {
+        var modalEl = document.getElementById('pdfModal');
+        var iframe = document.getElementById('pdfFrame');
+        iframe.src = url;
+        var modal = new bootstrap.Modal(modalEl);
+        modal.show();
+        modalEl.addEventListener('hidden.bs.modal', function () {
+            iframe.src = '';
+        });
+    }
+</script>
+
+{% endblock %}

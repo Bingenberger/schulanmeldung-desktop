@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block content %}
+<h2 class="mb-3"><i class="bi bi-calendar3"></i> Einschulungsjahre</h2>
+
+<div class="alert alert-info">
+  Jeder Jahrgang wird getrennt bearbeitet. Ein neues Jahr beginnt leer — die Daten des alten
+  bleiben vollständig erhalten und sind jederzeit wieder erreichbar.
+  <br>
+  <span class="small text-muted">Der Wechsel gilt nur für Ihre eigene Sitzung; Kolleg:innen
+  arbeiten unverändert weiter.</span>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-striped align-middle">
+    <thead>
+      <tr><th>Jahr</th><th>Kinder</th><th>Status</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for year in years %}
+      <tr {% if year.jahr == active %}class="table-primary"{% endif %}>
+        <td class="fs-5 fw-semibold">{{ year.jahr }}</td>
+        <td>{{ counts.get(year.jahr, 0) }}</td>
+        <td>
+          {% if year.ist_aktuell %}<span class="badge bg-success">aktuelles Jahr</span>{% endif %}
+          {% if year.gesperrt %}<span class="badge bg-secondary"><i class="bi bi-lock"></i> schreibgeschützt</span>{% endif %}
+          {% if year.jahr == active %}<span class="badge bg-primary">Sie arbeiten hier</span>{% endif %}
+        </td>
+        <td class="text-end">
+          <div class="d-inline-flex gap-2">
+            {% if year.jahr != active %}
+            <form method="post" action="{{ url_for('admin.switch_year', jahr=year.jahr) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-outline-primary">Hierhin wechseln</button>
+            </form>
+            {% endif %}
+            {% if current_user.role in ['Administrator', 'Schulleitung'] %}
+            <form method="post" action="{{ url_for('admin.unlock_year', jahr=year.jahr) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-outline-secondary">
+                {{ 'Entsperren' if year.gesperrt else 'Schreibschutz setzen' }}
+              </button>
+            </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card mt-4">
+  <div class="card-body">
+    <h5><i class="bi bi-plus-circle"></i> Neues Einschulungsjahr anlegen</h5>
+    <p class="text-muted small">
+      Der neue Jahrgang startet ohne Kinder, Termine und Elternzugänge. Der bisherige Jahrgang
+      wird dabei <strong>schreibgeschützt</strong>, damit dort nichts versehentlich verändert wird —
+      lesen, drucken und exportieren bleibt möglich.
+    </p>
+    <form method="post" class="row g-2 align-items-end" onsubmit="return confirm('Neues Einschulungsjahr anlegen? Der bisherige Jahrgang wird schreibgeschützt.')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="col-auto">
+        <label class="form-label small" for="jahr">Jahr</label>
+        <input id="jahr" name="jahr" type="number" min="2020" max="2100" class="form-control"
+               value="{{ (current.jahr + 1) if current else '' }}" required style="width:9rem">
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-success"><i class="bi bi-calendar-plus"></i> Anlegen und aktivieren</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

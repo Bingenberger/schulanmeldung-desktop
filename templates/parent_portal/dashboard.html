@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mx-auto" style="max-width: 52rem">
+  <h1>Schulanmeldung für {{ student.vorname }} {{ student.nachname }}</h1>
+  <div class="card my-4"><div class="card-body">
+    <h2 class="h5">Anmeldetermin</h2>
+    {% if appointment %}
+    {% set booked, slot, event = appointment %}
+    <p class="mb-1">Ihr Termin ist gebucht:</p>
+    <p class="fw-semibold mb-1">{{ slot_label(slot, event) }}</p>
+    {% if slot.location %}<p class="text-muted mb-3">{{ slot.location }}</p>{% else %}<div class="mb-3"></div>{% endif %}
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-primary" href="{{ url_for('parent_portal.appointment_calendar') }}">
+        <i class="bi bi-calendar-plus"></i> In meinen Kalender übernehmen
+      </a>
+      <form method="post" action="{{ url_for('parent_portal.cancel', booking_id=booked.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-outline-danger">Termin stornieren</button>
+      </form>
+    </div>
+    {% else %}<p>Es wurde noch kein Termin gebucht.</p><a class="btn btn-primary" href="{{ url_for('parent_portal.appointments') }}">Termin auswählen</a>{% endif %}
+  </div></div>
+  <div class="card"><div class="card-body"><h2 class="h5">Digitales Anmeldeformular</h2><p>Status: {{ public_status.get(registration.status, 'Noch nicht begonnen') if registration else 'Noch nicht begonnen' }}</p><a class="btn btn-outline-primary" href="{{ url_for('parent_portal.registration') }}">Formular öffnen</a></div></div>
+  <form method="post" action="{{ url_for('parent_portal.logout') }}" class="mt-4"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-outline-secondary">Abmelden</button></form>
+</div>
+{% endblock %}

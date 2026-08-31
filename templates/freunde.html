@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row mb-3">
+        <div class="col">
+            <h2 class="text-primary">Freundeswünsche: {{ schueler.vorname }} {{ schueler.nachname }}</h2>
+            <p class="text-muted">Wählen Sie bis zu zwei Kinder aus, mit denen {{ schueler.vorname }} in eine Klasse
+                gehen soll (oder nicht).</p>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('students.list_students') }}" class="btn btn-outline-secondary">Zurück zur Liste</a>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <form method="POST">
+                {{ form.hidden_tag() }}
+
+                <div class="row">
+                    <!-- Wunsch 1 -->
+                    <div class="col-md-6 border-end">
+                        <h5 class="card-title text-info mb-3">1. Wunsch</h5>
+
+                        <div class="mb-2">
+                            <label class="form-label" for="filter1">Suche:</label>
+                            <input type="text" id="filter1" class="form-control form-control-sm" placeholder="Name..."
+                                onkeyup="filterOptions('freund1', 'filter1')">
+                        </div>
+
+                        <div class="mb-3">
+                            {{ form.freund1.label(class="form-label fw-bold small") }}
+                            {{ form.freund1(class="form-select", size=8) }}
+                        </div>
+
+                        <div class="form-check form-switch bg-light p-2 rounded border">
+                            {{ form.freund1_negativ(class="form-check-input") }}
+                            <label class="form-check-label text-danger fw-bold small" for="freund1_negativ">
+                                NICHT zusammen (Negativwunsch)
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Wunsch 2 -->
+                    <div class="col-md-6">
+                        <h5 class="card-title text-info mb-3">2. Wunsch</h5>
+
+                        <div class="mb-2">
+                            <label class="form-label" for="filter2">Suche:</label>
+                            <input type="text" id="filter2" class="form-control form-control-sm" placeholder="Name..."
+                                onkeyup="filterOptions('freund2', 'filter2')">
+                        </div>
+
+                        <div class="mb-3">
+                            {{ form.freund2.label(class="form-label fw-bold small") }}
+                            {{ form.freund2(class="form-select", size=8) }}
+                        </div>
+
+                        <div class="form-check form-switch bg-light p-2 rounded border">
+                            {{ form.freund2_negativ(class="form-check-input") }}
+                            <label class="form-check-label text-danger fw-bold small" for="freund2_negativ">
+                                NICHT zusammen (Negativwunsch)
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-3">
+                    <div class="col-md-12">
+                        <div class="form-check bg-white p-3 border rounded">
+                            {{ form.keine_freunde(class="form-check-input") }}
+                            {{ form.keine_freunde.label(class="form-check-label fw-bold text-success") }}
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <!-- Bemerkungen -->
+                <div class="mb-3">
+                    {{ form.bemerkung.label(class="form-label fw-bold") }}
+                    {{ form.bemerkung(class="form-control", rows=3, placeholder="Anmerkungen zu den Wünschen...") }}
+                </div>
+
+                <div class="d-grid gap-2">
+                    {{ form.submit(class="btn btn-primary") }}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function filterOptions(selectId, filterId) {
+        var input, filter, select, options, i, txtValue;
+        input = document.getElementById(filterId);
+        filter = input.value.toUpperCase();
+        select = document.getElementById(selectId);
+        options = select.getElementsByTagName("option");
+
+        // Determine if we should show all (if filter is empty)
+        var showAll = filter === "";
+
+        var firstVisible = null;
+
+        for (i = 0; i < options.length; i++) {
+            txtValue = options[i].textContent || options[i].innerText;
+
+            // Skip the "Keine Auswahl" option (value 0) from hiding usually, but here we can hide if not matching logic
+            // But better to keep "Keine Auswahl" always visible at top? 
+            // Let's hide it too if it doesn't match, or always keep pos 0 visible?
+            // Let's filter everything.
+
+            if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                options[i].style.display = "";
+                if (!firstVisible) firstVisible = options[i];
+            } else {
+                options[i].style.display = "none";
+            }
+        }
+
+        // If current selection is hidden, maybe select first visible? 
+        // Usually browser keeps selection even if hidden, which is confusing. 
+        // We won't auto-change selection to avoid data loss.
+    }
+</script>
+{% endblock %}

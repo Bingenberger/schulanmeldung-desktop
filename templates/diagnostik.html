@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .rating-row {
+        transition: background-color 0.3s ease;
+    }
+
+    .bg-rating-3 {
+        background-color: #a5d6a7;
+    }
+
+    /* Dezent Dunkelgrün */
+    .bg-rating-2 {
+        background-color: #dcedc8;
+    }
+
+    /* Hellgrün */
+    .bg-rating-1 {
+        background-color: #fff9c4;
+    }
+
+    /* Gelb */
+    .bg-rating-0 {
+        background-color: #ffe0b2;
+    }
+
+    /* Orange */
+</style>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-info text-white">
+        <h3 class="mb-0">Pädagogische Diagnostik: {{ schueler.vorname }} {{ schueler.nachname }}</h3>
+    </div>
+    <div class="card-body">
+        <form method="POST" enctype="multipart/form-data">
+            {{ form.hidden_tag() }}
+
+            <p class="text-muted">Bitte bewerten Sie die folgenden Punkte auf der Skala.</p>
+
+            {% set items = [
+            form.wortschatz, form.grammatik, form.aussprache, form.gespraechsverhalten,
+            form.saetze_nachsprechen, form.reimen, form.pluralbildung, form.woerter_segmentieren,
+            form.mengenerfassung, form.menge_herstellen, form.zahlen_erkennen, form.rueckwaerts_zaehlen,
+            form.zahlreihe_erzeugen, form.logische_reihe, form.bild_malen, form.komplexe_figur
+            ] %}
+
+            <div class="row">
+                {% for field in items %}
+                <div class="col-md-12 mb-3 border-bottom pb-2 rating-row" id="row-{{ field.id }}">
+                    <div class="d-flex justify-content-between align-items-center p-2 rounded">
+                        <label class="form-label fw-bold mb-0" style="width: 40%;">{{ field.label.text }}</label>
+                        <div class="btn-group" role="group">
+                            {% for subfield in field %}
+                            <input type="radio" class="btn-check rating-input" name="{{ field.name }}"
+                                id="{{ subfield.id }}" value="{{ subfield.data }}" {% if subfield.checked %}checked{%
+                                endif %} autocomplete="off" data-row="row-{{ field.id }}" required>
+                            <label class="btn btn-outline-dark" for="{{ subfield.id }}">
+                                {{ subfield.label.text }}
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <hr>
+
+            <div class="row mt-4 bg-light p-3 rounded">
+                <div class="col-md-6 mb-3 rating-row" id="row-kognitiv">
+                    <label class="form-label fw-bold">{{ form.gesamteindruck_kognitiv.label.text }}</label>
+                    <div class="btn-group w-100" role="group">
+                        {% for subfield in form.gesamteindruck_kognitiv %}
+                        <input type="radio" class="btn-check kognitiv-input"
+                            name="{{ form.gesamteindruck_kognitiv.name }}" id="{{ subfield.id }}"
+                            value="{{ subfield.data }}" {% if subfield.checked %}checked{% endif %} autocomplete="off"
+                            data-row="row-kognitiv">
+                        <label class="btn btn-outline-dark" for="{{ subfield.id }}">
+                            {{ subfield.label.text }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3 rating-row" id="row-verhalten">
+                    <label class="form-label fw-bold">{{ form.gesamteindruck_verhalten.label.text }}</label>
+                    <div class="btn-group w-100" role="group">
+                        {% for subfield in form.gesamteindruck_verhalten %}
+                        <input type="radio" class="btn-check rating-input"
+                            name="{{ form.gesamteindruck_verhalten.name }}" id="{{ subfield.id }}"
+                            value="{{ subfield.data }}" {% if subfield.checked %}checked{% endif %} autocomplete="off"
+                            data-row="row-verhalten">
+                        <label class="btn btn-outline-dark" for="{{ subfield.id }}">
+                            {{ subfield.label.text }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-3 mt-3">
+                {{ form.bemerkung.label(class="form-label") }}
+                {{ form.bemerkung(class="form-control", rows="3") }}
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Weitere Optionen</label>
+                        <div class="form-check">
+                            {{ form.aosf_verdacht(class="form-check-input") }}
+                            {{ form.aosf_verdacht.label(class="form-check-label text-danger fw-bold") }}
+                        </div>
+                        <div class="form-check mt-2">
+                            {{ form.rueckstellung_empfohlen(class="form-check-input") }}
+                            {{ form.rueckstellung_empfohlen.label(class="form-check-label text-primary fw-bold") }}
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        {{ form.pdf_datei.label(class="form-label fw-bold") }}
+                        {{ form.pdf_datei(class="form-control") }}
+                        {% if diagnostik and diagnostik.pdf_dateiname %}
+                        <div class="mt-2">
+                            aktuell: <a href="{{ url_for('uploaded_file', filename=diagnostik.pdf_dateiname) }}"
+                                target="_blank"><i class="bi bi-file-earmark-pdf text-danger"></i> {{
+                                diagnostik.pdf_dateiname
+                                }}</a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3 form-check form-switch p-3 border rounded bg-white">
+                    <label class="form-check-label fw-bold ms-2" for="schulspiel-check">
+                        {{ form.schulspiel.label.text }}
+                    </label>
+                    <div class="btn-group ms-3" role="group">
+                        {% for sub in form.schulspiel %}
+                        <input type="radio" class="btn-check" name="{{ form.schulspiel.name }}" id="{{ sub.id }}"
+                            value="{{ sub.data }}" {% if sub.checked %}checked{% endif %}>
+                        <label class="btn btn-outline-success" for="{{ sub.id }}">{{ sub.label.text }}</label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <button type="submit" class="btn btn-success btn-lg"><i class="bi bi-save"></i> Diagnostik
+                    speichern</button>
+                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-lg"><i class="bi bi-x-circle"></i>
+                    Abbrechen</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Function to update row color
+        function updateRowColor(input) {
+            const rowId = input.getAttribute('data-row');
+            if (!rowId) return;
+            const row = document.getElementById(rowId);
+            const val = parseInt(input.value);
+
+            // Remove old classes
+            row.classList.remove('bg-rating-3', 'bg-rating-2', 'bg-rating-1', 'bg-rating-0');
+
+            // Add new class
+            if (!isNaN(val)) {
+                row.classList.add('bg-rating-' + val);
+            }
+        }
+
+        // Initialize colors
+        document.querySelectorAll('input.rating-input:checked, input.kognitiv-input:checked').forEach(input => {
+            updateRowColor(input);
+        });
+
+        // Event Listeners for color change
+        document.querySelectorAll('input.rating-input, input.kognitiv-input').forEach(input => {
+            input.addEventListener('change', function () {
+                updateRowColor(this);
+                if (this.classList.contains('rating-input') && !this.getAttribute('data-row').includes('verhalten')) {
+                    calculateAverage();
+                }
+            });
+        });
+
+        const inputs = document.querySelectorAll('.rating-input'); // Includes items
+
+        function calculateAverage() {
+            let sum = 0;
+            let count = 0;
+            const itemNames = [
+                'wortschatz', 'grammatik', 'aussprache', 'gespraechsverhalten',
+                'saetze_nachsprechen', 'reimen', 'pluralbildung', 'woerter_segmentieren',
+                'mengenerfassung', 'menge_herstellen', 'zahlen_erkennen', 'rueckwaerts_zaehlen',
+                'zahlreihe_erzeugen', 'logische_reihe', 'bild_malen', 'komplexe_figur'
+            ];
+
+            itemNames.forEach(name => {
+                const selected = document.querySelector(`input[name="${name}"]:checked`);
+                if (selected) {
+                    sum += parseInt(selected.value);
+                    count++;
+                }
+            });
+
+            if (count > 0) {
+                const avg = sum / count;
+                let recommendedVal = 0;
+                if (avg >= 2.5) recommendedVal = 3;
+                else if (avg >= 1.5) recommendedVal = 2;
+                else if (avg >= 0.5) recommendedVal = 1;
+                else recommendedVal = 0;
+
+                // Select the radio button
+                // Need to match wtf generated names for radio fields
+                // Typically 'gesamteindruck_kognitiv-0' to '-3' but value is what determines it.
+                // We select by name and value
+                const radios = document.getElementsByName('gesamteindruck_kognitiv');
+                for (let r of radios) {
+                    if (parseInt(r.value) === recommendedVal) {
+                        r.checked = true;
+                        updateRowColor(r);
+                        break;
+                    }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

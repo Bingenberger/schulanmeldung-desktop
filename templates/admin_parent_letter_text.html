@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <h2 class="mb-0"><i class="bi bi-pencil-square"></i> Elternbrief bearbeiten</h2>
+  <a class="btn btn-outline-secondary" href="{{ url_for('admin.parent_letters') }}">
+    <i class="bi bi-envelope-paper"></i> Briefe erzeugen
+  </a>
+</div>
+
+<div class="alert alert-info">
+  Hier steht der Wortlaut der <strong>Einladung zur Schulanmeldung</strong>. Briefkopf, Anschrift,
+  Datum und Unterschrift kommen aus dem Briefkopf und den Schülerdaten und bleiben unverändert.
+  {% if is_default %}
+  <br><span class="small text-muted">Zurzeit gilt der Wortlaut der Schulvorlage.</span>
+  {% endif %}
+</div>
+
+{% if problems %}
+<div class="alert alert-danger">
+  <strong>Bitte noch korrigieren:</strong>
+  <ul class="mb-0">{% for problem in problems %}<li>{{ problem }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="row g-3">
+    <div class="col-lg-8">
+      <div class="card mb-3">
+        <div class="card-body">
+          <label class="form-label" for="titel">Titelzeile (grüne Leiste)</label>
+          <input id="titel" name="titel" class="form-control mb-3" value="{{ text.titel }}">
+
+          <label class="form-label" for="text">Brieftext</label>
+          <textarea id="text" name="text" class="form-control font-monospace" rows="26"
+                    style="font-size:.85rem">{{ text.text }}</textarea>
+
+          <label class="form-label mt-3" for="gruss">Schlussformel (über der Unterschrift)</label>
+          <input id="gruss" name="gruss" class="form-control" value="{{ text.gruss }}">
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-body d-flex flex-wrap gap-3 align-items-end">
+          <div>
+            <label class="form-label small mb-1" for="period">Anmeldezeitraum (nur Vorschau)</label>
+            <input id="period" name="period" class="form-control form-control-sm" style="width:13rem"
+                   placeholder="z. B. 27. bis 30. Oktober">
+          </div>
+          <div>
+            <label class="form-label small mb-1" for="deadline">Frist (nur Vorschau)</label>
+            <input id="deadline" name="deadline" class="form-control form-control-sm" style="width:13rem"
+                   placeholder="z. B. 6. Oktober 2026">
+          </div>
+          <div class="ms-auto d-flex gap-2">
+            <button class="btn btn-outline-secondary" name="action" value="preview" formtarget="_blank">
+              <i class="bi bi-eye"></i> Vorschau als PDF
+            </button>
+            <button class="btn btn-primary" name="action" value="save">
+              <i class="bi bi-save"></i> Speichern
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-outline-danger btn-sm" name="action" value="reset"
+              onclick="return confirm('Den Brieftext auf die Schulvorlage zurücksetzen? Ihre Änderungen gehen dabei verloren.');">
+        <i class="bi bi-arrow-counterclockwise"></i> Auf Schulvorlage zurücksetzen
+      </button>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="card">
+        <div class="card-header py-2"><strong class="small">So wird der Text gesetzt</strong></div>
+        <div class="card-body small">
+          <p class="mb-2">Jede Zeile ist ein Absatz. Leerzeilen dienen nur der Übersicht.</p>
+          <table class="table table-sm mb-3">
+            <tbody>
+              <tr><td class="font-monospace"># Text</td><td>Zwischenüberschrift</td></tr>
+              <tr><td class="font-monospace">- Text</td><td>Aufzählungspunkt</td></tr>
+              <tr><td class="font-monospace">-- Text</td><td>Unterpunkt</td></tr>
+              <tr><td class="font-monospace">**Text**</td><td>fett</td></tr>
+              <tr><td class="font-monospace">{{ marker }}</td><td>die beiden Zugangskästen mit QR-Code</td></tr>
+            </tbody>
+          </table>
+          <p class="mb-2"><strong>Platzhalter</strong> — eine Zeile entfällt vollständig, wenn ihr
+          Platzhalter beim Druck leer bleibt:</p>
+          <table class="table table-sm mb-0">
+            <tbody>
+              {% for name, description in fields.items() %}
+              <tr><td class="font-monospace text-nowrap">{{ '{' }}{{ name }}{{ '}' }}</td><td>{{ description }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+{% endblock %}
