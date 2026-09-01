@@ -1,19 +1,32 @@
-"""Aufräumarbeiten an Datenbeständen, die eine frühere Programmfassung hinterlassen hat.
+"""Prüfläufe über den gespeicherten Datenbestand.
 
-Bis die Löschung eines Kindes auch seine Elternportal-Daten mitnahm, blieben
-diese Zeilen als Waisen zurück. Weil SQLite die freigewordene Zeilennummer neu
-vergibt, konnte ein später angelegtes Kind sie erben. Der Fehler ist behoben --
-die Zeilen, die schon liegen geblieben sind, muss aber jemand wegräumen.
+Zwei Dinge lassen sich im laufenden Betrieb nicht zuverlässig verhindern und
+müssen deshalb nachträglich prüfbar sein: verwaiste Elternportal-Zeilen aus der
+Zeit, als die Löschung eines Kindes sie stehen ließ (SQLite vergibt die
+freigewordene Zeilennummer neu, ein später angelegtes Kind konnte sie erben),
+und die Kann-Kind-Kennzeichen, die an vielen Stellen fortgeschrieben werden.
+
+Beide Kommandos melden zunächst nur; ``--fix`` bzw. ``--delete`` greift ein.
+Ohne Anfrage-Kontext hebt der Jahrgangsfilter aus ``sl_office/school_year`` sich
+selbst auf -- die Prüfung sieht deshalb alle Jahrgänge, nicht nur den offenen.
 """
+
+import datetime
 
 import click
 from flask.cli import with_appcontext
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
-from models import Schueler, db
+from models import Diagnostik, Schueler, db
 from sl_office.parent_portal.models import (
     ActivationGrant, AppointmentBooking, ParentAccess, ParentLoginToken, ParentRegistration,
 )
+from sl_office.services.student_classification import ist_kann_kind, stichtag
+
+
+def _ja_nein(wert):
+    return "Ja" if wert else "Nein"
+
 
 #: Tabellen, die über ``schueler_id`` an einem Kind hängen.
 _STUDENT_TABLES = (ParentAccess, ActivationGrant, ParentRegistration, AppointmentBooking)
@@ -55,6 +68,61 @@ def delete_orphaned_portal_records():
     return removed
 
 
+# --- Kann-Kinder ------------------------------------------------------------
+
+#: Wie weit ein Geburtsdatum neben seinem Jahrgang liegen darf, bevor es als
+#: Zahlendreher gemeldet wird. Ein Jahr deckt Rückstellungen und im Vorjahr
+#: nicht eingeschulte Kann-Kinder ab, die regulär im nächsten Jahrgang stehen.
+TOLERANZ_JAHRE = 1
+
+
+def _jahrgangsfenster(jahr):
+    """Von--bis, in dem ein Geburtsdatum für diesen Jahrgang plausibel ist."""
+    return (datetime.date(jahr - 7 - TOLERANZ_JAHRE, 10, 1),
+            datetime.date(jahr - 6 + TOLERANZ_JAHRE, 12, 31))
+
+
+def kann_kind_befunde():
+    """Alle Kinder gegen die Stichtagsregel prüfen.
+
+    Liefert ``(falsche_kennzeichen, ohne_geburtsdatum, unplausibel)``. Der erste
+    Eintrag lässt sich maschinell richtigstellen, die beiden anderen brauchen
+    eine Entscheidung und werden nur gemeldet.
+    """
+    falsch, ohne_datum, unplausibel = [], [], []
+    for kind in db.session.scalars(
+            select(Schueler).order_by(Schueler.einschulungsjahr, Schueler.nachname)):
+        if kind.geburtsdatum is None:
+            ohne_datum.append(kind)
+            continue
+        erwartet = ist_kann_kind(kind.geburtsdatum, kind.einschulungsjahr)
+        if erwartet != bool(kind.kann_kind):
+            falsch.append((kind, erwartet))
+        von, bis = _jahrgangsfenster(kind.einschulungsjahr)
+        if not von <= kind.geburtsdatum <= bis:
+            unplausibel.append(kind)
+    return falsch, ohne_datum, unplausibel
+
+
+def kann_kind_kennzeichen_richtigstellen(falsch):
+    """Gemeldete Kennzeichen setzen und neue Kann-Kinder zum Schulspiel einladen.
+
+    Eine bereits getroffene Entscheidung gegen das Schulspiel bleibt bestehen;
+    umgekehrt wird eine Einladung nicht zurückgenommen, wenn ein Kind seinen
+    Kann-Kind-Status verliert -- das Schulspiel kann längst stattgefunden haben.
+    """
+    for kind, erwartet in falsch:
+        kind.kann_kind = erwartet
+        if erwartet:
+            if kind.diagnostik is None:
+                kind.diagnostik = Diagnostik(schulspiel=True)
+                db.session.add(kind.diagnostik)
+            else:
+                kind.diagnostik.schulspiel = True
+    db.session.commit()
+    return len(falsch)
+
+
 def register_cli(app):
     @app.cli.command("check-orphans")
     @click.option("--delete", "remove", is_flag=True,
@@ -74,3 +142,45 @@ def register_cli(app):
         removed = delete_orphaned_portal_records()
         for table, count in removed.items():
             click.echo(f"gelöscht aus {table}: {count}")
+
+    @app.cli.command("check-kann-kinder")
+    @click.option("--fix", "fix", is_flag=True,
+                  help="Falsche Kennzeichen richtigstellen statt nur zu melden.")
+    @with_appcontext
+    def check_kann_kinder(fix):
+        """Kann-Kind-Kennzeichen aller Jahrgänge gegen die Stichtagsregel prüfen."""
+        falsch, ohne_datum, unplausibel = kann_kind_befunde()
+        gesamt = db.session.scalar(select(func.count(Schueler.id)))
+        click.echo(f"{gesamt} Kinder geprüft.\n")
+
+        if falsch:
+            click.echo(f"Falsches Kann-Kind-Kennzeichen: {len(falsch)}")
+            for kind, erwartet in falsch:
+                click.echo(f"  id={kind.id:<5} {kind.vorname} {kind.nachname} "
+                           f"(geb. {kind.geburtsdatum:%d.%m.%Y}, ESJ {kind.einschulungsjahr}, "
+                           f"Stichtag {stichtag(kind.einschulungsjahr):%d.%m.%Y}): "
+                           f"gespeichert {_ja_nein(kind.kann_kind)}, "
+                           f"richtig {_ja_nein(erwartet)}")
+        else:
+            click.echo("Kann-Kind-Kennzeichen: alle korrekt.")
+
+        if ohne_datum:
+            click.echo(f"\nOhne Geburtsdatum, daher nicht einzuordnen: {len(ohne_datum)}")
+            for kind in ohne_datum:
+                click.echo(f"  id={kind.id:<5} {kind.vorname} {kind.nachname} "
+                           f"(ESJ {kind.einschulungsjahr})")
+
+        if unplausibel:
+            click.echo(f"\nGeburtsdatum passt nicht zum Jahrgang, bitte sichten: "
+                       f"{len(unplausibel)}")
+            for kind in unplausibel:
+                click.echo(f"  id={kind.id:<5} {kind.vorname} {kind.nachname} "
+                           f"(geb. {kind.geburtsdatum:%d.%m.%Y}, ESJ {kind.einschulungsjahr})")
+
+        if not falsch:
+            return
+        if not fix:
+            click.echo("\nZum Richtigstellen: flask --app app check-kann-kinder --fix")
+            return
+        click.echo(f"\n{kann_kind_kennzeichen_richtigstellen(falsch)} Kennzeichen "
+                   "richtiggestellt.")

@@ -181,6 +181,9 @@ def add():
         )
         try:
             db.session.add(student)
+            # Erst speichern, dann einordnen: das Einschulungsjahr wird beim
+            # Flush gesetzt und bestimmt den Stichtag fuer das Kann-Kind.
+            db.session.flush()
             recalculate_kann_kind(student)
             db.session.commit()
             flash(f"Schüler {student.vorname} {student.nachname} wurde erfolgreich angelegt!")

@@ -148,9 +148,13 @@ def settings():
     if form.validate_on_submit():
         form.populate_obj(settings_record)
         settings_record.einschulungsjahr = int(form.einschulungsjahr.data)
-        recalculate_kann_kind(settings=settings_record)
+        # Der Stichtag haengt am Einschulungsjahr des Kindes, nicht an dieser
+        # Einstellung -- der Lauf raeumt also nur Abweichungen im gerade
+        # geoeffneten Jahrgang auf, statt ihn umzuetikettieren.
+        geprueft = recalculate_kann_kind(settings=settings_record)
         db.session.commit()
-        flash("Einstellungen gespeichert und Kann-Kinder neu berechnet.")
+        flash(f"Einstellungen gespeichert. {geprueft} Kinder des geöffneten "
+              "Jahrgangs wurden auf ihren Kann-Kind-Status geprüft.")
         return redirect(url_for("admin.settings"))
     return render_template("admin_settings.html", form=form)
 

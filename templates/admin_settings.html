@@ -15,8 +15,12 @@
                         <label class="form-label fw-bold">Einschulungsjahr</label>
                         {{ form.einschulungsjahr(class="form-control form-control-lg", placeholder="z.B. 2026") }}
                         <div class="form-text">
-                            Bestimmt die Berechnung der "Kann-Kinder". <br>
-                            Muss-Kinder sind bis zum 30.09. des Vorjahres (Jahr - 6) geboren.
+                            Jahrgang, dem neu angelegte Kinder zugeordnet werden, solange
+                            unter <em>Einschulungsjahre</em> keiner als aktuell markiert ist.<br>
+                            Der Kann-Kind-Stichtag richtet sich immer nach dem Einschulungsjahr
+                            des jeweiligen Kindes: Muss-Kinder sind bis zum 30.09. des
+                            Jahres (Einschulungsjahr &minus; 6) geboren, spätere Geburtstage
+                            ergeben ein Kann-Kind.
                         </div>
                     </div>
 
