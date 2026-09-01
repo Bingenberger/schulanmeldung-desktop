@@ -29,6 +29,24 @@ class UserAddForm(FlaskForm):
     ], validators=[DataRequired()])
     submit = SubmitField('Benutzer anlegen')
 
+#: Mindestlänge beim Zurücksetzen durch die Administration. Bewusst nur hier
+#: verlangt: die bestehenden Passwörter der Kolleginnen und Kollegen sollen
+#: nicht bei der nächsten Anmeldung plötzlich abgelehnt werden.
+MIN_PASSWORD_LENGTH = 10
+
+
+class PasswordResetForm(FlaskForm):
+    """Neues Passwort für eine andere Person, vergeben von der Administration."""
+
+    new_password = PasswordField(
+        "Neues Passwort",
+        validators=[DataRequired(),
+                    Length(min=MIN_PASSWORD_LENGTH,
+                           message=f"Mindestens {MIN_PASSWORD_LENGTH} Zeichen.")])
+    confirm_password = PasswordField("Neues Passwort bestätigen", validators=[DataRequired()])
+    submit = SubmitField("Passwort setzen")
+
+
 class ChangePasswordForm(FlaskForm):
     old_password = PasswordField('Aktuelles Passwort', validators=[DataRequired()])
     new_password = PasswordField('Neues Passwort', validators=[DataRequired()])

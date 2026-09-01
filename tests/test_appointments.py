@@ -10,10 +10,11 @@ from werkzeug.security import generate_password_hash  # noqa: E402
 from app import create_app  # noqa: E402
 from models import Schueler, User, db  # noqa: E402
 from sl_office.appointments import calendar  # noqa: E402
+from sl_office.appointments.routes import _planner_state  # noqa: E402
 from sl_office.appointments.service import (  # noqa: E402
-    BookingError, SlotHasBookings, SlotUnavailable, StudentAlreadyBooked, active_booking_for_student,
-    assign_slot, assignable_slots, book_slot, cancel_booking_as_staff, create_slot, delete_slot,
-    generate_slots, move_slot, set_capacity,
+    AssignedByStaff, BookingError, SlotHasBookings, SlotUnavailable, StudentAlreadyBooked,
+    active_booking_for_student, assign_slot, assignable_slots, book_slot, cancel_booking,
+    cancel_booking_as_staff, create_slot, delete_slot, generate_slots, move_slot, set_capacity,
 )
 from sl_office.parent_portal.models import (  # noqa: E402
     AppointmentBooking, AppointmentEvent, AppointmentSlot, ParentAccess,
@@ -406,6 +407,178 @@ class CalendarRouteTests(_AppointmentFixture, unittest.TestCase):
         response = self.app.test_client().get(
             f"/admin/appointments/{self.event_id}/buchungen.ics")
         self.assertEqual(response.status_code, 302)
+
+
+class SlotWithHistoryTests(_AppointmentFixture, unittest.TestCase):
+    """Ein Fenster, an dem stornierte Buchungen hängen, muss weg können.
+
+    Der Fremdschlüssel der Buchungen schützt das Fenster mit RESTRICT, ein
+    echtes Löschen scheitert also an der Datenbank. Es wird darum stillgelegt --
+    für Planer und Eltern ist es damit verschwunden.
+    """
+
+    def _retire(self):
+        """Fenster buchen, stornieren, dann löschen -- der gemeldete Fall."""
+        student, _, slot, _, access, _ = self.ids
+        with self.app.app_context():
+            booking = assign_slot(slot, student)
+            db.session.commit()
+            cancel_booking_as_staff(booking.id)
+            db.session.commit()
+            delete_slot(slot)
+            db.session.commit()
+            return booking.id
+
+    def test_a_slot_with_a_cancelled_booking_can_be_removed(self):
+        # Zuvor scheiterte das an "FOREIGN KEY constraint failed" und die
+        # Oberfläche meldete nur "Die Änderung konnte nicht gespeichert werden".
+        self._retire()
+        with self.app.app_context():
+            slot = db.session.get(AppointmentSlot, self.ids[2])
+            self.assertEqual(slot.status, "cancelled")
+
+    def test_the_retired_slot_is_gone_from_the_planner_and_the_portal(self):
+        self._retire()
+        with self.app.app_context():
+            event = db.session.get(AppointmentEvent, self.event_id)
+            board = _planner_state(event)
+            self.assertNotIn(self.ids[2], [entry["id"] for entry in board["slots"]])
+            self.assertNotIn(self.ids[2], [slot.id for slot, _ in assignable_slots(self.event_id)])
+
+    def test_the_old_booking_keeps_its_record(self):
+        booking_id = self._retire()
+        with self.app.app_context():
+            booking = db.session.get(AppointmentBooking, booking_id)
+            self.assertEqual(booking.status, "cancelled")
+            self.assertEqual(booking.slot_id, self.ids[2])
+
+    def test_the_freed_time_can_be_used_again(self):
+        # Der Zeitraum ist nur unter den lebenden Fenstern einmalig.
+        self._retire()
+        with self.app.app_context():
+            slot = db.session.get(AppointmentSlot, self.ids[2])
+            created = create_slot(self.event_id, slot.starts_at, slot.ends_at)
+            db.session.commit()
+            self.assertNotEqual(created.id, self.ids[2])
+            self.assertEqual(created.status, "available")
+
+    def test_two_live_slots_may_still_not_share_a_period(self):
+        with self.app.app_context():
+            slot = db.session.get(AppointmentSlot, self.ids[2])
+            with self.assertRaises(BookingError):
+                create_slot(self.event_id, slot.starts_at, slot.ends_at)
+
+    def test_a_slot_without_history_is_really_deleted(self):
+        _, _, _, second_slot, _, _ = self.ids
+        with self.app.app_context():
+            delete_slot(second_slot)
+            db.session.commit()
+            self.assertIsNone(db.session.get(AppointmentSlot, second_slot))
+
+    def test_a_slot_with_a_live_appointment_is_still_protected(self):
+        student, _, slot, _, _, _ = self.ids
+        with self.app.app_context():
+            assign_slot(slot, student)
+            db.session.commit()
+            with self.assertRaises(SlotHasBookings):
+                delete_slot(slot)
+
+
+class AssignedAppointmentTests(_AppointmentFixture, unittest.TestCase):
+    """Von der Schule vergebene Termine lösen die Eltern nicht selbst auf.
+
+    Ein stiller Rückzug hinterließe der Schule eine Lücke im Plan, von der sie
+    nichts erfährt. Selbst gebuchte Termine bleiben dagegen stornierbar.
+    """
+
+    def _parent_client(self, access_id):
+        with self.app.app_context():
+            version = db.session.get(ParentAccess, access_id).security_version
+        client = self.app.test_client()
+        with client.session_transaction() as sess:
+            sess["parent_access_id"] = access_id
+            sess["parent_access_version"] = version
+        return client
+
+    def test_the_service_refuses_to_cancel_an_assigned_appointment(self):
+        student, _, slot, _, access, _ = self.ids
+        with self.app.app_context():
+            booking = assign_slot(slot, student)
+            db.session.commit()
+            with self.assertRaises(AssignedByStaff):
+                cancel_booking(booking.id, access)
+            self.assertEqual(db.session.get(AppointmentBooking, booking.id).status, "confirmed")
+
+    def test_a_self_booked_appointment_stays_cancellable(self):
+        student, _, slot, _, access, _ = self.ids
+        with self.app.app_context():
+            booking = book_slot(slot, student, access)
+            db.session.commit()
+            cancel_booking(booking.id, access)
+            db.session.commit()
+            self.assertEqual(db.session.get(AppointmentBooking, booking.id).status, "cancelled")
+
+    def test_the_dashboard_hides_the_button_for_an_assigned_appointment(self):
+        student, _, slot, _, access, _ = self.ids
+        with self.app.app_context():
+            assign_slot(slot, student)
+            db.session.commit()
+        body = self._parent_client(access).get("/eltern/uebersicht").get_data(as_text=True)
+        self.assertNotIn("Termin stornieren", body)
+        self.assertIn("hat die Schule für Sie vorgesehen", body)
+
+    def test_the_dashboard_keeps_the_button_for_a_self_booked_appointment(self):
+        student, _, slot, _, access, _ = self.ids
+        with self.app.app_context():
+            book_slot(slot, student, access)
+            db.session.commit()
+        body = self._parent_client(access).get("/eltern/uebersicht").get_data(as_text=True)
+        self.assertIn("Termin stornieren", body)
+
+    def test_calling_the_address_directly_changes_nothing(self):
+        # Die Schaltfläche fehlt -- die Adresse ließe sich aber von Hand aufrufen.
+        student, _, slot, _, access, _ = self.ids
+        with self.app.app_context():
+            booking = assign_slot(slot, student)
+            db.session.commit()
+            booking_id = booking.id
+        response = self._parent_client(access).post(
+            f"/eltern/termine/{booking_id}/stornieren", follow_redirects=True)
+        self.assertIn("hat die Schule für Sie vorgesehen", response.get_data(as_text=True))
+        with self.app.app_context():
+            self.assertEqual(db.session.get(AppointmentBooking, booking_id).status, "confirmed")
+
+    def test_the_second_guardian_may_cancel_what_the_first_one_booked(self):
+        # Berechtigt ist, wer einen Zugang zu diesem Kind hat.
+        student, _, slot, _, access, _ = self.ids
+        with self.app.app_context():
+            zweiter = ParentAccess(schueler_id=student, status="active",
+                                   email_normalized="zweiter@example.de",
+                                   display_name="Zweiter Elternteil")
+            db.session.add(zweiter)
+            db.session.flush()
+            booking = book_slot(slot, student, access)
+            db.session.commit()
+            cancel_booking(booking.id, zweiter.id)
+            db.session.commit()
+            self.assertEqual(db.session.get(AppointmentBooking, booking.id).status, "cancelled")
+
+    def test_a_stranger_still_cannot_cancel(self):
+        student, other, slot, _, access, other_access = self.ids
+        with self.app.app_context():
+            booking = book_slot(slot, student, access)
+            db.session.commit()
+            with self.assertRaises(BookingError):
+                cancel_booking(booking.id, other_access)
+
+    def test_the_school_can_still_cancel_what_it_assigned(self):
+        student, _, slot, _, _, _ = self.ids
+        with self.app.app_context():
+            booking = assign_slot(slot, student)
+            db.session.commit()
+            cancel_booking_as_staff(booking.id)
+            db.session.commit()
+            self.assertEqual(db.session.get(AppointmentBooking, booking.id).status, "cancelled")
 
 
 class BookingWindowTests(unittest.TestCase):

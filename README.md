@@ -27,6 +27,8 @@ Zwei-Faktor-Bestätigung)
   Jahrgänge lassen sich lesend ansehen
 - Administration: Benutzer, Einstellungen, Datensicherung, Elternbriefe und
   deren Text, Elternzugänge, eingegangene Anmeldungen
+- Benutzerverwaltung: Zugänge anlegen und löschen, Passwort zurücksetzen,
+  Zwei-Faktor-Anmeldung zurücksetzen
 - Elternbrief in zwei Fassungen: Eltern wählen den Termin selbst, oder die
   Schule gibt ihn vor — je Kind wird beim Druck die passende gesetzt
 - eingegangene Anmeldungen als ausgefülltes `Schulanmeldung.pdf` zum Ausdrucken
@@ -42,6 +44,8 @@ Zwei-Faktor-Bestätigung)
   „Übermittelt“ und meldet sich per Mail bei der Schule
 - Terminbuchung für das Anmeldegespräch, mit Bestätigung per Mail samt
   Kalenderdatei und einer Erinnerung am Vortag
+- selbst gebuchte Termine lassen sich bis zur Frist stornieren; von der Schule
+  vorgegebene nicht — dort verweist das Portal an die Schule
 - Anmeldezeitraum und Gesprächstage werden getrennt festgelegt: gebucht wird
   regelmäßig Wochen vor dem Gespräch
 

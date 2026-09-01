@@ -11,9 +11,9 @@ from sqlalchemy import func, select
 from models import Schueler, db
 from sl_office.appointments import calendar
 from sl_office.appointments import notifications as appointment_mail
-from sl_office.appointments.service import (BookingError, active_booking_for_student,
-                                            book_slot, cancel_booking, moment_label, naive_utc,
-                                            slot_label)
+from sl_office.appointments.service import (AssignedByStaff, BookingError,
+                                            active_booking_for_student, book_slot, cancel_booking,
+                                            moment_label, naive_utc, slot_label)
 from sl_office.parent_portal.access_service import InvalidAccessToken, consume_activation_grant, consume_login_token, create_login_token, normalize_email
 from sl_office.parent_portal.mail_service import send_parent_login_link
 from sl_office.parent_portal import notifications as registration_mail
@@ -134,7 +134,8 @@ def dashboard(access):
     return render_template("parent_portal/dashboard.html", student=student, booking=booking,
                            appointment=appointment, slot_label=slot_label,
                            registration=registration, public_status=public_status,
-                           submission_note=_submission_note(registration))
+                           submission_note=_submission_note(registration),
+                           contact=current_app.config.get("SCHOOL_CONTACT_MAIL", ""))
 
 
 @parent_portal_bp.get("/termin.ics")
@@ -372,6 +373,11 @@ def cancel(access, booking_id):
         record("appointment_cancelled", "appointment_booking", booking_id, actor_type="parent", actor_id=access.id)
         db.session.commit()
         flash("Der Termin wurde storniert.")
+    except AssignedByStaff as exc:
+        # Kein Fehler der Eltern: die Oberfläche bietet den Knopf gar nicht an,
+        # hier landet nur, wer die Adresse direkt aufruft.
+        db.session.rollback()
+        flash(str(exc))
     except BookingError as exc:
         db.session.rollback()
         flash(str(exc), "error")

@@ -138,7 +138,13 @@ class AppointmentSlot(db.Model):
 
     __tablename__ = "appointment_slot"
     __table_args__ = (
-        db.UniqueConstraint("event_id", "starts_at", "ends_at", name="uq_slot_event_period"),
+        # Nur unter den lebenden Fenstern ist ein Zeitraum einmalig. Ein
+        # stillgelegtes darf seine Uhrzeit nicht blockieren -- sonst ließe sich
+        # ein versehentlich gelöschtes Fenster nicht wieder neu anlegen.
+        db.Index("uq_slot_event_period_active", "event_id", "starts_at", "ends_at",
+                 unique=True,
+                 sqlite_where=db.text("status != 'cancelled'"),
+                 postgresql_where=db.text("status <> 'cancelled'")),
         db.CheckConstraint("capacity > 0", name="ck_appointment_slot_capacity"),
         db.CheckConstraint("ends_at > starts_at", name="ck_appointment_slot_period"),
         db.CheckConstraint("status IN ('available','blocked','cancelled')", name="ck_appointment_slot_status"),

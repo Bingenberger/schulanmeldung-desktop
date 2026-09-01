@@ -6,9 +6,10 @@ from io import BytesIO
 from flask import Blueprint, current_app, flash, redirect, render_template, request, send_file, url_for
 from flask_login import current_user
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.security import generate_password_hash
 
-from forms import SettingsForm, UserAddForm
+from forms import MIN_PASSWORD_LENGTH, PasswordResetForm, SettingsForm, UserAddForm
 from models import Einschulungsjahr, GlobalSettings, User, db
 from sl_office.authorization import role_required
 from sl_office.services.student_classification import recalculate_kann_kind
@@ -39,10 +40,78 @@ def reset_user_two_factor(user_id):
     return redirect(url_for("admin.users"))
 
 
+@admin_bp.route("/users/<int:user_id>/passwort", methods=["GET", "POST"])
+@role_required(["Administrator"])
+def reset_user_password(user_id):
+    """Ein neues Passwort für eine Kollegin oder einen Kollegen setzen.
+
+    Das alte Passwort wird nicht abgefragt -- wer es noch wüsste, bräuchte
+    diese Seite nicht. Der zweite Faktor bleibt unangetastet: er ist ein
+    eigener Nachweis und hat mit einem vergessenen Passwort nichts zu tun.
+    """
+    user = db.get_or_404(User, user_id)
+    form = PasswordResetForm()
+    if form.validate_on_submit():
+        if form.new_password.data != form.confirm_password.data:
+            flash("Die beiden Passwörter stimmen nicht überein.", "error")
+        else:
+            user.password_hash = generate_password_hash(form.new_password.data)
+            # Wer ausgesperrt war, soll sich mit dem neuen Passwort sofort
+            # anmelden können und nicht erst die Sperrfrist absitzen.
+            two_factor.clear_failed_attempts(user)
+            record("staff_password_reset", "user", user.id,
+                   actor_type="staff", actor_id=current_user.id)
+            db.session.commit()
+            flash(f"Das Passwort für {user.username} wurde neu gesetzt. Bitte geben Sie es "
+                  "der Person persönlich weiter.")
+            return redirect(url_for("admin.users"))
+    return render_template("admin_user_password.html", form=form, benutzer=user,
+                           min_length=MIN_PASSWORD_LENGTH)
+
+
+@admin_bp.post("/users/<int:user_id>/loeschen")
+@role_required(["Administrator"])
+def delete_user(user_id):
+    """Einen Zugang entfernen.
+
+    Der eigene Zugang bleibt versperrt -- und damit auch der letzte
+    Administratorzugang: hierher kommt nur die Administration, und wer hier
+    steht, ist selbst Administrator. Es bleibt also immer mindestens dieser
+    eine übrig, ohne dass es dafür eine eigene Prüfung bräuchte.
+
+    Geführte AO-SF- und Rückstellungsverfahren bleiben erhalten und verlieren
+    nur ihre Zuordnung; die Übersicht nennt ihre Zahl in der Rückfrage.
+    """
+    user = db.get_or_404(User, user_id)
+    if user.id == current_user.id:
+        flash("Den eigenen Zugang können Sie nicht löschen.", "error")
+        return redirect(url_for("admin.users"))
+    name = user.username
+    try:
+        db.session.delete(user)
+        record("staff_account_deleted", "user", user_id,
+               actor_type="staff", actor_id=current_user.id)
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception("User deletion failed", extra={"user_id": user_id})
+        flash("Der Zugang konnte nicht gelöscht werden.", "error")
+        return redirect(url_for("admin.users"))
+    flash(f"Der Zugang {name} wurde gelöscht.")
+    return redirect(url_for("admin.users"))
+
+
 @admin_bp.get("/users")
 @role_required(["Administrator"])
 def users():
-    return render_template("admin_users.html", users=User.query.all())
+    people = User.query.order_by(User.username).all()
+    # Verfahren, die an einer Person hängen: beim Löschen verlieren sie ihre
+    # Zuordnung, bleiben aber bestehen. Das gehört in die Rückfrage.
+    led = {
+        person.id: len(person.aosf_faelle) + len(person.rueckstellung_faelle)
+        for person in people
+    }
+    return render_template("admin_users.html", users=people, led=led)
 
 
 @admin_bp.route("/users/add", methods=["GET", "POST"])

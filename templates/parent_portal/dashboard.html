@@ -13,11 +13,19 @@
       <a class="btn btn-outline-primary" href="{{ url_for('parent_portal.appointment_calendar') }}">
         <i class="bi bi-calendar-plus"></i> In meinen Kalender übernehmen
       </a>
+      {% if booked.source != 'staff' %}
       <form method="post" action="{{ url_for('parent_portal.cancel', booking_id=booked.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button class="btn btn-outline-danger">Termin stornieren</button>
       </form>
+      {% endif %}
     </div>
+    {% if booked.source == 'staff' %}
+    <p class="text-muted small mt-3 mb-0">
+      Diesen Termin hat die Schule für Sie vorgesehen. Wenn er Ihnen nicht möglich ist, wenden Sie
+      sich bitte an die Schule{% if contact %} unter <a href="mailto:{{ contact }}">{{ contact }}</a>{% endif %}.
+    </p>
+    {% endif %}
     {% else %}<p>Es wurde noch kein Termin gebucht.</p><a class="btn btn-primary" href="{{ url_for('parent_portal.appointments') }}">Termin auswählen</a>{% endif %}
   </div></div>
   <div class="card"><div class="card-body"><h2 class="h5">Digitales Anmeldeformular</h2><p class="mb-1">Status: {{ public_status.get(registration.status, 'Noch nicht begonnen') if registration else 'Noch nicht begonnen' }}</p>

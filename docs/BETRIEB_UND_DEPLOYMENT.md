@@ -278,6 +278,18 @@ sonst können Eltern weiterhin erst am ersten Gesprächstag buchen.
 Gesprächstage lassen sich nicht so beschneiden, dass bereits angelegte Fenster
 herausfielen -- die Maske nennt dann die betroffenen Tage.
 
+### Gelöschte Gesprächsfenster
+
+Ein Fenster, an dem noch stornierte Buchungen hängen, wird beim Löschen nicht
+entfernt, sondern auf `cancelled` gesetzt: die Buchungen zeigen weiter darauf,
+und ihr Fremdschlüssel verbietet das Entfernen. Für Planer und Elternportal ist
+das Fenster damit verschwunden, die alten Buchungen behalten aber ihren Bezug
+und stehen weiterhin in der Buchungsübersicht.
+
+Die Uhrzeit wird dadurch nicht blockiert -- ein neues Fenster zur selben Zeit
+lässt sich wieder anlegen. Nur unter den nicht stornierten Fenstern ist ein
+Zeitraum einmalig (Index `uq_slot_event_period_active`).
+
 ## 11. Verwaiste Elternportal-Daten
 
 Bis zur Behebung nahm das Löschen eines Kindes seine Elternportal-Daten nicht

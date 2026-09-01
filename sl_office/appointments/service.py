@@ -199,7 +199,16 @@ def set_capacity(slot_id, capacity):
 
 
 def delete_slot(slot_id):
-    """Remove a slot; one that is already taken is cancelled instead of dropped."""
+    """Remove a slot; one that carries history is retired instead of dropped.
+
+    An einem Fenster können stornierte Buchungen hängen -- aus einem früheren
+    Versuch oder von einem inzwischen gelöschten Kind. Die zeigen weiter auf das
+    Fenster, dessen Fremdschlüssel mit ``ON DELETE RESTRICT`` genau das schützt:
+    ein echtes Löschen scheiterte an der Datenbank. Solche Fenster werden darum
+    auf ``cancelled`` gesetzt. Für den Planer und die Eltern sind sie damit weg
+    -- beide zeigen nur nicht stornierte Fenster --, die alten Buchungen
+    behalten aber ihren Bezug.
+    """
     slot = db.session.scalar(select(AppointmentSlot).where(AppointmentSlot.id == slot_id).with_for_update())
     if slot is None:
         raise BookingError("Zeitfenster nicht gefunden.")
@@ -207,7 +216,11 @@ def delete_slot(slot_id):
         raise SlotHasBookings(
             "Dieses Fenster ist bereits vergeben. Storniere den Termin zuerst."
         )
-    db.session.delete(slot)
+    if db.session.scalar(select(AppointmentBooking.id).where(
+            AppointmentBooking.slot_id == slot_id).limit(1)) is not None:
+        slot.status = "cancelled"
+    else:
+        db.session.delete(slot)
     db.session.flush()
 
 
@@ -288,15 +301,36 @@ def assign_slot(slot_id, student_id):
     return booking
 
 
+class AssignedByStaff(BookingError):
+    """Ein von der Schule vergebener Termin; die Eltern lösen ihn nicht auf."""
+
+
+#: Was die Eltern zu hören bekommen, wenn sie einen vorgegebenen Termin
+#: stornieren wollen. Auch die Oberfläche zeigt diesen Satz, statt den
+#: Knopf überhaupt anzubieten.
+ASSIGNED_NOTICE = ("Diesen Termin hat die Schule für Sie vorgesehen. Wenn er Ihnen nicht "
+                   "möglich ist, wenden Sie sich bitte an die Schule.")
+
+
 def cancel_booking(booking_id, parent_access_id):
-    """Cancel from the parent portal, honouring the cancellation deadline."""
+    """Cancel from the parent portal, honouring the cancellation deadline.
+
+    Berechtigt ist, wer einen aktiven Zugang zu diesem Kind hat -- nicht nur,
+    wer die Buchung selbst angelegt hat. Sonst könnte die zweite
+    sorgeberechtigte Person den gemeinsamen Termin nicht auflösen.
+    """
     booking = db.session.scalar(
         select(AppointmentBooking).where(AppointmentBooking.id == booking_id).with_for_update()
     )
-    if booking is None or booking.parent_access_id != parent_access_id:
+    access = db.session.get(ParentAccess, parent_access_id)
+    if booking is None or access is None or booking.schueler_id != access.schueler_id:
         raise BookingError("Terminbuchung nicht gefunden.")
     if booking.status != "confirmed":
         return booking
+    if booking.source == "staff":
+        # Die Schule hat den Termin geplant; ein stiller Rückzug daraus würde
+        # ihr eine Lücke hinterlassen, von der sie nichts erfährt.
+        raise AssignedByStaff(ASSIGNED_NOTICE)
     slot = db.session.get(AppointmentSlot, booking.slot_id)
     event = db.session.get(AppointmentEvent, booking.event_id)
     deadline = naive_utc(slot.starts_at) - datetime.timedelta(hours=event.cancellation_deadline_hours)
