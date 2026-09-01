@@ -1,0 +1,21 @@
+[Unit]
+Description=SL-Office: Terminerinnerungen an die Eltern
+After=network.target
+
+[Service]
+Type=oneshot
+User=emrichschule
+Group=emrichschule
+WorkingDirectory=/home/emrichschule/SL-Office
+EnvironmentFile=-/home/emrichschule/SL-Office/.env
+
+# Der Webdienst läuft mit mehreren Arbeitsprozessen; ein Scheduler im Prozess
+# würde jede Erinnerung mehrfach verschicken. Darum ein eigener Aufruf.
+ExecStart=/home/emrichschule/SL-Office/venv/bin/flask --app app appointment-reminders
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true

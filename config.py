@@ -54,6 +54,15 @@ class BaseConfig:
     MAIL_USERNAME = os.getenv("SL_OFFICE_MAIL_USERNAME")
     MAIL_PASSWORD = os.getenv("SL_OFFICE_MAIL_PASSWORD")
     MAIL_FROM = os.getenv("SL_OFFICE_MAIL_FROM", "noreply@example.invalid")
+    #: Empfänger der Terminbenachrichtigungen an die Schule. Leer = kein Versand.
+    #: Ohne eigene Angabe geht die Nachricht an die Kontaktadresse der Schule.
+    NOTIFY_MAIL = os.getenv("SL_OFFICE_NOTIFY_MAIL", "")
+    #: Vorlauf der Terminerinnerung an die Eltern, in Stunden.
+    APPOINTMENT_REMINDER_HOURS = int(os.getenv("SL_OFFICE_REMINDER_HOURS", "24"))
+    #: Öffentliche Adresse der Anwendung, z. B. "https://anmeldung.example.de".
+    #: Nur der Erinnerungsdienst braucht sie: er läuft ohne Anfrage und kann
+    #: den Link zum Elternbereich sonst nicht bauen.
+    PUBLIC_BASE_URL = os.getenv("SL_OFFICE_PUBLIC_BASE_URL", "").rstrip("/")
 
     # Briefkopf der Elternschreiben. Die Vorgaben entsprechen der Schulvorlage
     # "Einladung_Schulanmeldung.odt"; jede Zeile ist per Umgebungsvariable

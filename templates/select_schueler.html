@@ -13,6 +13,7 @@
                     möchten.</p>
 
                 <form method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="mb-3">
                         <label for="schueler_id" class="form-label">Name des Kindes:</label>
                         <select class="form-select form-select-lg" name="schueler_id" id="schueler_id" required>

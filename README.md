@@ -33,7 +33,8 @@ Zwei-Faktor-Bestätigung)
 - Aktivierung über einen Besitzlink aus dem Elternbrief, danach dauerhafter
   Zugang an einer bestätigten E-Mail-Adresse
 - mehrstufiges Anmeldeformular, das intern geprüft und erst dann übernommen wird
-- Terminbuchung für das Anmeldegespräch
+- Terminbuchung für das Anmeldegespräch, mit Bestätigung per Mail samt
+  Kalenderdatei und einer Erinnerung am Vortag
 
 ## Aufbau
 
@@ -92,7 +93,10 @@ Wichtige Werte:
 | `SL_OFFICE_DATABASE_URL` | Datenbank, im Betrieb der absolute SQLite-Pfad |
 | `SL_OFFICE_UPLOAD_FOLDER` | Ablage der Dokumente außerhalb des Webverzeichnisses |
 | `SL_OFFICE_TRUSTED_PROXIES` | `1` hinter nginx, sonst `0`; ohne den Wert entstehen Aktivierungslinks als `http://` mit internem Hostnamen |
-| `SL_OFFICE_MAIL_*` | Mailversand der Elternzugänge |
+| `SL_OFFICE_MAIL_*` | Mailversand der Elternzugänge und Terminmails |
+| `SL_OFFICE_NOTIFY_MAIL` | erfährt von neuen Terminbuchungen; leer = `SL_OFFICE_SCHOOL_CONTACT_MAIL` |
+| `SL_OFFICE_REMINDER_HOURS` | Vorlauf der Terminerinnerung, Vorgabe 24 |
+| `SL_OFFICE_PUBLIC_BASE_URL` | öffentliche Adresse; der Erinnerungsdienst baut damit den Portallink |
 | `SL_OFFICE_SCHOOL_*` | Briefkopf der Elternschreiben; Vorgaben stehen in `config.py` |
 
 ## Datenbank

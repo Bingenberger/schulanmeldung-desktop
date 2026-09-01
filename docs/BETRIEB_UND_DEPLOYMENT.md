@@ -12,6 +12,7 @@ Arbeitsrechner ──git push──▶ ~/sl-office.git ──post-receive──�
 | Datei | Zweck |
 | --- | --- |
 | `sl-office.service` | Dienstdefinition, wird nach `/etc/systemd/system/` kopiert |
+| `sl-office-reminders.service` / `.timer` | stündlicher Lauf der Terminerinnerungen |
 | `deploy/nginx/sl-office.conf` | Vorlage für den nginx-Server-Block |
 | `deploy/sudoers-sl-office` | erlaubt dem Deployment den Neustart des Dienstes |
 | `deploy/setup-git-deploy.sh` | legt das nackte Repository an und installiert den Hook |
@@ -87,7 +88,54 @@ Die Dienstdefinition bindet gunicorn an `127.0.0.1:5000`. Vorher war es
 erreichbar. **Deshalb zuerst nginx einrichten, dann den Dienst umstellen** —
 danach ist der direkte Zugriff auf Port 5000 nicht mehr möglich.
 
-## 4. Git-Deployment einrichten
+## 4. Terminerinnerungen
+
+Bucht eine Familie im Elternbereich einen Termin, verschickt die Anwendung
+sofort zwei Mails: die Bestätigung mit Kalenderdatei an die Eltern und einen
+Hinweis an die Schule. Beides passiert in der Anfrage selbst und braucht
+nichts weiter als einen erreichbaren Mailserver.
+
+Die Erinnerung 24 Stunden vor dem Termin dagegen hat keine Anfrage, an der sie
+hängen könnte. Sie läuft als eigener Aufruf:
+
+```bash
+venv/bin/flask --app app appointment-reminders
+```
+
+Den startet ein Timer stündlich. Ein Scheduler innerhalb der Anwendung ginge
+nicht: gunicorn arbeitet mit drei Prozessen, jeder würde denselben Termin
+erinnern.
+
+```bash
+sudo cp sl-office-reminders.service sl-office-reminders.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now sl-office-reminders.timer
+systemctl list-timers sl-office-reminders.timer     # nächster Lauf
+journalctl -u sl-office-reminders -n 20             # was zuletzt raus ging
+```
+
+Drei Werte in der `.env` steuern den Versand:
+
+```ini
+# Wer erfährt von neuen Buchungen? Leer = SL_OFFICE_SCHOOL_CONTACT_MAIL,
+# beides leer = kein Hinweis an die Schule.
+SL_OFFICE_NOTIFY_MAIL=sekretariat@example.org
+# Vorlauf der Erinnerung in Stunden.
+SL_OFFICE_REMINDER_HOURS=24
+# Ohne Anfrage kennt der Erinnerungsdienst die eigene Adresse nicht; ohne
+# diesen Wert enthält die Erinnerung keinen Link in den Elternbereich.
+SL_OFFICE_PUBLIC_BASE_URL=https://anmeldung.example.org
+```
+
+Verschickt wird jede Erinnerung genau einmal: die Buchung merkt sich den
+Zeitpunkt in `reminder_sent_at`. Wer kurzfristig bucht, bekommt nur die
+Bestätigung — sie enthält dieselben Angaben. Termine, die die Schule ohne
+Elternzugang vergeben hat, werden übersprungen und dabei als erledigt
+vermerkt, damit sie nicht bei jedem Lauf erneut auftauchen. Ein verpasster
+Lauf ist unkritisch: `Persistent=true` holt ihn nach, und die noch offenen
+Termine stehen weiterhin in der Warteschlange.
+
+## 5. Git-Deployment einrichten
 
 Einmalig auf dem Server:
 
@@ -111,7 +159,7 @@ python3 -m venv venv && ./venv/bin/pip install -r requirements.txt
 cp .env.example .env        # eigene Werte für die lokale Arbeit
 ```
 
-## 5. Der Arbeitsablauf
+## 6. Der Arbeitsablauf
 
 ```bash
 git add -A
@@ -141,7 +189,7 @@ der nächste Push mit der Korrektur bringt beides wieder zusammen.
 Nur der Branch `main` wird ausgerollt. Andere Branches lassen sich also
 gefahrlos auf den Server schieben.
 
-## 6. Zurückrollen
+## 7. Zurückrollen
 
 ```bash
 # Auf dem Arbeitsrechner: den letzten Commit rückgängig machen und pushen
@@ -159,7 +207,7 @@ git --git-dir=$HOME/sl-office.git --work-tree=$PWD checkout -f <alter-commit>
 sudo systemctl start sl-office
 ```
 
-## 7. Nachsehen, wenn etwas klemmt
+## 8. Nachsehen, wenn etwas klemmt
 
 ```bash
 sudo systemctl status sl-office

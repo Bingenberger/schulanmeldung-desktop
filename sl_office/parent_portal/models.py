@@ -157,3 +157,6 @@ class AppointmentBooking(db.Model):
     booked_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow)
     cancelled_at = db.Column(db.DateTime(timezone=True))
     internal_note = db.Column(db.Text)
+    #: Zeitpunkt der verschickten Erinnerung. Gesetzt heißt "erledigt", damit
+    #: ein zweiter Lauf des Erinnerungsdienstes nicht erneut zustellt.
+    reminder_sent_at = db.Column(db.DateTime(timezone=True))

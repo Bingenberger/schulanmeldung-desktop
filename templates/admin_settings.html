@@ -50,6 +50,7 @@
 
                 <form action="{{ url_for('admin.delete_all_students_route') }}" method="POST"
                     onsubmit="return confirm('SIND SIE SICHER? \n\nDies löscht ALLE Schüler und ALLE zugehörigen Dateien (Diagnostik, Berichte, etc.) aus der Datenbank. \n\nDieser Vorgang kann NICHT rückgängig gemacht werden!');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-outline-danger w-100">
                         <i class="bi bi-trash-fill"></i> Alle Schüler & Daten löschen
                     </button>

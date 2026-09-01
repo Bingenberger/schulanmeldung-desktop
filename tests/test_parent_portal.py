@@ -6,6 +6,7 @@ os.environ["SL_OFFICE_ENV"] = "testing"
 
 from app import create_app  # noqa: E402
 from models import Schueler, db  # noqa: E402
+from sl_office.appointments import notifications  # noqa: E402
 from sl_office.parent_portal.access_service import create_activation_grant  # noqa: E402
 from sl_office.parent_portal import registration_form  # noqa: E402
 from sl_office.parent_portal.models import (  # noqa: E402
@@ -65,6 +66,35 @@ class ParentPortalTests(unittest.TestCase):
         with self.app.app_context():
             booking = AppointmentBooking.query.one()
             self.assertEqual(booking.schueler_id, self.student_id)
+
+    def test_booking_sends_the_confirmation_and_tells_the_school(self):
+        self._activate()
+        outbox = []
+        original = notifications.send_message
+        notifications.send_message = lambda app, message: (outbox.append(message), True)[1]
+        try:
+            self.client.post(f"/eltern/termine/{self.slot_id}/buchen", follow_redirects=True)
+        finally:
+            notifications.send_message = original
+        self.assertEqual([message["To"] for message in outbox],
+                         ["parent@example.de", self.app.config["SCHOOL_CONTACT_MAIL"]])
+
+    def test_a_failing_mailserver_does_not_undo_the_booking(self):
+        self._activate()
+        original = notifications.send_message
+
+        def explode(app, message):
+            raise OSError("Verbindung zum Mailserver abgelehnt")
+
+        notifications.send_message = explode
+        try:
+            response = self.client.post(f"/eltern/termine/{self.slot_id}/buchen",
+                                        follow_redirects=True)
+        finally:
+            notifications.send_message = original
+        self.assertEqual(response.status_code, 200)
+        with self.app.app_context():
+            self.assertEqual(AppointmentBooking.query.one().status, "confirmed")
 
     def test_parent_can_cancel_own_booking(self):
         self._activate()

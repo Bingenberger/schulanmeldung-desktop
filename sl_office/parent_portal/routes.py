@@ -9,7 +9,7 @@ from flask import (Blueprint, current_app, flash, redirect, render_template, req
 from sqlalchemy import func, select
 
 from models import Schueler, db
-from sl_office.appointments import calendar
+from sl_office.appointments import calendar, notifications
 from sl_office.appointments.service import (BookingError, active_booking_for_student,
                                             book_slot, cancel_booking, slot_label)
 from sl_office.parent_portal.access_service import InvalidAccessToken, consume_activation_grant, consume_login_token, create_login_token, normalize_email
@@ -291,13 +291,21 @@ def appointments(access):
 @parent_access_required
 def book(access, slot_id):
     try:
-        book_slot(slot_id, access.schueler_id, access.id)
+        booking = book_slot(slot_id, access.schueler_id, access.id)
         record("appointment_booked", "appointment_slot", slot_id, actor_type="parent", actor_id=access.id)
         db.session.commit()
         flash("Der Termin wurde verbindlich gebucht.")
     except BookingError as exc:
         db.session.rollback()
         flash(str(exc))
+        return redirect(url_for("parent_portal.dashboard"))
+    # Erst nach dem Commit: der Termin steht, auch wenn der Mailserver klemmt.
+    try:
+        notifications.confirm_booking(current_app, booking.id)
+    except Exception:
+        current_app.logger.exception("Terminbestätigung konnte nicht versendet werden")
+        flash("Die Bestätigung per E-Mail konnte nicht zugestellt werden. "
+              "Der Termin ist trotzdem gebucht.")
     return redirect(url_for("parent_portal.dashboard"))
 
 

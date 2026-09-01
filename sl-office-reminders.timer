@@ -1,0 +1,13 @@
+[Unit]
+Description=SL-Office: stündlich nach fälligen Terminerinnerungen sehen
+
+[Timer]
+# Stündlich reicht: der Vorlauf beträgt 24 Stunden, eine Stunde Streuung darin
+# fällt nicht ins Gewicht. Persistent=true holt Läufe nach, die ein Neustart
+# oder ein ausgeschalteter Rechner verpasst hat.
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
