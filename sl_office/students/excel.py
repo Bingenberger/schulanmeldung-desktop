@@ -7,6 +7,7 @@ import pandas as pd
 
 from models import Schueler, db
 from sl_office.services.student_classification import recalculate_kann_kind
+from sl_office.students.dates import parse_birthdate
 
 MAX_ROWS = 2000
 MAX_COLUMNS = 50
@@ -48,7 +49,7 @@ def import_students(payload):
     for _, row in frame.iterrows():
         try:
             nachname, vorname = str(row[last_name]).strip(), str(row[first_name]).strip()
-            geburtsdatum = pd.to_datetime(row[birth], dayfirst=True, errors="raise").date()
+            geburtsdatum = parse_birthdate(row[birth])
             if not nachname or not vorname or nachname.lower() == "nan" or vorname.lower() == "nan":
                 raise ValueError
         except (TypeError, ValueError):

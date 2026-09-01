@@ -13,7 +13,7 @@ from werkzeug.security import generate_password_hash  # noqa: E402
 from app import create_app  # noqa: E402
 from models import Diagnostik, Einschulungsjahr, GlobalSettings, Schueler, User, db  # noqa: E402
 from sl_office.maintenance import (  # noqa: E402
-    kann_kind_befunde, kann_kind_kennzeichen_richtigstellen,
+    kann_kind_befunde, kann_kind_kennzeichen_richtigstellen, vertauschte_geburtsdaten,
 )
 from sl_office.services.student_classification import (  # noqa: E402
     ist_kann_kind, recalculate_kann_kind, stichtag,
@@ -202,6 +202,28 @@ class KannKindTests(unittest.TestCase):
             self.assertTrue(self._kind("Alt").diagnostik.schulspiel)
             self.assertFalse(self._kind("Neu").kann_kind)
 
+    def test_prueflauf_findet_vertauschte_geburtsdaten(self):
+        with self.app.app_context():
+            # 03.12.2021 wäre ein Kann-Kind, 12.03.2021 nicht.
+            kippt = Schueler(vorname="A", nachname="Kipper", einschulungsjahr=2027,
+                             geburtsdatum=datetime.date(2021, 12, 3), kann_kind=True)
+            # 10.01.2020 liegt vor dem Jahrgang, 01.10.2020 mittendrin.
+            daneben = Schueler(vorname="B", nachname="Daneben", einschulungsjahr=2027,
+                               geburtsdatum=datetime.date(2020, 1, 10))
+            # Tag über 12: konnte gar nicht vertauscht werden.
+            sicher = Schueler(vorname="C", nachname="Sicher", einschulungsjahr=2027,
+                              geburtsdatum=datetime.date(2021, 10, 21), kann_kind=True)
+            db.session.add_all([kippt, daneben, sicher])
+            db.session.commit()
+
+            befunde = {kind.nachname: (getauscht, verdacht, status_kippt)
+                       for kind, getauscht, verdacht, status_kippt in vertauschte_geburtsdaten()}
+            self.assertEqual(set(befunde), {"Kipper", "Daneben"})
+            self.assertEqual(befunde["Kipper"][0], datetime.date(2021, 3, 12))
+            self.assertTrue(befunde["Kipper"][2])          # Status kippt
+            self.assertEqual(befunde["Daneben"][0], datetime.date(2020, 10, 1))
+            self.assertTrue(befunde["Daneben"][1])         # passt getauscht besser
+
     def test_prueflauf_meldet_sauberen_bestand(self):
         with self.app.app_context():
             db.session.add(Schueler(vorname="A", nachname="Sauber", einschulungsjahr=2027,
@@ -209,6 +231,7 @@ class KannKindTests(unittest.TestCase):
             db.session.commit()
             falsch, fehlend, auffaellig = kann_kind_befunde()
             self.assertEqual((falsch, fehlend, auffaellig), ([], [], []))
+            self.assertEqual(vertauschte_geburtsdaten(), [])
 
 
 if __name__ == "__main__":

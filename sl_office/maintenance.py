@@ -76,10 +76,15 @@ def delete_orphaned_portal_records():
 TOLERANZ_JAHRE = 1
 
 
-def _jahrgangsfenster(jahr):
-    """Von--bis, in dem ein Geburtsdatum für diesen Jahrgang plausibel ist."""
-    return (datetime.date(jahr - 7 - TOLERANZ_JAHRE, 10, 1),
-            datetime.date(jahr - 6 + TOLERANZ_JAHRE, 12, 31))
+def _jahrgangsfenster(jahr, toleranz=TOLERANZ_JAHRE):
+    """Von--bis, in dem ein Geburtsdatum für diesen Jahrgang plausibel ist.
+
+    Ohne Toleranz ist das der Zeitraum, aus dem der Jahrgang tatsächlich stammt:
+    Muss-Kinder vom 01.10. (Jahr-7) bis zum Stichtag, Kann-Kinder bis zum
+    Jahresende.
+    """
+    return (datetime.date(jahr - 7 - toleranz, 10, 1),
+            datetime.date(jahr - 6 + toleranz, 12, 31))
 
 
 def kann_kind_befunde():
@@ -102,6 +107,40 @@ def kann_kind_befunde():
         if not von <= kind.geburtsdatum <= bis:
             unplausibel.append(kind)
     return falsch, ohne_datum, unplausibel
+
+
+def vertauschte_geburtsdaten():
+    """Kinder, deren Geburtsdatum nach einer Tag/Monat-Vertauschung aussieht.
+
+    Der Importfehler (siehe ``sl_office/students/dates.py``) traf nur Geburtstage
+    bis zum 12. eines Monats -- höhere Tage taugen nicht als Monat und blieben
+    richtig. Aus den Daten allein ist eine Vertauschung nicht beweisbar, aber
+    einzugrenzen: Liegt das gespeicherte Datum außerhalb des Zeitraums, aus dem
+    ein Jahrgang stammen kann, das getauschte aber darin, ist der Verdacht hoch.
+    Sonst entscheidet, ob der Tausch den Kann-Kind-Status kippen würde -- dann
+    hängt eine Einschulungsentscheidung daran.
+
+    Liefert ``[(kind, getauschtes_datum, verdacht, status_kippt), ...]``.
+    """
+    befunde = []
+    for kind in db.session.scalars(
+            select(Schueler).order_by(Schueler.einschulungsjahr, Schueler.nachname)):
+        if kind.geburtsdatum is None or kind.geburtsdatum.day > 12:
+            continue
+        try:
+            getauscht = kind.geburtsdatum.replace(
+                month=kind.geburtsdatum.day, day=kind.geburtsdatum.month)
+        except ValueError:
+            continue
+        # Hier zählt der enge Zeitraum: bei einer Toleranz von einem Jahr fiele
+        # der typische Fall (aus 01.10. wurde 10.01.) nicht mehr auf.
+        von, bis = _jahrgangsfenster(kind.einschulungsjahr, toleranz=0)
+        verdacht = not (von <= kind.geburtsdatum <= bis) and von <= getauscht <= bis
+        kippt = (ist_kann_kind(kind.geburtsdatum, kind.einschulungsjahr)
+                 != ist_kann_kind(getauscht, kind.einschulungsjahr))
+        if verdacht or kippt:
+            befunde.append((kind, getauscht, verdacht, kippt))
+    return befunde
 
 
 def kann_kind_kennzeichen_richtigstellen(falsch):
@@ -176,6 +215,23 @@ def register_cli(app):
             for kind in unplausibel:
                 click.echo(f"  id={kind.id:<5} {kind.vorname} {kind.nachname} "
                            f"(geb. {kind.geburtsdatum:%d.%m.%Y}, ESJ {kind.einschulungsjahr})")
+
+        verdaechtig = vertauschte_geburtsdaten()
+        if verdaechtig:
+            click.echo(f"\nGeburtsdatum möglicherweise tag/monat-vertauscht: "
+                       f"{len(verdaechtig)}")
+            click.echo("  (nur gegen die Liste der Stadt zu klären -- nicht automatisch "
+                       "korrigierbar)")
+            for kind, getauscht, verdacht, kippt in verdaechtig:
+                hinweise = []
+                if verdacht:
+                    hinweise.append("passt getauscht besser zum Jahrgang")
+                if kippt:
+                    hinweise.append("Kann-Kind-Status hängt daran")
+                click.echo(f"  id={kind.id:<5} {kind.vorname} {kind.nachname} "
+                           f"(ESJ {kind.einschulungsjahr}): "
+                           f"{kind.geburtsdatum:%d.%m.%Y} oder {getauscht:%d.%m.%Y}? "
+                           f"-- {', '.join(hinweise)}")
 
         if not falsch:
             return

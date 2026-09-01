@@ -18,6 +18,7 @@ import pandas as pd
 
 from models import Schueler, db
 from sl_office.services.student_classification import recalculate_kann_kind
+from sl_office.students.dates import parse_birthdate
 
 MAX_ROWS = 2000
 MAX_COLUMNS = 60
@@ -189,15 +190,10 @@ def import_rows(staged, mapping):
             invalid += 1
             continue
         try:
-            parsed = pd.to_datetime(raw_birth, dayfirst=True, errors="raise")
+            geburtsdatum = parse_birthdate(raw_birth)
         except (TypeError, ValueError):
             invalid += 1
             continue
-        # An unparsable value yields NaT instead of raising, so check explicitly.
-        if pd.isna(parsed):
-            invalid += 1
-            continue
-        geburtsdatum = parsed.date()
 
         fields = {
             "strasse": value(row, "strasse"), "plz": value(row, "plz"), "ort": value(row, "ort"),
