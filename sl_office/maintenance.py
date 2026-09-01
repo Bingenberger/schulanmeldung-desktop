@@ -304,7 +304,7 @@ def register_cli(app):
         if ergebnis.mehrdeutig:
             click.echo(f"\nName mehrfach im Jahrgang, nicht zuzuordnen: "
                        f"{len(ergebnis.mehrdeutig)}")
-            for vor, nach, kinder in ergebnis.mehrdeutig:
+            for vor, nach, kinder, _datum in ergebnis.mehrdeutig:
                 click.echo(f"  {vor} {nach} -- ids {[kind.id for kind in kinder]}")
 
         if ergebnis.ohne_treffer:
@@ -335,3 +335,79 @@ def register_cli(app):
             return
         click.echo(f"\n{ergebnis.anwenden()} Geburtsdaten übernommen, "
                    "Kann-Kind-Kennzeichen neu bestimmt.")
+
+    @app.cli.command("check-dubletten")
+    @click.option("--datei", "datei", required=True,
+                  type=click.Path(exists=True, dir_okay=False),
+                  help="XLSX-Liste der Stadt für diesen Jahrgang.")
+    @click.option("--jahr", "jahr", required=True, type=int,
+                  help="Einschulungsjahr, zu dem die Liste gehört.")
+    @click.option("--fix", "fix", is_flag=True,
+                  help="Lösbare Dubletten zusammenführen statt nur zu melden.")
+    @click.option("--spalte-vorname", "vorname", default=None,
+                  help="Spaltenüberschrift, falls die Erkennung danebenliegt.")
+    @click.option("--spalte-nachname", "nachname", default=None)
+    @click.option("--spalte-geburtsdatum", "geburtsdatum", default=None)
+    @with_appcontext
+    def check_dubletten(datei, jahr, fix, vorname, nachname, geburtsdatum):
+        """Doppelt angelegte Kinder eines Jahrgangs zusammenführen.
+
+        Der bearbeitete Datensatz bleibt und bekommt das Geburtsdatum aus der
+        Liste; der unbearbeitete entfällt. Sind beide bearbeitet, wird nur
+        gemeldet.
+        """
+        from sl_office.students.city_import import InvalidWorkbook
+        from sl_office.students.duplicates import dubletten, zusammenfuehren
+        from sl_office.students.reconcile import geburtsdaten_abgleichen
+
+        with open(datei, "rb") as handle:
+            payload = handle.read()
+        try:
+            abgleich = geburtsdaten_abgleichen(
+                payload, jahr,
+                vorname=vorname, nachname=nachname, geburtsdatum=geburtsdatum)
+        except InvalidWorkbook as fehler:
+            raise click.ClickException(str(fehler)) from fehler
+
+        befunde = dubletten(abgleich)
+        if not befunde:
+            click.echo(f"Jahrgang {jahr}: keine doppelt angelegten Kinder gefunden.")
+            return
+
+        loesbar = [befund for befund in befunde if befund.loesbar]
+        click.echo(f"Jahrgang {jahr}: {len(befunde)} Name(n) doppelt im Bestand, "
+                   f"davon {len(loesbar)} automatisch auflösbar.\n")
+        for befund in befunde:
+            click.echo(f"{befund.name} -- laut Liste geb. {befund.datum:%d.%m.%Y}")
+            for kind in befund.kinder:
+                spuren = befund.spuren[kind.id]
+                rolle = ""
+                if befund.loesbar:
+                    rolle = " BLEIBT" if kind is befund.behalten else " entfällt"
+                datum = f"{kind.geburtsdatum:%d.%m.%Y}" if kind.geburtsdatum else "ohne Datum"
+                click.echo(f"  id={kind.id:<5} geb. {datum}"
+                           f"{' (richtig)' if kind.geburtsdatum == befund.datum else ''}"
+                           f"{rolle}")
+                genannt = befund.verweise[kind.id]
+                if genannt:
+                    spuren = spuren + [f"als Freund genannt ({genannt}x, wird umgehängt)"]
+                click.echo(f"        {', '.join(spuren) if spuren else 'keine Bearbeitung'}")
+            if befund.konflikt:
+                click.echo(f"  -> nicht automatisch lösbar: {befund.konflikt}")
+            elif befund.datum_zu_berichtigen:
+                click.echo(f"  -> Geburtsdatum wird auf {befund.datum:%d.%m.%Y} berichtigt"
+                           f"{_kann_kind_hinweis(befund.behalten, befund.datum, jahr)}")
+            click.echo("")
+
+        if not loesbar:
+            return
+        if not fix:
+            click.echo(f"Zum Zusammenführen: flask --app app check-dubletten "
+                       f"--datei {datei} --jahr {jahr} --fix")
+            return
+        entfernt = zusammenfuehren(loesbar, app.config["UPLOAD_FOLDER"])
+        click.echo(f"{entfernt} Doppeleintrag/-einträge entfernt, Geburtsdaten berichtigt, "
+                   "Kann-Kind-Kennzeichen neu bestimmt.")
+        offen = len(befunde) - len(loesbar)
+        if offen:
+            click.echo(f"{offen} Fall/Fälle bleiben zur Prüfung von Hand offen.")

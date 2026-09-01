@@ -242,6 +242,7 @@ class ReconcileTests(unittest.TestCase):
             ergebnis = geburtsdaten_abgleichen(
                 self._liste([("Muster", "Max", datetime.datetime(2021, 3, 12))]), jahr=2027)
             self.assertEqual(len(ergebnis.mehrdeutig), 1)
+            self.assertEqual(ergebnis.mehrdeutig[0][3], ZWOELFTER_MAERZ)
             self.assertEqual(ergebnis.korrekturen, [])
 
     def test_schreibweise_und_akzente_stoeren_die_zuordnung_nicht(self):
@@ -251,6 +252,147 @@ class ReconcileTests(unittest.TestCase):
             ergebnis = geburtsdaten_abgleichen(
                 self._liste([("  TARAU ", "eric", datetime.datetime(2020, 10, 1))]), jahr=2027)
             self.assertEqual(len(ergebnis.vertauscht), 1)
+
+
+class DuplicateTests(unittest.TestCase):
+    """Zwei Datensätze pro Kind -- die Folge der Vertauschung beim Zweitimport."""
+
+    def setUp(self):
+        self.app = create_app("testing")
+        with self.app.app_context():
+            db.session.add_all([
+                GlobalSettings(einschulungsjahr=2027),
+                Einschulungsjahr(jahr=2027, ist_aktuell=True),
+            ])
+            db.session.commit()
+
+    def tearDown(self):
+        with self.app.app_context():
+            db.session.remove()
+            db.drop_all()
+
+    def _paar(self, vorname="Salvatore", nachname="Ritrovato"):
+        """Derselbe Name zweimal: einmal vertauscht, einmal richtig datiert."""
+        vertauscht = Schueler(vorname=vorname, nachname=nachname, einschulungsjahr=2027,
+                              geburtsdatum=datetime.date(2021, 12, 3), kann_kind=True)
+        richtig = Schueler(vorname=vorname, nachname=nachname, einschulungsjahr=2027,
+                           geburtsdatum=ZWOELFTER_MAERZ)
+        db.session.add_all([vertauscht, richtig])
+        db.session.commit()
+        return vertauscht, richtig
+
+    def _liste(self, zeilen):
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["Nachname", "Vorname", "Geburtsdatum"])
+        for nachname, vorname, geburt in zeilen:
+            sheet.append([nachname, vorname, geburt])
+        buffer = io.BytesIO()
+        workbook.save(buffer)
+        return buffer.getvalue()
+
+    def _befunde(self, zeilen=None):
+        from sl_office.students.duplicates import dubletten
+        from sl_office.students.reconcile import geburtsdaten_abgleichen
+        zeilen = zeilen or [("Ritrovato", "Salvatore", datetime.datetime(2021, 3, 12))]
+        return dubletten(geburtsdaten_abgleichen(self._liste(zeilen), jahr=2027))
+
+    def test_bearbeiteter_datensatz_bleibt_und_wird_berichtigt(self):
+        from models import Diagnostik
+        from sl_office.students.duplicates import zusammenfuehren
+        with self.app.app_context():
+            vertauscht, richtig = self._paar()
+            # Am falsch datierten Datensatz hängt die geleistete Arbeit.
+            vertauscht.diagnostik = Diagnostik(bemerkung="Schulspiel auffällig")
+            vertauscht.klasse = "1a"
+            db.session.commit()
+            behalten_id, verworfen_id = vertauscht.id, richtig.id
+
+            befunde = self._befunde()
+            self.assertEqual(len(befunde), 1)
+            self.assertTrue(befunde[0].loesbar)
+            self.assertEqual(befunde[0].behalten.id, behalten_id)
+            self.assertEqual(zusammenfuehren(befunde, self.app.config["UPLOAD_FOLDER"]), 1)
+
+            uebrig = Schueler.query.filter_by(nachname="Ritrovato").all()
+            self.assertEqual([kind.id for kind in uebrig], [behalten_id])
+            self.assertEqual(uebrig[0].geburtsdatum, ZWOELFTER_MAERZ)
+            self.assertFalse(uebrig[0].kann_kind, "nach der Berichtigung ein Muss-Kind")
+            self.assertEqual(uebrig[0].diagnostik.bemerkung, "Schulspiel auffällig")
+            self.assertIsNone(db.session.get(Schueler, verworfen_id))
+
+    def test_beidseitig_bearbeitete_paare_bleiben_unangetastet(self):
+        from sl_office.students.duplicates import zusammenfuehren
+        with self.app.app_context():
+            vertauscht, richtig = self._paar()
+            vertauscht.klasse = "1a"
+            richtig.betreuung = "OGS"
+            db.session.commit()
+
+            befunde = self._befunde()
+            self.assertFalse(befunde[0].loesbar)
+            self.assertIn("beiden", befunde[0].konflikt)
+            self.assertEqual(zusammenfuehren(befunde, self.app.config["UPLOAD_FOLDER"]), 0)
+            self.assertEqual(Schueler.query.filter_by(nachname="Ritrovato").count(), 2)
+
+    def test_ohne_bearbeitung_bleibt_der_aeltere_datensatz(self):
+        from sl_office.students.duplicates import zusammenfuehren
+        with self.app.app_context():
+            vertauscht, richtig = self._paar()
+            aeltere_id = min(vertauscht.id, richtig.id)
+
+            befunde = self._befunde()
+            self.assertEqual(befunde[0].behalten.id, aeltere_id)
+            zusammenfuehren(befunde, self.app.config["UPLOAD_FOLDER"])
+            uebrig = Schueler.query.filter_by(nachname="Ritrovato").one()
+            self.assertEqual(uebrig.id, aeltere_id)
+            self.assertEqual(uebrig.geburtsdatum, ZWOELFTER_MAERZ)
+
+    def test_automatisch_gesetztes_schulspiel_gilt_nicht_als_bearbeitung(self):
+        """recalculate_kann_kind legt für Kann-Kinder selbst eine Diagnostik an."""
+        from models import Diagnostik
+        with self.app.app_context():
+            vertauscht, _richtig = self._paar()
+            vertauscht.diagnostik = Diagnostik(schulspiel=True)
+            db.session.commit()
+
+            befunde = self._befunde()
+            self.assertTrue(befunde[0].loesbar)
+            self.assertEqual(befunde[0].spuren[vertauscht.id], [])
+
+    def test_freundschaftswunsch_wird_umgehaengt(self):
+        from sl_office.students.duplicates import zusammenfuehren
+        with self.app.app_context():
+            vertauscht, richtig = self._paar()
+            vertauscht.klasse = "1a"          # macht ihn zum bleibenden Datensatz
+            freundin = Schueler(vorname="Mina", nachname="Wedekind", einschulungsjahr=2027,
+                                geburtsdatum=datetime.date(2020, 10, 19),
+                                freund1_id=richtig.id)
+            db.session.add(freundin)
+            db.session.commit()
+            behalten_id = vertauscht.id
+
+            zusammenfuehren(self._befunde([
+                ("Ritrovato", "Salvatore", datetime.datetime(2021, 3, 12)),
+                ("Wedekind", "Mina", datetime.datetime(2020, 10, 19)),
+            ]), self.app.config["UPLOAD_FOLDER"])
+
+            freundin = Schueler.query.filter_by(nachname="Wedekind").one()
+            self.assertEqual(freundin.freund1_id, behalten_id)
+
+    def test_freundschaftswunsch_blockiert_das_zusammenfuehren_nicht(self):
+        """Ein Zeiger auf den Datensatz ist keine Bearbeitung, er wird umgehängt."""
+        with self.app.app_context():
+            _vertauscht, richtig = self._paar()
+            db.session.add(Schueler(vorname="Mina", nachname="Wedekind", einschulungsjahr=2027,
+                                    geburtsdatum=datetime.date(2020, 10, 19),
+                                    freund1_id=richtig.id))
+            db.session.commit()
+
+            befund = self._befunde()[0]
+            self.assertTrue(befund.loesbar)
+            self.assertEqual(befund.spuren[richtig.id], [])
+            self.assertEqual(befund.verweise[richtig.id], 1)
 
 
 if __name__ == "__main__":

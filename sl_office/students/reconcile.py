@@ -52,7 +52,7 @@ class Abgleich:
         self.abweichend = []      # [(kind, datum_aus_datei)] -- keine Vertauschung
         self.bestaetigt = 0       # Datum stimmt bereits überein
         self.ohne_treffer = []    # [(vorname, nachname, datum)] -- Zeile ohne Kind
-        self.mehrdeutig = []      # [(vorname, nachname, [kind, ...])]
+        self.mehrdeutig = []      # [(vorname, nachname, [kind, ...], datum_aus_datei)]
         self.unlesbar = 0         # Zeilen ohne verwertbaren Namen oder Datum
         self.nicht_in_datei = []  # [kind] -- Kind des Jahrgangs fehlt in der Liste
 
@@ -122,7 +122,7 @@ def geburtsdaten_abgleichen(payload, jahr, **spalten):
             ergebnis.ohne_treffer.append((vorname, nachname, aus_datei))
             continue
         if len(kinder) > 1:
-            ergebnis.mehrdeutig.append((vorname, nachname, kinder))
+            ergebnis.mehrdeutig.append((vorname, nachname, kinder, aus_datei))
             continue
 
         kind = kinder[0]
@@ -134,7 +134,7 @@ def geburtsdaten_abgleichen(payload, jahr, **spalten):
         else:
             ergebnis.abweichend.append((kind, aus_datei))
 
-    mehrdeutige_ids = {kind.id for _, _, kinder in ergebnis.mehrdeutig for kind in kinder}
+    mehrdeutige_ids = {kind.id for _, _, kinder, _ in ergebnis.mehrdeutig for kind in kinder}
     ergebnis.nicht_in_datei = [
         kind for kinder in bestand.values() for kind in kinder
         if kind.id not in getroffen and kind.id not in mehrdeutige_ids
