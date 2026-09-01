@@ -133,6 +133,33 @@ class ParentPortalTests(unittest.TestCase):
             self.assertEqual(registration.status, "draft")
             self.assertEqual(registration.data["kind_vorname"], "Portal")
 
+    def test_the_kita_period_may_be_typed_without_a_slash(self):
+        # Auf dem Ziffernfeld eines Mobiltelefons gibt es keine Taste dafür.
+        self._activate()
+        self.client.post("/eltern/formular/weiteres",
+                         data={"kita_von": "082023", "kita_bis": "7.2027", "action": "save"},
+                         follow_redirects=True)
+        with self.app.app_context():
+            data = ParentRegistration.query.one().data
+            self.assertEqual(data["kita_von"], "08/2023")
+            self.assertEqual(data["kita_bis"], "07/2027")
+
+    def test_the_stored_kita_period_is_shown_again_with_its_slash(self):
+        self._activate()
+        self.client.post("/eltern/formular/weiteres",
+                         data={"kita_von": "082023", "action": "save"}, follow_redirects=True)
+        body = self.client.get("/eltern/formular/weiteres").get_data(as_text=True)
+        self.assertIn('value="08/2023"', body)
+
+    def test_an_unparsable_kita_period_is_kept_as_written(self):
+        # Das Formular weist nichts zurück; die Schule sieht es beim Gespräch.
+        self._activate()
+        self.client.post("/eltern/formular/weiteres",
+                         data={"kita_von": "Sommer 2023", "action": "save"},
+                         follow_redirects=True)
+        with self.app.app_context():
+            self.assertEqual(ParentRegistration.query.one().data["kita_von"], "Sommer 2023")
+
     def test_a_later_step_keeps_the_earlier_answers(self):
         self._activate()
         self._fill("kind", {"kind_nachname": "Kind", "kind_vorname": "Portal",
@@ -236,6 +263,15 @@ class RegistrationCatalogueTests(unittest.TestCase):
                 field = registration_form.FIELDS_BY_NAME[name]
                 self.assertEqual(field.kind, "select")
                 self.assertTrue(field.options)
+
+    def test_the_kita_period_accepts_every_spelling_its_pattern_allows(self):
+        import re
+        muster = re.compile("^(?:" + registration_form.MONTH_YEAR_PATTERN + ")$")
+        for wert in ("082023", "08/2023", "8/2023", "08.2023", "08-2023"):
+            self.assertTrue(muster.match(wert), wert)
+            self.assertEqual(registration_form.normalise("kita_von", wert), "08/2023")
+        for wert in ("82023", "0823", "Sommer"):
+            self.assertIsNone(muster.match(wert), wert)
 
     def test_contact_details_use_their_own_input_types(self):
         expected = {

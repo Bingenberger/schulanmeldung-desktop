@@ -11,6 +11,7 @@ sind die drei Felder, die es nur auf Papier gibt: die beiden Unterschriftszeilen
 absendet, hat sie beantwortet.
 """
 
+import re
 from dataclasses import dataclass, field as dataclass_field
 from datetime import date
 
@@ -20,6 +21,12 @@ KONFESSION = ("katholisch", "evangelisch", "islamisch", "orthodox", "jüdisch",
 JA_NEIN = ("ja", "nein")
 KITAS = ("Kita St. Matthäus", "Kita Pappelweg", "Kita Weidenstraße", "Wilde 13",
          "Kita Sanddornstraße", "Andere")
+
+
+#: Monat und Jahr, mit oder ohne Trennzeichen. Der zweite Zweig lässt einen
+#: einstelligen Monat zu, dann aber mit Trennzeichen -- "82023" wäre sonst
+#: nicht zu entscheiden.
+MONTH_YEAR_PATTERN = r"\d{2}[./-]?\d{4}|\d[./-]\d{4}"
 
 
 @dataclass(frozen=True)
@@ -130,11 +137,14 @@ STEPS = (
              Field("besuchte_kita", "Einrichtung", kind="select", options=KITAS,
                    group="Besuchte Kita"),
              Field("besuchte_kita_andere", "Falls andere: welche?", group="Besuchte Kita"),
+             # Der Schrägstrich darf entfallen: das Ziffernfeld eines
+             # Mobiltelefons hat keine Taste dafür. Gespeichert wird trotzdem
+             # einheitlich MM/JJJJ -- siehe normalise().
              Field("kita_von", "Besucht seit", group="Besuchte Kita", width=3,
-                   placeholder="MM/JJJJ", pattern=r"\d{2}/\d{4}", inputmode="numeric",
-                   maxlength=7, hint="Monat und Jahr, z. B. 08/2023."),
+                   placeholder="MM/JJJJ", pattern=MONTH_YEAR_PATTERN, inputmode="numeric",
+                   maxlength=7, hint="Monat und Jahr, z. B. 08/2023 oder 082023."),
              Field("kita_bis", "Besucht bis", group="Besuchte Kita", width=3,
-                   placeholder="MM/JJJJ", pattern=r"\d{2}/\d{4}", inputmode="numeric",
+                   placeholder="MM/JJJJ", pattern=MONTH_YEAR_PATTERN, inputmode="numeric",
                    maxlength=7, hint="Voraussichtliches Ende, meist der Sommer vor der Einschulung."),
          )),
     Step("abschluss", "Prüfen und absenden",
@@ -177,6 +187,33 @@ def neighbours(key):
     previous = STEPS[index - 1] if index > 0 else None
     following = STEPS[index + 1] if 0 <= index < len(STEPS) - 1 else None
     return previous, following
+
+
+_MONTH_YEAR = re.compile(r"^\s*(\d{1,2})\s*[./-]?\s*(\d{4})\s*$")
+
+
+def _month_year(value):
+    """"082023", "8.2023" oder "08 / 2023" werden zu "08/2023".
+
+    Was nicht passt, bleibt unverändert stehen: das Formular weist Eingaben
+    nicht zurück, die Schule sieht sie beim Anmeldegespräch ohnehin durch.
+    """
+    match = _MONTH_YEAR.match(value)
+    if not match:
+        return value
+    monat, jahr = match.groups()
+    return f"{int(monat):02d}/{jahr}"
+
+
+#: Felder, deren Eingabe vor dem Speichern vereinheitlicht wird.
+NORMALISERS = {"kita_von": _month_year, "kita_bis": _month_year}
+
+
+def normalise(name, value):
+    """Eine Eingabe in der Schreibweise ablegen, die das Formular ausgibt."""
+    value = (value or "").strip()
+    cleaner = NORMALISERS.get(name)
+    return cleaner(value) if cleaner else value
 
 
 def missing(data):

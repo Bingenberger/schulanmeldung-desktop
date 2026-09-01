@@ -193,7 +193,11 @@ def registration_step(access, step):
         action = request.form.get("action", "next")
         if action != "skip":
             for field in current.fields:
-                data[field.name] = request.form.get(field.name, "").strip()
+                # normalise() vereinheitlicht, was in mehreren Schreibweisen
+                # ankommen darf -- etwa "082023" statt "08/2023" vom
+                # Ziffernfeld eines Mobiltelefons.
+                data[field.name] = registration_form.normalise(
+                    field.name, request.form.get(field.name, ""))
         # Beide Sorgeberechtigten füllen dasselbe Formular. War es schon
         # abgesendet, ist jede inhaltliche Änderung für die Schule relevant --
         # reines Durchblättern ohne Änderung dagegen nicht.
