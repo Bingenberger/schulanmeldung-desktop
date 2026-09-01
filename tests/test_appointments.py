@@ -40,6 +40,9 @@ class _AppointmentFixture:
                 # Booking is already open, so parent bookings are testable.
                 booking_opens_at=_naive(datetime.datetime.now(datetime.UTC)) - datetime.timedelta(days=1),
                 booking_closes_at=start + datetime.timedelta(days=5),
+                # Gesprächstage: die Woche um den ersten Termin herum.
+                slot_days_from=start.date() - datetime.timedelta(days=1),
+                slot_days_until=start.date() + datetime.timedelta(days=5),
             )
             db.session.add_all([self.student, self.other_student, event])
             db.session.flush()
@@ -144,11 +147,23 @@ class AppointmentServiceTests(_AppointmentFixture, unittest.TestCase):
                 create_slot(self.event_id, self.start + datetime.timedelta(hours=2, minutes=5),
                             self.start + datetime.timedelta(hours=2, minutes=45))
 
-    def test_slot_must_lie_inside_the_booking_period(self):
+    def test_slot_must_fall_on_one_of_the_interview_days(self):
         with self.app.app_context():
             with self.assertRaises(BookingError):
                 create_slot(self.event_id, self.start + datetime.timedelta(days=30),
                             self.start + datetime.timedelta(days=30, minutes=40))
+
+    def test_a_slot_long_before_the_booking_period_is_fine(self):
+        # Der Anmeldezeitraum begrenzt die Fenster nicht: gebucht wird lange
+        # vorher, gesprochen an den Gesprächstagen.
+        with self.app.app_context():
+            event = db.session.get(AppointmentEvent, self.event_id)
+            event.booking_opens_at = self.start - datetime.timedelta(days=60)
+            event.booking_closes_at = self.start - datetime.timedelta(days=30)
+            db.session.commit()
+            created = create_slot(self.event_id, self.start + datetime.timedelta(days=1),
+                                  self.start + datetime.timedelta(days=1, minutes=40))
+            self.assertIsNotNone(created.id)
 
     def test_bulk_generation_creates_requested_number_and_duration(self):
         with self.app.app_context():
@@ -166,7 +181,7 @@ class AppointmentServiceTests(_AppointmentFixture, unittest.TestCase):
             self.assertEqual(moved.starts_at, target)
             self.assertEqual(moved.ends_at - moved.starts_at, datetime.timedelta(minutes=50))
 
-    def test_move_slot_rejects_outside_booking_period(self):
+    def test_move_slot_rejects_a_day_outside_the_interview_days(self):
         with self.app.app_context():
             target = self.start + datetime.timedelta(days=30)
             with self.assertRaises(BookingError):
@@ -391,6 +406,146 @@ class CalendarRouteTests(_AppointmentFixture, unittest.TestCase):
         response = self.app.test_client().get(
             f"/admin/appointments/{self.event_id}/buchungen.ics")
         self.assertEqual(response.status_code, 302)
+
+
+class BookingWindowTests(unittest.TestCase):
+    """Der Buchungszeitraum muss schon auf der Terminliste sichtbar sein.
+
+    Vorher standen die Zeitfenster mitsamt Schaltfläche da, und erst der Klick
+    brachte die Meldung, dass die Buchung noch nicht geöffnet sei.
+    """
+
+    def setUp(self):
+        self.app = create_app("testing")
+        with self.app.app_context():
+            student = Schueler(vorname="Termin", nachname="Kind")
+            now = _naive(datetime.datetime.now(datetime.UTC))
+            event = AppointmentEvent(title="Anmeldung", school_year=2027, status="published")
+            db.session.add_all([student, event])
+            db.session.flush()
+            start = (now + datetime.timedelta(days=30)).replace(minute=0, second=0, microsecond=0)
+            slot = AppointmentSlot(event_id=event.id, starts_at=start,
+                                   ends_at=start + datetime.timedelta(minutes=40))
+            access = ParentAccess(schueler_id=student.id, email_normalized="eltern@example.de",
+                                  display_name="Eltern", status="active")
+            db.session.add_all([slot, access])
+            db.session.commit()
+            self.event_id, self.slot_id, self.access_id = event.id, slot.id, access.id
+            self.now = now
+
+    def tearDown(self):
+        with self.app.app_context():
+            db.session.remove()
+            db.drop_all()
+
+    def _window(self, opens_in, closes_in):
+        with self.app.app_context():
+            event = db.session.get(AppointmentEvent, self.event_id)
+            event.booking_opens_at = self.now + opens_in
+            event.booking_closes_at = self.now + closes_in
+            db.session.commit()
+
+    def _client(self):
+        with self.app.app_context():
+            version = db.session.get(ParentAccess, self.access_id).security_version
+        client = self.app.test_client()
+        with client.session_transaction() as sess:
+            sess["parent_access_id"] = self.access_id
+            sess["parent_access_version"] = version
+        return client
+
+    def test_before_the_window_no_slot_is_offered(self):
+        self._window(datetime.timedelta(days=2), datetime.timedelta(days=40))
+        body = self._client().get("/eltern/termine").get_data(as_text=True)
+        self.assertIn("Die Terminbuchung öffnet am", body)
+        self.assertNotIn("Buchen</button>", body)
+
+    def test_after_the_window_no_slot_is_offered(self):
+        self._window(datetime.timedelta(days=-40), datetime.timedelta(days=-1))
+        body = self._client().get("/eltern/termine").get_data(as_text=True)
+        self.assertIn("abgeschlossen", body)
+        self.assertNotIn("Buchen</button>", body)
+
+    def test_inside_the_window_the_slot_can_be_booked(self):
+        self._window(datetime.timedelta(days=-1), datetime.timedelta(days=40))
+        client = self._client()
+        self.assertIn("Buchen</button>", client.get("/eltern/termine").get_data(as_text=True))
+        client.post(f"/eltern/termine/{self.slot_id}/buchen", follow_redirects=True)
+        with self.app.app_context():
+            self.assertEqual(db.session.query(AppointmentBooking).count(), 1)
+
+    def test_the_announced_opening_is_the_local_time_the_school_entered(self):
+        # Die Schule trägt Ortszeit ein, gespeichert wird UTC. Angekündigt
+        # werden muss wieder die Ortszeit.
+        with self.app.app_context():
+            event = db.session.get(AppointmentEvent, self.event_id)
+            event.booking_opens_at = datetime.datetime(2027, 9, 1, 6, 0)   # 08:00 Berlin
+            event.booking_closes_at = datetime.datetime(2027, 12, 1, 6, 0)
+            db.session.commit()
+        body = self._client().get("/eltern/termine").get_data(as_text=True)
+        self.assertIn("01.09.2027, 08:00 Uhr", body)
+
+
+class AdministrationWindowTests(_AppointmentFixture, unittest.TestCase):
+
+    def test_the_settings_form_shows_the_window_in_local_time(self):
+        client = self._login_staff()
+        client.post(f"/admin/appointments/{self.event_id}", data={
+            "action": "booking_window",
+            "booking_opens_at": "2026-09-01T08:00",
+            "booking_closes_at": "2026-09-30T18:00",
+        }, follow_redirects=True)
+        with self.app.app_context():
+            event = db.session.get(AppointmentEvent, self.event_id)
+            self.assertEqual(event.booking_opens_at, datetime.datetime(2026, 9, 1, 6, 0))
+        body = client.get(f"/admin/appointments/{self.event_id}").get_data(as_text=True)
+        # Zuvor stand hier der UTC-Wert und damit zwei Stunden zu früh.
+        self.assertIn('value="2026-09-01T08:00"', body)
+        self.assertIn('value="2026-09-30T18:00"', body)
+
+    def test_the_interview_days_are_stored_and_shown_separately(self):
+        client = self._login_staff()
+        first = self.start.date() - datetime.timedelta(days=1)
+        last = self.start.date() + datetime.timedelta(days=5)
+        response = client.post(f"/admin/appointments/{self.event_id}", data={
+            "action": "slot_days",
+            "slot_days_from": first.isoformat(),
+            "slot_days_until": last.isoformat(),
+        }, follow_redirects=True)
+        self.assertEqual(response.status_code, 200)
+        with self.app.app_context():
+            event = db.session.get(AppointmentEvent, self.event_id)
+            self.assertEqual((event.slot_days_from, event.slot_days_until), (first, last))
+            # Der Anmeldezeitraum bleibt davon unberührt.
+            self.assertIsNotNone(event.booking_opens_at)
+        body = client.get(f"/admin/appointments/{self.event_id}").get_data(as_text=True)
+        self.assertIn(f'value="{first.isoformat()}"', body)
+
+    def test_interview_days_may_not_strand_an_existing_slot(self):
+        client = self._login_staff()
+        later = self.start.date() + datetime.timedelta(days=3)
+        response = client.post(f"/admin/appointments/{self.event_id}", data={
+            "action": "slot_days",
+            "slot_days_from": later.isoformat(),
+            "slot_days_until": (later + datetime.timedelta(days=1)).isoformat(),
+        }, follow_redirects=True)
+        self.assertIn("liegen bereits Gesprächsfenster", response.get_data(as_text=True))
+        with self.app.app_context():
+            event = db.session.get(AppointmentEvent, self.event_id)
+            self.assertNotEqual(event.slot_days_from, later)
+
+    def _login_staff(self):
+        with self.app.app_context():
+            user = User(username="fenster", password_hash=generate_password_hash("x"),
+                        role="Schulleitung")
+            db.session.add(user)
+            db.session.commit()
+            user_id = user.id
+        client = self.app.test_client()
+        with client.session_transaction() as sess:
+            sess["_user_id"] = str(user_id)
+            sess["_fresh"] = True
+        return client
 
 
 if __name__ == "__main__":

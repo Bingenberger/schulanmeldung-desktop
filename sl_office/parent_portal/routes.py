@@ -12,7 +12,8 @@ from models import Schueler, db
 from sl_office.appointments import calendar
 from sl_office.appointments import notifications as appointment_mail
 from sl_office.appointments.service import (BookingError, active_booking_for_student,
-                                            book_slot, cancel_booking, slot_label)
+                                            book_slot, cancel_booking, moment_label, naive_utc,
+                                            slot_label)
 from sl_office.parent_portal.access_service import InvalidAccessToken, consume_activation_grant, consume_login_token, create_login_token, normalize_email
 from sl_office.parent_portal.mail_service import send_parent_login_link
 from sl_office.parent_portal import notifications as registration_mail
@@ -311,6 +312,20 @@ def appointments(access):
     if event is None:
         return render_template("parent_portal/appointments.html", slots=[], event=None,
                                slot_label=slot_label)
+    # Ohne diese Prüfung standen die Zeitfenster mitsamt "Buchen"-Schaltfläche
+    # da, obwohl book_slot die Buchung ablehnt -- die Eltern liefen erst beim
+    # Klick in die Meldung, dass die Buchung noch nicht geöffnet sei.
+    opens, closes = naive_utc(event.booking_opens_at), naive_utc(event.booking_closes_at)
+    if opens and now < opens:
+        return render_template(
+            "parent_portal/appointments.html", slots=[], event=event, slot_label=slot_label,
+            window_note=f"Die Terminbuchung öffnet am {moment_label(event.booking_opens_at, event)}. "
+                        "Bitte schauen Sie ab dann noch einmal herein.")
+    if closes and now > closes:
+        return render_template(
+            "parent_portal/appointments.html", slots=[], event=event, slot_label=slot_label,
+            window_note=f"Die Terminbuchung ist seit {moment_label(event.booking_closes_at, event)} "
+                        "abgeschlossen. Bitte wenden Sie sich an die Schule.")
     booked_count = func.count(AppointmentBooking.id).filter(AppointmentBooking.status == "confirmed")
     rows = db.session.execute(
         select(AppointmentSlot, booked_count.label("booked_count"))

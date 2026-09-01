@@ -118,8 +118,13 @@ class AppointmentEvent(db.Model):
     title = db.Column(db.String(200), nullable=False)
     school_year = db.Column(db.Integer, nullable=False, index=True)
     status = db.Column(db.String(20), nullable=False, default="draft")
+    #: Wann Eltern buchen dürfen. Liegt in aller Regel *vor* den Gesprächstagen.
     booking_opens_at = db.Column(db.DateTime(timezone=True))
     booking_closes_at = db.Column(db.DateTime(timezone=True))
+    #: An welchen Tagen Gesprächsfenster angeboten werden. Reine Datumsangaben
+    #: in der Zeitzone der Veranstaltung; ohne Angabe gilt keine Einschränkung.
+    slot_days_from = db.Column(db.Date)
+    slot_days_until = db.Column(db.Date)
     cancellation_deadline_hours = db.Column(db.Integer, nullable=False, default=24)
     timezone = db.Column(db.String(64), nullable=False, default="Europe/Berlin")
     parent_instructions = db.Column(db.Text)

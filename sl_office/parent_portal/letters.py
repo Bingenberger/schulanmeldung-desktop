@@ -36,8 +36,11 @@ from sl_office.parent_portal.models import ActivationGrant, Elternbrief, ParentA
 PURPOSES = ("first_access", "second_access")
 #: Letters are printed well before the registration period, so give them room.
 GRANT_LIFETIME_DAYS = 120
-#: Schlüssel des Brieftextes in der Tabelle ``elternbrief``.
+#: Schlüssel der Brieftexte in der Tabelle ``elternbrief``.
+#: ``einladung``        -- die Eltern wählen ihren Termin selbst,
+#: ``einladung_termin`` -- die Schule hat den Termin bereits vergeben.
 TEXT_KEY = "einladung"
+ASSIGNED_TEXT_KEY = "einladung_termin"
 
 MONTHS = ("Januar", "Februar", "März", "April", "Mai", "Juni", "Juli",
           "August", "September", "Oktober", "November", "Dezember")
@@ -148,9 +151,7 @@ Bei der {schule} handelt es sich für Ihr Kind um die nächstgelegene Schule, au
 
 In diesem Jahr findet die Schulanmeldung vom {zeitraum} statt.
 
-Den genauen Termin des Einschulungsgesprächs können Sie selbst wählen. Nutzen Sie dazu bitte Ihren persönlichen Zugang zum Elternportal unserer Schule. Dort buchen Sie Ihren Termin, füllen das Anmeldeformular elektronisch aus und übermitteln uns die Daten Ihres Kindes vorab – das verkürzt den formalen Teil des Anmeldegesprächs spürbar.
-
-**Bitte wählen Sie Ihren Termin bis spätestens zum {frist} aus. Andernfalls werden wir Ihnen einen Termin zuweisen müssen.**
+[termin-absatz]
 
 # Ihre persönlichen Zugänge zum Elternportal
 
@@ -193,22 +194,76 @@ Alle Informationen bzgl. des Tages der offenen Tür erhalten Sie über den diese
 
 Wir freuen uns auf das Anmeldegespräch mit Ihnen und Ihrem Kind."""
 
+#: Der Absatz zur Terminfindung -- das Einzige, worin sich die beiden
+#: Fassungen unterscheiden. Alles andere steht nur einmal da und bleibt
+#: dadurch von selbst gleich.
+SELF_BOOKING_PARAGRAPH = """Den genauen Termin des Einschulungsgesprächs können Sie selbst wählen. \
+Nutzen Sie dazu bitte Ihren persönlichen Zugang zum Elternportal unserer Schule. Dort buchen Sie \
+Ihren Termin, füllen das Anmeldeformular elektronisch aus und übermitteln uns die Daten Ihres \
+Kindes vorab – das verkürzt den formalen Teil des Anmeldegesprächs spürbar.
+
+**Bitte wählen Sie Ihren Termin bis spätestens zum {frist} aus. Andernfalls werden wir Ihnen \
+einen Termin zuweisen müssen.**"""
+
+ASSIGNED_PARAGRAPH = """Damit Sie nicht selbst suchen müssen, haben wir für Sie und Ihr Kind \
+bereits einen Termin für das Einschulungsgespräch vorgesehen:
+
+**{termin}**
+
+Nutzen Sie bitte Ihren persönlichen Zugang zum Elternportal unserer Schule. Dort füllen Sie das \
+Anmeldeformular elektronisch aus und übermitteln uns die Daten Ihres Kindes vorab – das verkürzt \
+den formalen Teil des Anmeldegesprächs spürbar. Ihren Termin finden Sie dort ebenfalls noch einmal.
+
+Sollte Ihnen dieser Termin nicht möglich sein, melden Sie sich bitte unter {kontakt}, damit wir \
+gemeinsam eine andere Zeit finden."""
+
+#: Marke, an der die jeweilige Fassung ihren Terminabsatz einsetzt.
+SLOT_MARKER = "[termin-absatz]"
+
+ASSIGNED_TITLE = "Einladung zur Schulanmeldung für das Schuljahr {schuljahr}"
+ASSIGNED_BODY = DEFAULT_BODY.replace(SLOT_MARKER, ASSIGNED_PARAGRAPH)
+DEFAULT_BODY = DEFAULT_BODY.replace(SLOT_MARKER, SELF_BOOKING_PARAGRAPH)
+
 DEFAULT_TEXT = {"titel": DEFAULT_TITLE, "text": DEFAULT_BODY, "gruss": DEFAULT_CLOSING}
+ASSIGNED_TEXT = {"titel": ASSIGNED_TITLE, "text": ASSIGNED_BODY, "gruss": DEFAULT_CLOSING}
+
+#: ``termin`` gibt es nur in der zugewiesenen Fassung, ``frist`` nur in der
+#: selbstgewählten -- eine Frist zum Buchen hat sonst keinen Sinn.
+ASSIGNED_FIELDS = {name: label for name, label in FIELDS.items() if name != "frist"}
+ASSIGNED_FIELDS["termin"] = "zugewiesener Termin des Kindes, aus der Terminverwaltung"
+
+VARIANTS = {
+    TEXT_KEY: {
+        "label": "Eltern wählen den Termin selbst",
+        "default": DEFAULT_TEXT,
+        "fields": FIELDS,
+    },
+    ASSIGNED_TEXT_KEY: {
+        "label": "Die Schule gibt den Termin vor",
+        "default": ASSIGNED_TEXT,
+        "fields": ASSIGNED_FIELDS,
+    },
+}
 
 
-def stored_text():
+def variant(key):
+    """Beschreibung einer Fassung; unbekannte Schlüssel fallen auf die erste zurück."""
+    return VARIANTS.get(key) or VARIANTS[TEXT_KEY]
+
+
+def stored_text(key=TEXT_KEY):
     """Gespeicherte Fassung des Brieftextes, sonst die Schulvorlage."""
-    row = db.session.scalar(select(Elternbrief).where(Elternbrief.key == TEXT_KEY))
+    row = db.session.scalar(select(Elternbrief).where(Elternbrief.key == key))
     if row is None:
-        return dict(DEFAULT_TEXT)
+        return dict(variant(key)["default"])
     return {"titel": row.titel, "text": row.text, "gruss": row.gruss}
 
 
-def save_text(titel, text, gruss, user_id=None):
+def save_text(titel, text, gruss, user_id=None, key=TEXT_KEY):
     """Brieftext ablegen; geprüft wird davor mit :func:`check_text`."""
-    row = db.session.scalar(select(Elternbrief).where(Elternbrief.key == TEXT_KEY))
+    row = db.session.scalar(select(Elternbrief).where(Elternbrief.key == key))
     if row is None:
-        row = Elternbrief(key=TEXT_KEY)
+        row = Elternbrief(key=key)
         db.session.add(row)
     row.titel, row.text, row.gruss = titel.strip(), text.strip(), gruss.strip()
     row.updated_by_user_id = user_id
@@ -216,22 +271,23 @@ def save_text(titel, text, gruss, user_id=None):
     return row
 
 
-def reset_text():
+def reset_text(key=TEXT_KEY):
     """Zurück auf die Schulvorlage: die gespeicherte Fassung entfällt."""
-    row = db.session.scalar(select(Elternbrief).where(Elternbrief.key == TEXT_KEY))
+    row = db.session.scalar(select(Elternbrief).where(Elternbrief.key == key))
     if row is not None:
         db.session.delete(row)
-    return dict(DEFAULT_TEXT)
+    return dict(variant(key)["default"])
 
 
 _PLACEHOLDER = re.compile(r"\{([A-Za-zÄÖÜäöüß_]+)\}")
 
 
-def check_text(titel, text, gruss):
+def check_text(titel, text, gruss, key=TEXT_KEY):
     """Beanstandungen für den Editor; leere Liste heißt: kann gespeichert werden."""
     problems = []
+    allowed = variant(key)["fields"]
     unknown = sorted({name for part in (titel, text, gruss)
-                      for name in _PLACEHOLDER.findall(part or "") if name not in FIELDS})
+                      for name in _PLACEHOLDER.findall(part or "") if name not in allowed})
     if unknown:
         problems.append("Unbekannte Platzhalter: " + ", ".join("{%s}" % name for name in unknown))
     if not (text or "").strip():
@@ -241,6 +297,9 @@ def check_text(titel, text, gruss):
                         "Zugangsdaten und die Eltern können keinen Termin buchen.")
     if not (titel or "").strip():
         problems.append("Die Titelzeile ist leer.")
+    if key == ASSIGNED_TEXT_KEY and "{termin}" not in (text or ""):
+        problems.append("Der Platzhalter {termin} fehlt – ohne ihn steht der zugewiesene "
+                        "Termin nirgends im Brief.")
     return problems
 
 
@@ -442,6 +501,7 @@ def _draw_letter(pdf, student, school, letter, text, access_block):
         "frist": letter.get("frist", ""),
         "kontakt": school.get("contact_mail", ""),
         "schulleitung": school.get("head", ""),
+        "termin": letter.get("termin", ""),
     }
 
     flow.address_block(_address_lines(student))
@@ -467,8 +527,29 @@ def _letter_fields(letter_date, school_year, period, deadline):
     }
 
 
+def appointment_label(student_id):
+    """Der vergebene Termin des Kindes als Satz, oder "" wenn keiner besteht.
+
+    Der Import steht hier und nicht oben: die Terminverwaltung greift ihrerseits
+    auf das Elternportal zu, ein Import auf Modulebene liefe im Kreis.
+    """
+    from sl_office.appointments.service import active_booking_for_student, slot_label
+
+    appointment = active_booking_for_student(student_id)
+    if appointment is None:
+        return ""
+    _, slot, event = appointment
+    label = slot_label(slot, event)
+    return f"{label}, {slot.location}" if slot.location else label
+
+
+def letter_variant(student_id):
+    """Welche Fassung dieses Kind bekommt: mit oder ohne festen Termin."""
+    return ASSIGNED_TEXT_KEY if appointment_label(student_id) else TEXT_KEY
+
+
 def build_letters(students, school, link_builder, created_by_user_id=None, deadline=None,
-                  period=None, school_year=None, letter_date=None, reissue=False, text=None):
+                  period=None, school_year=None, letter_date=None, reissue=False, texts=None):
     """Render one letter per child and return (pdf_bytes, issued_token_count).
 
     ``school_year`` is the school year the children start in ("2026/2027");
@@ -476,12 +557,16 @@ def build_letters(students, school, link_builder, created_by_user_id=None, deadl
     the date by which parents should have booked their slot. All three are
     optional -- without them the wording simply leaves the dates out.
 
+    Je Kind wird die passende Fassung gesetzt: Kinder mit bereits vergebenem
+    Termin bekommen ihn im Brief genannt, alle anderen die Aufforderung, selbst
+    einen zu wählen. Ein Stapeldruck kann darum beides enthalten.
+
     ``reissue`` replaces still-open access links instead of referring to the
-    earlier letter; see :func:`issue_letter_tokens`. ``text`` overrides the
-    stored wording and is what the editor's preview passes in.
+    earlier letter; see :func:`issue_letter_tokens`. ``texts`` overrides the
+    stored wording je Fassung und ist das, was die Vorschau des Editors mitgibt.
     """
     letter = _letter_fields(letter_date, school_year, period, deadline)
-    text = text or stored_text()
+    texts = texts or {}
     buffer = BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=A4)
     pdf.setTitle("Einladung zur Schulanmeldung")
@@ -490,7 +575,10 @@ def build_letters(students, school, link_builder, created_by_user_id=None, deadl
     for student in students:
         tokens, reusable = issue_letter_tokens(student.id, created_by_user_id, reissue=reissue)
         issued += len(tokens)
-        _draw_letter(pdf, student, school, letter, text,
+        termin = appointment_label(student.id)
+        key = ASSIGNED_TEXT_KEY if termin else TEXT_KEY
+        text = texts.get(key) or stored_text(key)
+        _draw_letter(pdf, student, school, dict(letter, termin=termin), text,
                      lambda flow, child, granted=tokens, covered=reusable:
                      _draw_access_block(flow, child, granted, covered, link_builder))
     pdf.save()
@@ -506,9 +594,15 @@ SAMPLE_STUDENT = SimpleNamespace(
 SAMPLE_URL = "https://beispiel.example/eltern/aktivieren/NUR-ZUR-ANSICHT"
 
 
-def build_preview(school, text, deadline=None, period=None, school_year=None, letter_date=None):
+#: Termin des Beispielkindes in der Vorschau der zugewiesenen Fassung.
+SAMPLE_APPOINTMENT = "Mi 14.10.2026, 09:20–10:00 Uhr, Raum 1"
+
+
+def build_preview(school, text, deadline=None, period=None, school_year=None, letter_date=None,
+                  appointment=SAMPLE_APPOINTMENT):
     """Den Brief mit einem Beispielkind setzen, ohne Zugänge auszustellen."""
-    letter = _letter_fields(letter_date, school_year, period, deadline)
+    letter = dict(_letter_fields(letter_date, school_year, period, deadline),
+                  termin=appointment)
     buffer = BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=A4)
     pdf.setTitle("Vorschau Elternbrief")

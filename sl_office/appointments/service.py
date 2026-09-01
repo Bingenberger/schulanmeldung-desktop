@@ -39,7 +39,7 @@ class SlotHasBookings(BookingError):
     """Raised when a slot may not change because appointments hang on it."""
 
 
-def _naive_utc(value):
+def naive_utc(value):
     """Return ``value`` as a tz-naive UTC datetime.
 
     Slots are stored tz-naive in UTC (SQLite drops tzinfo), so every comparison
@@ -64,10 +64,39 @@ def _validate_period(starts_at, ends_at):
         raise BookingError(f"Ein Gesprächsfenster dauert {allowed} Minuten.")
 
 
+def local_date(value, event):
+    """Der Kalendertag eines gespeicherten Zeitpunkts in der Zeitzone der Veranstaltung.
+
+    Ein Fenster um 23:30 UTC gehört in Ortszeit schon zum Folgetag; ohne die
+    Umrechnung fiele es beim Vergleich mit den Gesprächstagen auf den falschen.
+    """
+    aware = value.replace(tzinfo=datetime.UTC) if value.tzinfo is None else value
+    return aware.astimezone(ZoneInfo(event.timezone)).date()
+
+
 def _validate_within_event(event, starts_at, ends_at):
-    opens, closes = _naive_utc(event.booking_opens_at), _naive_utc(event.booking_closes_at)
-    if (opens and starts_at < opens) or (closes and ends_at > closes):
-        raise BookingError("Das Zeitfenster muss innerhalb des Anmeldezeitraums liegen.")
+    """Ein Gesprächsfenster muss auf einen der Gesprächstage fallen.
+
+    Der Anmeldezeitraum spielt hier bewusst keine Rolle: gebucht wird lange
+    vor den Gesprächen, die Fenster liegen also regelmäßig außerhalb.
+    """
+    first, last = event.slot_days_from, event.slot_days_until
+    if not first and not last:
+        return
+    for moment in (starts_at, ends_at):
+        day = local_date(moment, event)
+        if (first and day < first) or (last and day > last):
+            raise BookingError(
+                "Das Zeitfenster muss auf einen der Gesprächstage fallen "
+                f"({_date_range_label(first, last)}).")
+
+
+def _date_range_label(first, last):
+    if first and last:
+        return f"{first.strftime('%d.%m.%Y')} bis {last.strftime('%d.%m.%Y')}"
+    if first:
+        return f"ab {first.strftime('%d.%m.%Y')}"
+    return f"bis {last.strftime('%d.%m.%Y')}"
 
 
 def _assert_not_duplicate(event_id, starts_at, ends_at, exclude_slot_id=None):
@@ -99,7 +128,7 @@ def confirmed_booking_count(slot_id):
 
 
 def create_slot(event_id, starts_at, ends_at, capacity=1, location=None):
-    starts_at, ends_at = _naive_utc(starts_at), _naive_utc(ends_at)
+    starts_at, ends_at = naive_utc(starts_at), naive_utc(ends_at)
     _validate_period(starts_at, ends_at)
     if not 1 <= capacity <= MAX_CAPACITY:
         raise BookingError(f"Die Platzzahl muss zwischen 1 und {MAX_CAPACITY} liegen.")
@@ -127,7 +156,7 @@ def generate_slots(event_id, first_start, count, duration_minutes, gap_minutes=0
     if gap_minutes < 0 or gap_minutes % GRID_MINUTES:
         raise BookingError(f"Die Pause muss ein Vielfaches von {GRID_MINUTES} Minuten sein.")
     created = []
-    cursor = _naive_utc(first_start)
+    cursor = naive_utc(first_start)
     for _ in range(count):
         end = cursor + datetime.timedelta(minutes=duration_minutes)
         created.append(create_slot(event_id, cursor, end, capacity))
@@ -145,7 +174,7 @@ def move_slot(slot_id, starts_at, ends_at):
             "Dieses Fenster ist bereits vergeben und kann nicht verschoben werden. "
             "Storniere den Termin zuerst."
         )
-    starts_at, ends_at = _naive_utc(starts_at), _naive_utc(ends_at)
+    starts_at, ends_at = naive_utc(starts_at), naive_utc(ends_at)
     _validate_period(starts_at, ends_at)
     event = db.session.get(AppointmentEvent, slot.event_id)
     _validate_within_event(event, starts_at, ends_at)
@@ -210,10 +239,10 @@ def _existing_booking(event_id, student_id):
 def book_slot(slot_id, student_id, parent_access_id):
     """Book a slot from the parent portal while holding its row lock."""
     slot, event = _load_bookable_slot(slot_id, require_published=True)
-    now = _naive_utc(utcnow())
-    if event.booking_opens_at and now < _naive_utc(event.booking_opens_at):
+    now = naive_utc(utcnow())
+    if event.booking_opens_at and now < naive_utc(event.booking_opens_at):
         raise SlotUnavailable("Die Terminbuchung ist noch nicht geöffnet.")
-    if event.booking_closes_at and now > _naive_utc(event.booking_closes_at):
+    if event.booking_closes_at and now > naive_utc(event.booking_closes_at):
         raise SlotUnavailable("Die Terminbuchung ist bereits geschlossen.")
 
     access = db.session.get(ParentAccess, parent_access_id)
@@ -270,8 +299,8 @@ def cancel_booking(booking_id, parent_access_id):
         return booking
     slot = db.session.get(AppointmentSlot, booking.slot_id)
     event = db.session.get(AppointmentEvent, booking.event_id)
-    deadline = _naive_utc(slot.starts_at) - datetime.timedelta(hours=event.cancellation_deadline_hours)
-    if _naive_utc(utcnow()) > deadline:
+    deadline = naive_utc(slot.starts_at) - datetime.timedelta(hours=event.cancellation_deadline_hours)
+    if naive_utc(utcnow()) > deadline:
         raise BookingError("Die Stornierungsfrist ist abgelaufen.")
     booking.status = "cancelled"
     booking.cancelled_at = utcnow()
@@ -293,6 +322,15 @@ def slot_label(slot, event):
         f"{_WEEKDAYS[starts.weekday()]} {starts.strftime('%d.%m.%Y')}, "
         f"{starts.strftime('%H:%M')}–{ends.strftime('%H:%M')} Uhr"
     )
+
+
+def moment_label(value, event):
+    """Ein einzelner Zeitpunkt in der Zeitzone der Veranstaltung."""
+    tz = ZoneInfo(event.timezone)
+    aware = value.replace(tzinfo=datetime.UTC) if value.tzinfo is None else value
+    local = aware.astimezone(tz)
+    return (f"{_WEEKDAYS[local.weekday()]} {local.strftime('%d.%m.%Y')}, "
+            f"{local.strftime('%H:%M')} Uhr")
 
 
 def active_booking_for_student(student_id):

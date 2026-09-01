@@ -73,6 +73,7 @@
           <th>Kind</th>
           <th>Anschrift</th>
           <th>Erziehungsberechtigte</th>
+          <th>Brief</th>
           <th>Zugang</th>
         </tr>
       </thead>
@@ -96,6 +97,14 @@
           </td>
           <td class="small">
             {{ student.erzb_1_name or '—' }}<br>{{ student.erzb_2_name or '—' }}
+          </td>
+          <td class="small">
+            {% if appointments.get(student.id) %}
+            <span class="badge bg-info text-dark">Termin vorgegeben</span><br>
+            <span class="text-muted">{{ appointments[student.id] }}</span>
+            {% else %}
+            <span class="text-muted">Eltern wählen selbst</span>
+            {% endif %}
           </td>
           <td>
             {% set done = redeemed.get(student.id) or [] %}

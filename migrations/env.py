@@ -1,4 +1,6 @@
 import logging
+
+import sqlalchemy
 from logging.config import fileConfig
 
 from flask import current_app
@@ -96,6 +98,20 @@ def run_migrations_online():
 
     connectable = get_engine()
 
+    # SQLite entfernt oder ändert Spalten nur, indem es die Tabelle neu baut.
+    # Bei eingeschalteter Fremdschlüsselprüfung -- zur Laufzeit notwendig, siehe
+    # models.py -- scheitert der Neubau an den Tabellen, die darauf zeigen. Die
+    # Prüfung muss darum vor dem Verbindungsaufbau abgeschaltet werden: innerhalb
+    # einer Transaktion ignoriert SQLite das PRAGMA stillschweigend.
+    sqlite = connectable.dialect.name == "sqlite"
+    if sqlite:
+        @sqlalchemy.event.listens_for(connectable, "connect")
+        def _migration_without_fk_checks(dbapi_connection, connection_record):
+            dbapi_connection.execute("PRAGMA foreign_keys=OFF")
+
+        # Bereits offene Verbindungen stammen noch aus der Zeit mit Prüfung.
+        connectable.dispose()
+
     with connectable.connect() as connection:
         context.configure(
             connection=connection,
@@ -105,6 +121,15 @@ def run_migrations_online():
 
         with context.begin_transaction():
             context.run_migrations()
+
+    if sqlite:
+        # Nach dem Neubau ausdrücklich nachsehen: ohne Prüfung während der
+        # Migration bliebe ein zerrissener Verweis sonst unbemerkt.
+        with connectable.connect() as connection:
+            broken = connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall()
+        if broken:
+            raise RuntimeError(
+                f"Die Migration hat verwaiste Verweise hinterlassen: {broken[:10]}")
 
 
 if context.is_offline_mode():

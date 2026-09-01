@@ -1,6 +1,7 @@
 """User administration routes."""
 
 import datetime
+from io import BytesIO
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, send_file, url_for
 from flask_login import current_user
@@ -14,7 +15,7 @@ from sl_office.services.student_classification import recalculate_kann_kind
 from sl_office.services.student_deletion import delete_all_students
 from sl_office.parent_portal.models import ParentAccess, ParentRegistration
 from sl_office.parent_portal.access_service import create_activation_grant
-from sl_office.parent_portal import letterhead, letters, registration_form
+from sl_office.parent_portal import letterhead, letters, registration_form, registration_pdf
 from sl_office.auth import two_factor
 from sl_office import school_year
 from sl_office.admin import backup_service
@@ -270,6 +271,33 @@ def registration_detail(registration_id):
                            summary=registration_form.summary(registration.data or {}))
 
 
+@admin_bp.get("/anmeldungen/<int:registration_id>/formular.pdf")
+@role_required(["Administrator", "Schulleitung", "Sekretariat"])
+def registration_printout(registration_id):
+    """Die Angaben der Eltern auf der amtlichen Vorlage, zum Ausdrucken.
+
+    Wird zur Ansicht ausgeliefert statt als Download: aus dem PDF-Betrachter
+    des Browsers geht der Ausdruck direkt, ohne Umweg über die Ablage.
+    """
+    registration = db.get_or_404(ParentRegistration, registration_id)
+    student = db.get_or_404(Schueler, registration.schueler_id)
+    try:
+        payload = registration_pdf.build(registration.data or {}, student)
+    except Exception:
+        current_app.logger.exception("Registration printout failed",
+                                     extra={"registration_id": registration.id})
+        flash("Das Formular konnte nicht erzeugt werden.", "error")
+        return redirect(url_for("admin.registration_detail", registration_id=registration.id))
+    record("registration_printed", "parent_registration", registration.id,
+           actor_type="staff", actor_id=current_user.id)
+    db.session.commit()
+    name = f"{student.nachname}_{student.vorname}".replace(" ", "-")
+    return send_file(
+        BytesIO(payload), mimetype="application/pdf", as_attachment=False,
+        download_name=f"Schulanmeldung_{name}.pdf",
+    )
+
+
 @admin_bp.route("/elternzugänge", methods=["GET", "POST"])
 @role_required(["Administrator", "Schulleitung", "Sekretariat"])
 def parent_accesses():
@@ -336,29 +364,39 @@ def parent_letters():
 
     pending = {student.id for student in letters.students_without_access(students)}
     redeemed = {student.id: letters.redeemed_purposes(student.id) for student in students}
+    # Kinder mit vergebenem Termin bekommen die Fassung, die ihn nennt.
+    appointments = {student.id: letters.appointment_label(student.id) for student in students}
     return render_template(
         "admin_parent_letters.html", students=students, pending=pending, redeemed=redeemed,
+        appointments={key: value for key, value in appointments.items() if value},
     )
 
 
 @admin_bp.route("/elternbrief-text", methods=["GET", "POST"])
 @role_required(["Administrator", "Schulleitung"])
 def parent_letter_text():
-    """Wortlaut des Elternanschreibens bearbeiten, prüfen und ansehen."""
-    text = letters.stored_text()
+    """Wortlaut des Elternanschreibens bearbeiten, prüfen und ansehen.
+
+    Es gibt zwei Fassungen -- mit und ohne bereits vergebenen Termin. Welche
+    bearbeitet wird, steht in ``variante``; beide werden getrennt gespeichert.
+    """
+    key = request.values.get("variante", letters.TEXT_KEY)
+    if key not in letters.VARIANTS:
+        key = letters.TEXT_KEY
+    text = letters.stored_text(key)
     problems = []
     if request.method == "POST":
         action = request.form.get("action", "save")
         if action == "reset":
-            text = letters.reset_text()
+            text = letters.reset_text(key)
             record("parent_letter_text_reset", "elternbrief", None,
                    actor_type="staff", actor_id=current_user.id)
             db.session.commit()
             flash("Der Brieftext entspricht wieder der Schulvorlage.")
-            return redirect(url_for("admin.parent_letter_text"))
+            return redirect(url_for("admin.parent_letter_text", variante=key))
 
-        text = {key: request.form.get(key, "") for key in ("titel", "text", "gruss")}
-        problems = letters.check_text(text["titel"], text["text"], text["gruss"])
+        text = {field: request.form.get(field, "") for field in ("titel", "text", "gruss")}
+        problems = letters.check_text(text["titel"], text["text"], text["gruss"], key=key)
         if not problems and action == "preview":
             year = school_year.active_year()
             return send_file(
@@ -371,17 +409,18 @@ def parent_letter_text():
                 mimetype="application/pdf", download_name="Vorschau_Elternbrief.pdf",
             )
         if not problems:
-            letters.save_text(text["titel"], text["text"], text["gruss"], current_user.id)
+            letters.save_text(text["titel"], text["text"], text["gruss"], current_user.id, key=key)
             record("parent_letter_text_saved", "elternbrief", None,
                    actor_type="staff", actor_id=current_user.id)
             db.session.commit()
             flash("Der Brieftext wurde gespeichert.")
-            return redirect(url_for("admin.parent_letter_text"))
+            return redirect(url_for("admin.parent_letter_text", variante=key))
 
     return render_template(
         "admin_parent_letter_text.html", text=text, problems=problems,
-        fields=letters.FIELDS, marker=letters.ACCESS_MARKER,
-        is_default=text == letters.DEFAULT_TEXT,
+        fields=letters.variant(key)["fields"], marker=letters.ACCESS_MARKER,
+        is_default=text == letters.variant(key)["default"],
+        variants=letters.VARIANTS, current_key=key,
     )
 
 

@@ -27,6 +27,10 @@ Zwei-Faktor-Bestätigung)
   Jahrgänge lassen sich lesend ansehen
 - Administration: Benutzer, Einstellungen, Datensicherung, Elternbriefe und
   deren Text, Elternzugänge, eingegangene Anmeldungen
+- Elternbrief in zwei Fassungen: Eltern wählen den Termin selbst, oder die
+  Schule gibt ihn vor — je Kind wird beim Druck die passende gesetzt
+- eingegangene Anmeldungen als ausgefülltes `Schulanmeldung.pdf` zum Ausdrucken
+  für den Termin vor Ort
 
 **Elternportal** (`/eltern`)
 
@@ -38,6 +42,8 @@ Zwei-Faktor-Bestätigung)
   „Übermittelt“ und meldet sich per Mail bei der Schule
 - Terminbuchung für das Anmeldegespräch, mit Bestätigung per Mail samt
   Kalenderdatei und einer Erinnerung am Vortag
+- Anmeldezeitraum und Gesprächstage werden getrennt festgelegt: gebucht wird
+  regelmäßig Wochen vor dem Gespräch
 
 ## Aufbau
 

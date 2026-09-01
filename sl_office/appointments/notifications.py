@@ -13,20 +13,13 @@ from sqlalchemy import select
 
 from models import Schueler, db
 from sl_office.appointments import calendar
-from sl_office.appointments.service import slot_label
+from sl_office.appointments.service import naive_utc, slot_label
 from sl_office.parent_portal.mail_service import build_message, send_message, staff_recipient
 from sl_office.parent_portal.models import (
     AppointmentBooking, AppointmentEvent, AppointmentSlot, ParentAccess, utcnow,
 )
 
 ICS_FILENAME = "Anmeldetermin.ics"
-
-
-def _naive_utc(value):
-    """Termine liegen tz-naiv in UTC in der Datenbank; hier dieselbe Sicht."""
-    if value is None or value.tzinfo is None:
-        return value
-    return value.astimezone(datetime.UTC).replace(tzinfo=None)
 
 
 def _school_name(app):
@@ -173,13 +166,13 @@ def confirm_booking(app, booking_id):
 
 def _within_reminder_window(app, slot, now=None):
     hours = app.config.get("APPOINTMENT_REMINDER_HOURS", 24)
-    now = _naive_utc(now or utcnow())
-    return _naive_utc(slot.starts_at) <= now + datetime.timedelta(hours=hours)
+    now = naive_utc(now or utcnow())
+    return naive_utc(slot.starts_at) <= now + datetime.timedelta(hours=hours)
 
 
 def due_reminders(app, now=None):
     """Bestätigte Termine im Erinnerungsfenster, für die noch nichts raus ist."""
-    now = _naive_utc(now or utcnow())
+    now = naive_utc(now or utcnow())
     horizon = now + datetime.timedelta(hours=app.config.get("APPOINTMENT_REMINDER_HOURS", 24))
     return db.session.execute(
         select(AppointmentBooking, AppointmentSlot, AppointmentEvent, Schueler)

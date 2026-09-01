@@ -14,8 +14,8 @@ from sl_office.authorization import role_required
 from sl_office.appointments import calendar
 from sl_office.appointments.service import (
     ALLOWED_DURATIONS, GRID_MINUTES, MAX_CAPACITY, BookingError, assign_slot,
-    cancel_booking_as_staff, create_slot, delete_slot, generate_slots, move_slot, set_capacity,
-    slot_label,
+    cancel_booking_as_staff, create_slot, delete_slot, generate_slots, local_date, move_slot,
+    set_capacity, slot_label,
 )
 from sl_office.parent_portal.models import (
     AppointmentBooking, AppointmentEvent, AppointmentSlot, ParentAccess,
@@ -68,11 +68,13 @@ def _planner_state(event):
     ).order_by(AppointmentSlot.starts_at).all()
     bookings = _booking_index(event.id)
 
-    opens, closes = _to_local(event.booking_opens_at, tz), _to_local(event.booking_closes_at, tz)
+    # Die Spalten des Planers sind die Gesprächstage, nicht der Anmeldezeitraum:
+    # gebucht wird Wochen vorher, gesprochen an wenigen Tagen.
     days = []
-    if opens and closes:
-        day = opens.date()
-        while day <= closes.date():
+    first, last = event.slot_days_from, event.slot_days_until
+    if first and last:
+        day = first
+        while day <= last:
             if day.weekday() < 5:
                 days.append(day)
             day += datetime.timedelta(days=1)
@@ -154,19 +156,57 @@ def detail(event_id):
             db.session.rollback()
             current_app.logger.exception("Appointment administration failed", extra={"event_id": event.id})
             flash("Die Änderung konnte nicht gespeichert werden.", "error")
-    return render_template("appointments/detail.html", event=event, planner=_planner_state(event))
+    # Das Eingabefeld ist ein <input type="datetime-local">, erwartet also
+    # Ortszeit. Gespeichert wird UTC -- ohne diese Umrechnung zeigte die Maske
+    # den Zeitraum um den Zeitzonenversatz verschoben an.
+    tz = ZoneInfo(event.timezone)
+    window = {
+        name: (_to_local(getattr(event, name), tz).strftime("%Y-%m-%dT%H:%M")
+               if getattr(event, name) else "")
+        for name in ("booking_opens_at", "booking_closes_at")
+    }
+    window.update({
+        name: (getattr(event, name).isoformat() if getattr(event, name) else "")
+        for name in ("slot_days_from", "slot_days_until")
+    })
+    return render_template("appointments/detail.html", event=event, window=window,
+                           planner=_planner_state(event))
+
+
+def _assert_slots_still_fit(event, first, last):
+    """Gesprächstage nicht so beschneiden, dass angelegte Fenster herausfallen.
+
+    Sonst stünden Fenster außerhalb des eigenen Zeitraums -- gebuchte noch dazu,
+    die sich nicht mehr verschieben lassen.
+    """
+    slots = AppointmentSlot.query.filter_by(event_id=event.id).filter(
+        AppointmentSlot.status != "cancelled").all()
+    stranded = sorted({local_date(slot.starts_at, event) for slot in slots
+                       if not first <= local_date(slot.starts_at, event) <= last})
+    if stranded:
+        gelistet = ", ".join(day.strftime("%d.%m.%Y") for day in stranded[:5])
+        raise BookingError(
+            "Außerhalb des gewählten Zeitraums liegen bereits Gesprächsfenster "
+            f"({gelistet}). Verschiebe oder lösche sie zuerst.")
 
 
 def _handle_settings_post(event, form):
     """Apply one of the settings forms on the planner page."""
     action = form.get("action")
     tz = ZoneInfo(event.timezone)
-    if action == "event_settings":
+    if action == "booking_window":
         opens = _from_local(form["booking_opens_at"], tz)
         closes = _from_local(form["booking_closes_at"], tz)
         if closes <= opens:
             raise BookingError("Das Ende des Anmeldezeitraums muss nach dem Beginn liegen.")
         event.booking_opens_at, event.booking_closes_at = opens, closes
+    elif action == "slot_days":
+        first = datetime.date.fromisoformat(form["slot_days_from"])
+        last = datetime.date.fromisoformat(form["slot_days_until"])
+        if last < first:
+            raise BookingError("Der letzte Gesprächstag darf nicht vor dem ersten liegen.")
+        _assert_slots_still_fit(event, first, last)
+        event.slot_days_from, event.slot_days_until = first, last
     elif action == "status":
         status = form["status"]
         if status not in {"draft", "published", "closed", "cancelled"}:

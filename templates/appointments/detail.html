@@ -18,21 +18,43 @@
   <div class="col-lg-5">
     <div class="card card-body h-100">
       <h5><i class="bi bi-calendar-range"></i> Anmeldezeitraum</h5>
-      <p class="text-muted small mb-2">Legt fest, welche Tage der Planer zeigt und wann Eltern buchen können.</p>
+      <p class="text-muted small mb-2">Wann Eltern buchen können. Liegt üblicherweise
+        <em>vor</em> den Gesprächstagen.</p>
       <form method="post" class="row g-2">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="action" value="event_settings">
+        <input type="hidden" name="action" value="booking_window">
         <div class="col-sm-6">
-          <label class="form-label small">Beginn</label>
+          <label class="form-label small">Buchung öffnet</label>
           <input class="form-control form-control-sm" type="datetime-local" name="booking_opens_at" required
-                 value="{{ event.booking_opens_at.strftime('%Y-%m-%dT%H:%M') if event.booking_opens_at else '' }}">
+                 value="{{ window.booking_opens_at }}">
         </div>
         <div class="col-sm-6">
-          <label class="form-label small">Ende</label>
+          <label class="form-label small">Buchung schließt</label>
           <input class="form-control form-control-sm" type="datetime-local" name="booking_closes_at" required
-                 value="{{ event.booking_closes_at.strftime('%Y-%m-%dT%H:%M') if event.booking_closes_at else '' }}">
+                 value="{{ window.booking_closes_at }}">
         </div>
-        <div class="col-12"><button class="btn btn-sm btn-outline-primary">Zeitraum speichern</button></div>
+        <div class="col-12"><button class="btn btn-sm btn-outline-primary">Anmeldezeitraum speichern</button></div>
+      </form>
+
+      <hr class="my-3">
+
+      <h5><i class="bi bi-calendar-week"></i> Gesprächstage</h5>
+      <p class="text-muted small mb-2">An welchen Tagen Gespräche stattfinden. Diese Tage
+        zeigt der Planer; Wochenenden bleiben außen vor.</p>
+      <form method="post" class="row g-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="slot_days">
+        <div class="col-sm-6">
+          <label class="form-label small">Erster Tag</label>
+          <input class="form-control form-control-sm" type="date" name="slot_days_from" required
+                 value="{{ window.slot_days_from }}">
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label small">Letzter Tag</label>
+          <input class="form-control form-control-sm" type="date" name="slot_days_until" required
+                 value="{{ window.slot_days_until }}">
+        </div>
+        <div class="col-12"><button class="btn btn-sm btn-outline-primary">Gesprächstage speichern</button></div>
       </form>
     </div>
   </div>

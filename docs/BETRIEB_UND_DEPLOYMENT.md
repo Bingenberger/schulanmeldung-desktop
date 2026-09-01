@@ -207,7 +207,78 @@ git --git-dir=$HOME/sl-office.git --work-tree=$PWD checkout -f <alter-commit>
 sudo systemctl start sl-office
 ```
 
-## 8. Verwaiste Elternportal-Daten
+## 8. Die zwei Fassungen des Elternbriefs
+
+Der Anmeldebrief gibt es zweimal, gespeichert unter getrennten Schlüsseln:
+
+| Schlüssel | Wann |
+| --- | --- |
+| `einladung` | Die Eltern wählen den Termin selbst. Der Brief nennt die Frist. |
+| `einladung_termin` | Die Schule hat den Termin bereits vergeben. Der Brief nennt ihn. |
+
+**Welche ein Kind bekommt, entscheidet sich beim Druck** und nicht beim
+Auswählen: hat das Kind eine bestätigte Terminbuchung, kommt die zweite
+Fassung, sonst die erste. Ein Stapeldruck kann also beides enthalten. In der
+Liste unter *Elternbriefe* steht je Kind, was es bekommt.
+
+Bearbeitet werden beide unter *Elternbrief bearbeiten*; die Reiter oben wählen
+die Fassung. Der gemeinsame Wortlaut steht im Quelltext nur einmal
+(`SELF_BOOKING_PARAGRAPH` bzw. `ASSIGNED_PARAGRAPH` in `letters.py` sind das
+Einzige, was sich unterscheidet) -- solange keine Fassung von Hand geändert
+wurde, können die beiden Vorlagen deshalb nicht auseinanderlaufen.
+
+Die zugewiesene Fassung braucht den Platzhalter `{termin}`; ohne ihn stünde
+der Termin nirgends, deshalb weist der Editor das Speichern zurück. `{frist}`
+gibt es dort nicht -- eine Frist zum Buchen hat keinen Sinn mehr.
+
+## 9. Ausgefülltes Anmeldeformular
+
+Unter *Anmeldungen → Öffnen* liefert „Anmeldeformular ausfüllen und drucken"
+die amtliche Vorlage `Schulanmeldung.pdf` mit den Angaben der Eltern darin.
+Gefüllt wird sie nicht durch Formularfelder -- die Vorlage hat keine --,
+sondern durch eine Textebene, die über die beiden Seiten gelegt wird
+(`sl_office/parent_portal/registration_pdf.py`).
+
+Was die Eltern offen gelassen haben, bleibt leer und lässt sich am Termin von
+Hand ergänzen. Fehlt eine Angabe zum Kind im Formular, springen die Stammdaten
+der Schule ein; eine Eingabe der Eltern wird davon nie überschrieben.
+
+**Wird `Schulanmeldung.pdf` neu gesetzt, verrutschen die Werte.** Die
+Positionen stehen gesammelt in `PLACEMENTS` und `CHOICES` am Kopf des Moduls
+und müssen dann nachgeführt werden. Die Beschriftungen der Vorlage lassen sich
+mitsamt ihren Koordinaten auslesen:
+
+```bash
+venv/bin/python -c "
+from pypdf import PdfReader
+for nr, page in enumerate(PdfReader('Schulanmeldung.pdf').pages, 1):
+    teile = []
+    page.extract_text(visitor_text=lambda t, cm, tm, f, s: teile.append((tm[5], tm[4], t.strip())))
+    for y, x, text in sorted((t for t in teile if t[2]), key=lambda t: (-t[0], t[1])):
+        print(f'S{nr} y={y:7.1f} x={x:6.1f}  {text}')"
+```
+
+Der Ausdruck wird protokolliert (`registration_printed` im Audit-Log).
+
+## 10. Anmeldezeitraum und Gesprächstage
+
+Die Terminverwaltung kennt zwei Zeiträume, die nichts miteinander zu tun haben:
+
+| Feld | Bedeutung |
+| --- | --- |
+| **Anmeldezeitraum** | Von wann bis wann Eltern buchen dürfen. Zeitpunkt auf die Minute genau, in Ortszeit einzugeben. |
+| **Gesprächstage** | An welchen Tagen Gesprächsfenster liegen dürfen. Reine Datumsangaben; nur diese Tage zeigt der Planer, Wochenenden bleiben außen vor. |
+
+Üblich ist, dass der Anmeldezeitraum Wochen **vor** den Gesprächstagen liegt.
+Früher gab es nur einen Zeitraum für beides -- die Buchung öffnete damit erst
+am ersten Gesprächstag. Die Migration `d7a3c92f4b81` übernimmt die bisherigen
+Werte als Gesprächstage; **der Anmeldezeitraum muss danach neu gesetzt werden**,
+sonst können Eltern weiterhin erst am ersten Gesprächstag buchen.
+
+Gesprächstage lassen sich nicht so beschneiden, dass bereits angelegte Fenster
+herausfielen -- die Maske nennt dann die betroffenen Tage.
+
+## 11. Verwaiste Elternportal-Daten
 
 Bis zur Behebung nahm das Löschen eines Kindes seine Elternportal-Daten nicht
 mit: Zugänge, Anmeldelinks, Formular und Terminbuchung blieben liegen. SQLite
@@ -232,7 +303,7 @@ Ohne Fund meldet der Aufruf, dass nichts gefunden wurde, und ändert nichts. Der
 Befehl ist gefahrlos wiederholbar und eignet sich auch später als gelegentliche
 Kontrolle.
 
-## 9. Nachsehen, wenn etwas klemmt
+## 12. Nachsehen, wenn etwas klemmt
 
 ```bash
 sudo systemctl status sl-office
@@ -247,4 +318,4 @@ sudo tail -f /var/log/nginx/sl-office.error.log
 | 413 beim Hochladen | `client_max_body_size` kleiner als `SL_OFFICE_MAX_UPLOAD_BYTES` |
 | Push bricht bei „Dienst neu starten" ab | sudoers-Eintrag fehlt |
 | Push bricht bei „Migrationen" ab | siehe `docs/DATENBANKMIGRATIONEN.md` |
-| Neues Kind hat schon einen Elternzugang | verwaiste Zeilen aus einer früheren Fassung — siehe Abschnitt 8 |
+| Neues Kind hat schon einen Elternzugang | verwaiste Zeilen aus einer früheren Fassung — siehe Abschnitt 11 |

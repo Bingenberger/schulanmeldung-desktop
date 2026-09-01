@@ -7,11 +7,24 @@
   </a>
 </div>
 
+<ul class="nav nav-tabs mb-3">
+  {% for key, entry in variants.items() %}
+  <li class="nav-item">
+    <a class="nav-link {% if key == current_key %}active{% endif %}"
+       href="{{ url_for('admin.parent_letter_text', variante=key) }}">{{ entry.label }}</a>
+  </li>
+  {% endfor %}
+</ul>
+
 <div class="alert alert-info">
-  Hier steht der Wortlaut der <strong>Einladung zur Schulanmeldung</strong>. Briefkopf, Anschrift,
-  Datum und Unterschrift kommen aus dem Briefkopf und den Schülerdaten und bleiben unverändert.
+  Hier steht der Wortlaut der <strong>Einladung zur Schulanmeldung</strong> für den Fall
+  „{{ variants[current_key].label|lower }}". Briefkopf, Anschrift, Datum und Unterschrift kommen aus
+  dem Briefkopf und den Schülerdaten und bleiben unverändert.
+  <br><span class="small">Beide Fassungen werden getrennt gespeichert. Welches Kind welche bekommt,
+  entscheidet sich beim Druck: Kinder mit bereits vergebenem Termin bekommen die Fassung, die ihn
+  nennt.</span>
   {% if is_default %}
-  <br><span class="small text-muted">Zurzeit gilt der Wortlaut der Schulvorlage.</span>
+  <br><span class="small text-muted">Zurzeit gilt für diese Fassung der Wortlaut der Schulvorlage.</span>
   {% endif %}
 </div>
 
@@ -24,6 +37,7 @@
 
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="variante" value="{{ current_key }}">
 
   <div class="row g-3">
     <div class="col-lg-8">
