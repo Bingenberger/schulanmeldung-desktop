@@ -256,12 +256,17 @@ def registration_detail(registration_id):
             flash("Ungültiger Bearbeitungsstatus.", "error")
         else:
             registration.status = status
+            # Der Vorgang ist wieder in der Hand der Schule: ein erneuter
+            # Hinweis auf eine Änderung der Eltern ist damit wieder fällig.
+            registration.change_notified_at = None
             record("registration_status_changed", "parent_registration", registration.id, actor_type="staff", actor_id=current_user.id)
             db.session.commit()
             flash("Bearbeitungsstatus gespeichert.")
             return redirect(url_for("admin.registration_detail", registration_id=registration.id))
+    submitted_by = (db.session.get(ParentAccess, registration.submitted_by_access_id)
+                    if registration.submitted_by_access_id else None)
     return render_template("admin_registration_detail.html", registration=registration,
-                           student=student,
+                           student=student, submitted_by=submitted_by,
                            summary=registration_form.summary(registration.data or {}))
 
 

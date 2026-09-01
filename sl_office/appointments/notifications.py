@@ -14,7 +14,7 @@ from sqlalchemy import select
 from models import Schueler, db
 from sl_office.appointments import calendar
 from sl_office.appointments.service import slot_label
-from sl_office.parent_portal.mail_service import build_message, send_message
+from sl_office.parent_portal.mail_service import build_message, send_message, staff_recipient
 from sl_office.parent_portal.models import (
     AppointmentBooking, AppointmentEvent, AppointmentSlot, ParentAccess, utcnow,
 )
@@ -31,11 +31,6 @@ def _naive_utc(value):
 
 def _school_name(app):
     return app.config.get("SCHOOL_NAME", "")
-
-
-def staff_recipient(app):
-    """Adresse der Schule; ohne Angabe geht kein Hinweis raus."""
-    return app.config.get("NOTIFY_MAIL") or app.config.get("SCHOOL_CONTACT_MAIL") or ""
 
 
 def _portal_link(app):

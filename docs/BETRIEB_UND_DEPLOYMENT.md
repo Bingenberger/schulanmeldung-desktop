@@ -207,7 +207,32 @@ git --git-dir=$HOME/sl-office.git --work-tree=$PWD checkout -f <alter-commit>
 sudo systemctl start sl-office
 ```
 
-## 8. Nachsehen, wenn etwas klemmt
+## 8. Verwaiste Elternportal-Daten
+
+Bis zur Behebung nahm das Löschen eines Kindes seine Elternportal-Daten nicht
+mit: Zugänge, Anmeldelinks, Formular und Terminbuchung blieben liegen. SQLite
+vergibt die freigewordene Zeilennummer erneut, deshalb konnte ein später
+angelegtes Kind diese Zeilen erben -- mitsamt fremdem Elternzugang.
+
+Zwei Dinge verhindern das jetzt: die Löschung räumt die Tabellen ausdrücklich
+mit ab, und SQLite prüft Fremdschlüssel überhaupt erst (`PRAGMA foreign_keys`
+steht in SQLite standardmäßig auf `OFF`, jedes `ON DELETE CASCADE` war damit
+wirkungslos).
+
+**Einmalig nach dem Einspielen dieser Fassung** -- und zwar bevor der Dienst
+wieder läuft, da die Fremdschlüsselprüfung sonst über einer bereits verwaisten
+Zeile stolpern kann:
+
+```bash
+venv/bin/flask --app app check-orphans            # nur melden
+venv/bin/flask --app app check-orphans --delete   # gefundene Zeilen entfernen
+```
+
+Ohne Fund meldet der Aufruf, dass nichts gefunden wurde, und ändert nichts. Der
+Befehl ist gefahrlos wiederholbar und eignet sich auch später als gelegentliche
+Kontrolle.
+
+## 9. Nachsehen, wenn etwas klemmt
 
 ```bash
 sudo systemctl status sl-office
@@ -222,3 +247,4 @@ sudo tail -f /var/log/nginx/sl-office.error.log
 | 413 beim Hochladen | `client_max_body_size` kleiner als `SL_OFFICE_MAX_UPLOAD_BYTES` |
 | Push bricht bei „Dienst neu starten" ab | sudoers-Eintrag fehlt |
 | Push bricht bei „Migrationen" ab | siehe `docs/DATENBANKMIGRATIONEN.md` |
+| Neues Kind hat schon einen Elternzugang | verwaiste Zeilen aus einer früheren Fassung — siehe Abschnitt 8 |

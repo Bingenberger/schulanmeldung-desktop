@@ -35,6 +35,11 @@ def build_message(app, recipient, subject, body):
     return message
 
 
+def staff_recipient(app):
+    """Adresse der Schule für Benachrichtigungen; ohne Angabe geht nichts raus."""
+    return app.config.get("NOTIFY_MAIL") or app.config.get("SCHOOL_CONTACT_MAIL") or ""
+
+
 def send_parent_login_link(app, recipient, link, child_name):
     message = build_message(
         app, recipient, "Ihr Zugangslink zur Schulanmeldung",

@@ -9,11 +9,13 @@ from flask import (Blueprint, current_app, flash, redirect, render_template, req
 from sqlalchemy import func, select
 
 from models import Schueler, db
-from sl_office.appointments import calendar, notifications
+from sl_office.appointments import calendar
+from sl_office.appointments import notifications as appointment_mail
 from sl_office.appointments.service import (BookingError, active_booking_for_student,
                                             book_slot, cancel_booking, slot_label)
 from sl_office.parent_portal.access_service import InvalidAccessToken, consume_activation_grant, consume_login_token, create_login_token, normalize_email
 from sl_office.parent_portal.mail_service import send_parent_login_link
+from sl_office.parent_portal import notifications as registration_mail
 from sl_office.parent_portal.models import AppointmentBooking, AppointmentEvent, AppointmentSlot, ParentAccess, ParentRegistration, utcnow
 from sl_office.parent_portal import registration_form
 from sl_office.audit import record
@@ -130,7 +132,8 @@ def dashboard(access):
     appointment = active_booking_for_student(access.schueler_id)
     return render_template("parent_portal/dashboard.html", student=student, booking=booking,
                            appointment=appointment, slot_label=slot_label,
-                           registration=registration, public_status=public_status)
+                           registration=registration, public_status=public_status,
+                           submission_note=_submission_note(registration))
 
 
 @parent_portal_bp.get("/termin.ics")
@@ -181,6 +184,7 @@ def registration_step(access, step):
     student = db.session.get(Schueler, access.schueler_id)
     form = _registration_draft(access)
     data = dict(form.data or {})
+    before = dict(data)
     gaps = []
 
     if request.method == "POST":
@@ -188,6 +192,10 @@ def registration_step(access, step):
         if action != "skip":
             for field in current.fields:
                 data[field.name] = request.form.get(field.name, "").strip()
+        # Beide Sorgeberechtigten füllen dasselbe Formular. War es schon
+        # abgesendet, ist jede inhaltliche Änderung für die Schule relevant --
+        # reines Durchblättern ohne Änderung dagegen nicht.
+        changed_after_submission = form.status != "draft" and data != before
         form.data = data
         form.version = (form.version or 0) + 1
         submitted = False
@@ -195,11 +203,29 @@ def registration_step(access, step):
             gaps = registration_form.missing(data)
             if not gaps:
                 form.status = "submitted"
-                form.submitted_at = utcnow()
+                # Nur die erste Abgabe zählt: für die Anmeldefrist ist der
+                # ursprüngliche Zeitpunkt maßgeblich, nicht die letzte Korrektur.
+                form.submitted_at = form.submitted_at or utcnow()
+                form.submitted_by_access_id = form.submitted_by_access_id or access.id
                 submitted = True
+        if changed_after_submission:
+            # Aus "In Prüfung" oder "Abgeschlossen" zurück auf "Übermittelt":
+            # die Schule hat einen Stand gesehen, der so nicht mehr gilt.
+            form.status = "submitted"
+            record("registration_changed_after_submission", "parent_registration", form.id,
+                   actor_type="parent", actor_id=access.id)
         record("registration_submitted" if submitted else "registration_saved",
                "parent_registration", form.id, actor_type="parent", actor_id=access.id)
         db.session.commit()
+        if changed_after_submission:
+            flash("Das Formular war bereits abgesendet. Ihre Änderung ist gespeichert, "
+                  "die Schule sieht sich die Anmeldung noch einmal an.")
+            # Erst nach dem Commit: eine klemmende Mail darf die Eingabe nicht verwerfen.
+            try:
+                registration_mail.notify_registration_change(
+                    current_app, form.id, changed_by=access.display_name)
+            except Exception:
+                current_app.logger.exception("Hinweis auf geänderte Anmeldung nicht versendet")
         if action == "save":
             flash("Ihre Angaben sind gespeichert. Sie können jederzeit über Ihren "
                   "Zugangslink weitermachen.")
@@ -220,7 +246,21 @@ def registration_step(access, step):
         previous=previous, following=following, data=data, gaps=gaps,
         summary=registration_form.summary(data) if current is registration_form.SUMMARY_STEP else None,
         prefill=_registration_prefill(access, student),
+        submission_note=_submission_note(form),
     )
+
+
+def _submission_note(form):
+    """"Am ... von ... übermittelt" -- oder nichts, solange nichts abgesendet ist.
+
+    Beide Sorgeberechtigten sehen dasselbe Formular; ohne diesen Hinweis kann
+    die zweite Person nicht erkennen, dass die erste es schon abgeschickt hat.
+    """
+    if form is None or form.submitted_at is None:
+        return ""
+    who = db.session.get(ParentAccess, form.submitted_by_access_id) if form.submitted_by_access_id else None
+    stamp = form.submitted_at.strftime("%d.%m.%Y")
+    return f"Am {stamp} von {who.display_name} übermittelt." if who else f"Am {stamp} übermittelt."
 
 
 def _registration_draft(access):
@@ -301,7 +341,7 @@ def book(access, slot_id):
         return redirect(url_for("parent_portal.dashboard"))
     # Erst nach dem Commit: der Termin steht, auch wenn der Mailserver klemmt.
     try:
-        notifications.confirm_booking(current_app, booking.id)
+        appointment_mail.confirm_booking(current_app, booking.id)
     except Exception:
         current_app.logger.exception("Terminbestätigung konnte nicht versendet werden")
         flash("Die Bestätigung per E-Mail konnte nicht zugestellt werden. "

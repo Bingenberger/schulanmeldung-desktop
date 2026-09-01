@@ -221,13 +221,17 @@ def delete(student_id):
     student_name = f"{student.vorname} {student.nachname}"
     try:
         delete_student(student, current_app.config["UPLOAD_FOLDER"])
-        flash(f"Schüler {student_name} und alle zugehörigen Dateien wurden gelöscht.")
-        return redirect(url_for("schueler_liste"))
     except Exception:
         db.session.rollback()
         current_app.logger.exception("Student deletion failed", extra={"student_id": student_id})
         flash("Der Schülerdatensatz konnte nicht gelöscht werden.")
+        # Der Rollback hat den Datensatz erhalten, die Detailseite gibt es also noch.
         return redirect(url_for("students.detail", student_id=student_id))
+    # Bewusst außerhalb des try: ein Fehler beim Bauen dieser Adresse ist ein
+    # Programmfehler und darf nicht als "Löschen fehlgeschlagen" erscheinen --
+    # das Kind ist zu diesem Zeitpunkt weg, seine Detailseite gibt es nicht mehr.
+    flash(f"Schüler {student_name} und alle zugehörigen Dateien wurden gelöscht.")
+    return redirect(url_for("students.list_students"))
 
 
 @students_bp.get("/schueler/<int:student_id>")

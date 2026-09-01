@@ -26,6 +26,7 @@ from sl_office.admin import admin_bp
 from sl_office.students import students_bp
 from sl_office.appointments import appointments_bp
 from sl_office.appointments.cli import register_cli as register_appointment_cli
+from sl_office.maintenance import register_cli as register_maintenance_cli
 from sl_office.parent_portal import parent_portal_bp
 # Import new domain models so SQLAlchemy and Alembic include their metadata.
 import sl_office.parent_portal.models  # noqa: F401, E402
@@ -1875,6 +1876,7 @@ def create_app(environment=None, config_overrides=None):
     flask_app.register_blueprint(appointments_bp)
     flask_app.register_blueprint(parent_portal_bp)
     register_appointment_cli(flask_app)
+    register_maintenance_cli(flask_app)
 
     # The year scope is registered once on the shared Session class; the
     # read-only guard is per application.

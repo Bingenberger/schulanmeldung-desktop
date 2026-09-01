@@ -33,6 +33,9 @@ Zwei-Faktor-Bestätigung)
 - Aktivierung über einen Besitzlink aus dem Elternbrief, danach dauerhafter
   Zugang an einer bestätigten E-Mail-Adresse
 - mehrstufiges Anmeldeformular, das intern geprüft und erst dann übernommen wird
+- beide Sorgeberechtigten bearbeiten dasselbe Formular; sie sehen, wer es
+  abgesendet hat, und eine Änderung danach setzt den Vorgang zurück auf
+  „Übermittelt“ und meldet sich per Mail bei der Schule
 - Terminbuchung für das Anmeldegespräch, mit Bestätigung per Mail samt
   Kalenderdatei und einer Erinnerung am Vortag
 

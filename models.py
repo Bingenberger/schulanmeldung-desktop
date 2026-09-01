@@ -1,10 +1,28 @@
 from flask_sqlalchemy import SQLAlchemy
 import datetime
+import sqlite3
 
 from flask_login import UserMixin, LoginManager
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
 
 db = SQLAlchemy()
 login_manager = LoginManager()
+
+
+@event.listens_for(Engine, "connect")
+def _enforce_sqlite_foreign_keys(dbapi_connection, connection_record):
+    """SQLite prüft Fremdschlüssel nur, wenn man es ausdrücklich verlangt.
+
+    Ohne diese Einstellung bleibt jedes ``ON DELETE CASCADE`` wirkungslos: die
+    abhängigen Zeilen überleben das Löschen ihres Kindes, und weil SQLite die
+    freigewordene Zeilennummer erneut vergibt, erbt sie das nächste angelegte
+    Kind. Andere Datenbanken prüfen von sich aus, deshalb die Typprüfung.
+    """
+    if isinstance(dbapi_connection, sqlite3.Connection):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 @login_manager.user_loader
 def load_user(user_id):

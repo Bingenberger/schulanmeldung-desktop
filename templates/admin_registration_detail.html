@@ -2,7 +2,12 @@
 {% block content %}
 <h1>Anmeldung: {{ student.vorname }} {{ student.nachname }}</h1>
 <form method="post" class="mb-4"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label class="form-label">Bearbeitungsstatus</label><div class="input-group" style="max-width: 30rem"><select class="form-select" name="status">{% for value, label in [('draft','Entwurf'),('submitted','Übermittelt'),('in_review','In Prüfung'),('completed','Abgeschlossen')] %}<option value="{{ value }}" {% if registration.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><button class="btn btn-primary">Speichern</button></div></form>
-<h2 class="h5">Übermittelte Angaben (Version {{ registration.version }})</h2>
+<h2 class="h5 mb-1">Übermittelte Angaben (Version {{ registration.version }})</h2>
+<p class="text-muted small">
+  {% if registration.submitted_at %}Abgesendet am {{ registration.submitted_at.strftime('%d.%m.%Y') }}{% if submitted_by %} von {{ submitted_by.display_name }} ({{ submitted_by.email_normalized }}){% endif %}.{% else %}Noch nicht abgesendet.{% endif %}
+  Zuletzt bearbeitet am {{ registration.updated_at.strftime('%d.%m.%Y %H:%M') }} Uhr.
+  {% if registration.change_notified_at %}<span class="badge bg-warning text-dark">nach dem Absenden geändert</span>{% endif %}
+</p>
 {% for block_step, entries in summary %}
 <h3 class="h6 mt-3">{{ block_step.title }}</h3>
 <dl class="row mb-0">

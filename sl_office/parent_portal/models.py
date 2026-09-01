@@ -85,7 +85,15 @@ class ParentRegistration(db.Model):
     status = db.Column(db.String(20), nullable=False, default="draft", index=True)
     data = db.Column(JSON, nullable=False, default=dict)
     version = db.Column(db.Integer, nullable=False, default=1)
+    #: Erste Abgabe -- bleibt stehen, auch wenn danach noch geändert wird. Für
+    #: die Anmeldefrist zählt dieser Zeitpunkt, nicht die letzte Bearbeitung.
     submitted_at = db.Column(db.DateTime(timezone=True))
+    submitted_by_access_id = db.Column(db.Integer, db.ForeignKey("parent_access.id", ondelete="SET NULL"))
+    #: Gesetzt, sobald die Schule über eine Änderung nach der Abgabe informiert
+    #: wurde. Greift die Schule den Vorgang wieder auf, wird der Wert geleert
+    #: und die nächste Änderung meldet sich erneut -- sonst käme bei jedem
+    #: gespeicherten Schritt eine Mail.
+    change_notified_at = db.Column(db.DateTime(timezone=True))
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow)
 
 

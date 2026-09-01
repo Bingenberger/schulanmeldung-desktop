@@ -31,6 +31,14 @@
 <div class="mx-auto" style="max-width: 52rem">
   <h1 class="h3">Schulanmeldung für {{ student.vorname }} {{ student.nachname }}</h1>
 
+  {% if submission_note %}
+  <div class="alert alert-info" role="status">
+    <strong>{{ submission_note }}</strong>
+    Sie können die Angaben weiterhin ändern. Die Schule erfährt dann davon und
+    sieht sich die Anmeldung noch einmal an.
+  </div>
+  {% endif %}
+
   <ol class="list-unstyled d-flex flex-wrap gap-2 small my-3">
     {% for entry in steps %}
     <li>
