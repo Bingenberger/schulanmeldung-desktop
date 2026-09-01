@@ -12,6 +12,7 @@ selbst auf -- die Prüfung sieht deshalb alle Jahrgänge, nicht nur den offenen.
 """
 
 import datetime
+import os
 
 import click
 from flask.cli import with_appcontext
@@ -162,6 +163,15 @@ def kann_kind_kennzeichen_richtigstellen(falsch):
     return len(falsch)
 
 
+def _kann_kind_hinweis(kind, neues_datum, jahr):
+    """Vermerk, wenn eine Datumskorrektur die Einschulungsentscheidung dreht."""
+    vorher = ist_kann_kind(kind.geburtsdatum, jahr)
+    nachher = ist_kann_kind(neues_datum, jahr)
+    if vorher == nachher:
+        return ""
+    return f"  [{_ja_nein(vorher)} -> {_ja_nein(nachher)} Kann-Kind]"
+
+
 def register_cli(app):
     @app.cli.command("check-orphans")
     @click.option("--delete", "remove", is_flag=True,
@@ -240,3 +250,88 @@ def register_cli(app):
             return
         click.echo(f"\n{kann_kind_kennzeichen_richtigstellen(falsch)} Kennzeichen "
                    "richtiggestellt.")
+
+    @app.cli.command("check-geburtsdaten")
+    @click.option("--datei", "datei", required=True,
+                  type=click.Path(exists=True, dir_okay=False),
+                  help="XLSX-Liste der Stadt für diesen Jahrgang.")
+    @click.option("--jahr", "jahr", required=True, type=int,
+                  help="Einschulungsjahr, zu dem die Liste gehört.")
+    @click.option("--fix", "fix", is_flag=True,
+                  help="Abweichende Geburtsdaten übernehmen statt nur zu melden.")
+    @click.option("--spalte-vorname", "vorname", default=None,
+                  help="Spaltenüberschrift, falls die Erkennung danebenliegt.")
+    @click.option("--spalte-nachname", "nachname", default=None)
+    @click.option("--spalte-geburtsdatum", "geburtsdatum", default=None)
+    @with_appcontext
+    def check_geburtsdaten(datei, jahr, fix, vorname, nachname, geburtsdatum):
+        """Geburtsdaten eines Jahrgangs gegen die Liste der Stadt abgleichen.
+
+        Ordnet über den Namen zu und ändert ausschließlich das Geburtsdatum --
+        es werden keine Kinder angelegt, gelöscht oder anderweitig geändert.
+        """
+        from sl_office.students.city_import import InvalidWorkbook
+        from sl_office.students.reconcile import geburtsdaten_abgleichen
+
+        with open(datei, "rb") as handle:
+            payload = handle.read()
+        try:
+            ergebnis = geburtsdaten_abgleichen(
+                payload, jahr,
+                vorname=vorname, nachname=nachname, geburtsdatum=geburtsdatum)
+        except InvalidWorkbook as fehler:
+            raise click.ClickException(str(fehler)) from fehler
+
+        click.echo(f"Jahrgang {jahr} gegen {os.path.basename(datei)} abgeglichen.")
+        click.echo(f"Geburtsdatum bereits richtig: {ergebnis.bestaetigt}")
+
+        if ergebnis.vertauscht:
+            click.echo(f"\nTag und Monat vertauscht: {len(ergebnis.vertauscht)}")
+            for kind, neu in ergebnis.vertauscht:
+                click.echo(f"  id={kind.id:<5} {kind.vorname} {kind.nachname}: "
+                           f"{kind.geburtsdatum:%d.%m.%Y} -> {neu:%d.%m.%Y}"
+                           f"{_kann_kind_hinweis(kind, neu, jahr)}")
+
+        if ergebnis.abweichend:
+            click.echo(f"\nAnderweitig abweichendes Geburtsdatum: {len(ergebnis.abweichend)}")
+            click.echo("  (keine Vertauschung -- bitte einzeln prüfen, ob der Name "
+                       "wirklich dasselbe Kind meint)")
+            for kind, neu in ergebnis.abweichend:
+                click.echo(f"  id={kind.id:<5} {kind.vorname} {kind.nachname}: "
+                           f"{kind.geburtsdatum:%d.%m.%Y} -> {neu:%d.%m.%Y}"
+                           f"{_kann_kind_hinweis(kind, neu, jahr)}")
+
+        if ergebnis.mehrdeutig:
+            click.echo(f"\nName mehrfach im Jahrgang, nicht zuzuordnen: "
+                       f"{len(ergebnis.mehrdeutig)}")
+            for vor, nach, kinder in ergebnis.mehrdeutig:
+                click.echo(f"  {vor} {nach} -- ids {[kind.id for kind in kinder]}")
+
+        if ergebnis.ohne_treffer:
+            click.echo(f"\nIn der Liste, aber nicht im Bestand: {len(ergebnis.ohne_treffer)}")
+            for vor, nach, datum in ergebnis.ohne_treffer:
+                click.echo(f"  {vor} {nach} (geb. {datum:%d.%m.%Y})")
+
+        if ergebnis.nicht_in_datei:
+            click.echo(f"\nIm Bestand, aber nicht in der Liste: "
+                       f"{len(ergebnis.nicht_in_datei)}")
+            click.echo("  (normal für Kinder, die sich selbst angemeldet haben)")
+            for kind in ergebnis.nicht_in_datei:
+                click.echo(f"  id={kind.id:<5} {kind.vorname} {kind.nachname} "
+                           f"(geb. {kind.geburtsdatum:%d.%m.%Y})"
+                           if kind.geburtsdatum else
+                           f"  id={kind.id:<5} {kind.vorname} {kind.nachname}")
+
+        if ergebnis.unlesbar:
+            click.echo(f"\nZeilen ohne verwertbaren Namen oder Datum übersprungen: "
+                       f"{ergebnis.unlesbar}")
+
+        if not ergebnis.korrekturen:
+            click.echo("\nKeine Geburtsdaten zu ändern.")
+            return
+        if not fix:
+            click.echo(f"\nZum Übernehmen: flask --app app check-geburtsdaten "
+                       f"--datei {datei} --jahr {jahr} --fix")
+            return
+        click.echo(f"\n{ergebnis.anwenden()} Geburtsdaten übernommen, "
+                   "Kann-Kind-Kennzeichen neu bestimmt.")
