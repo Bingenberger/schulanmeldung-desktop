@@ -131,10 +131,12 @@ def dashboard(access):
     registration = db.session.scalar(select(ParentRegistration).where(ParentRegistration.schueler_id == access.schueler_id))
     public_status = {"draft": "Formular in Bearbeitung", "submitted": "Formular eingereicht", "in_review": "Unterlagen werden geprüft", "completed": "Verfahren abgeschlossen"}
     appointment = active_booking_for_student(access.schueler_id)
+    open_day_event, open_day_entry, _ = _open_day_context(access)
     return render_template("parent_portal/dashboard.html", student=student, booking=booking,
                            appointment=appointment, slot_label=slot_label,
                            registration=registration, public_status=public_status,
                            submission_note=_submission_note(registration),
+                           open_day_event=open_day_event, open_day_entry=open_day_entry,
                            contact=current_app.config.get("SCHOOL_CONTACT_MAIL", ""))
 
 
@@ -254,6 +256,85 @@ def registration_step(access, step):
         prefill=_registration_prefill(access, student),
         submission_note=_submission_note(form),
     )
+
+
+# --- Tag der offenen Tür ---------------------------------------------------
+
+def _open_day_context(access):
+    """Veranstaltung und bisherige Rückmeldung dieser Familie.
+
+    Der Import steht in der Funktion: das Modul zum Tag der offenen Tür greift
+    seinerseits auf das Elternportal zu, ein Import oben liefe im Kreis.
+    """
+    from sl_office.open_day.models import OpenDayRegistration
+    from sl_office.open_day.service import veroeffentlichtes_event
+
+    student = db.session.get(Schueler, access.schueler_id)
+    event = veroeffentlichtes_event(student.einschulungsjahr) if student else None
+    if event is None:
+        return None, None, student
+    eintrag = db.session.scalar(select(OpenDayRegistration).where(
+        OpenDayRegistration.event_id == event.id,
+        OpenDayRegistration.schueler_id == access.schueler_id))
+    return event, eintrag, student
+
+
+@parent_portal_bp.route("/tag-der-offenen-tuer", methods=["GET", "POST"])
+@parent_access_required
+def open_day(access):
+    """Rückmeldung zum Tag der offenen Tür.
+
+    Eine Rückmeldung je Kind: Beide Sorgeberechtigten bearbeiten dieselbe
+    Zeile, wie beim Anmeldeformular auch. Eine Absage ist eine vollwertige
+    Antwort -- die Schule plant damit.
+    """
+    from sl_office.open_day.models import OpenDayRegistration
+    from sl_office.open_day.service import ablaufplan, stationsplan
+
+    event, eintrag, student = _open_day_context(access)
+    if event is None:
+        flash("Zurzeit ist kein Tag der offenen Tür ausgeschrieben.")
+        return redirect(url_for("parent_portal.dashboard"))
+
+    if request.method == "POST":
+        if not event.anmeldung_offen:
+            flash("Die Anmeldefrist ist abgelaufen. Bitte wenden Sie sich an das Sekretariat.")
+            return redirect(url_for("parent_portal.open_day"))
+        name = (request.form.get("name") or "").strip()
+        email = normalize_email(request.form.get("email", ""))
+        if not name or not email:
+            flash("Bitte geben Sie Ihren Namen und Ihre E-Mail-Adresse an.")
+            return redirect(url_for("parent_portal.open_day"))
+        if eintrag is None:
+            eintrag = OpenDayRegistration(event_id=event.id, schueler_id=access.schueler_id,
+                                          name=name, email=email)
+            db.session.add(eintrag)
+        teilnahme = request.form.get("teilnahme") == "ja"
+        eintrag.name, eintrag.email = name, email
+        eintrag.parent_access_id = access.id
+        eintrag.teilnahme = teilnahme
+        # Bei einer Absage sind die Programmwünsche gegenstandslos; sie stehen
+        # zu lassen ergäbe eine Familie, die zu nichts kommt, aber überall zählt.
+        eintrag.wunsch_fuehrung = teilnahme and request.form.get("fuehrung") == "ja"
+        eintrag.wunsch_unterricht = teilnahme and request.form.get("unterricht") == "ja"
+        eintrag.wunsch_ogs = teilnahme and request.form.get("ogs") == "ja"
+        if not teilnahme:
+            eintrag.gruppe = None
+        eintrag.bemerkung = (request.form.get("bemerkung") or "").strip() or None
+        db.session.flush()
+        record("open_day_registered", "open_day_registration", eintrag.id,
+               actor_type="parent", actor_id=access.id)
+        db.session.commit()
+        flash("Vielen Dank, Ihre Rückmeldung ist gespeichert." if teilnahme
+              else "Vielen Dank, Ihre Absage ist vermerkt.")
+        return redirect(url_for("parent_portal.dashboard"))
+
+    return render_template(
+        "parent_portal/open_day.html", event=event, eintrag=eintrag, student=student,
+        vorschlag_name=(eintrag.name if eintrag else access.display_name) or "",
+        vorschlag_email=(eintrag.email if eintrag else access.email_normalized) or "",
+        plan=ablaufplan(eintrag, stationsplan(event)) if eintrag else [],
+        contact=current_app.config.get("SCHOOL_CONTACT_MAIL", ""))
 
 
 def _submission_note(form):

@@ -30,6 +30,23 @@
   </div></div>
   <div class="card"><div class="card-body"><h2 class="h5">Digitales Anmeldeformular</h2><p class="mb-1">Status: {{ public_status.get(registration.status, 'Noch nicht begonnen') if registration else 'Noch nicht begonnen' }}</p>
     {% if submission_note %}<p class="text-muted small">{{ submission_note }}</p>{% endif %}<a class="btn btn-outline-primary" href="{{ url_for('parent_portal.registration') }}">Formular öffnen</a></div></div>
+  {% if open_day_event %}
+  <div class="card mt-4"><div class="card-body">
+    <h2 class="h5">{{ open_day_event.titel }}</h2>
+    <p class="mb-1">{{ open_day_event.datum.strftime('%d.%m.%Y') }}{% if open_day_event.ort %} · {{ open_day_event.ort }}{% endif %}</p>
+    {% if open_day_entry %}
+      {% if open_day_entry.teilnahme %}
+      <p class="text-success mb-3"><i class="bi bi-check-circle"></i> Sie haben sich angemeldet.</p>
+      {% else %}
+      <p class="text-muted mb-3"><i class="bi bi-dash-circle"></i> Sie haben abgesagt.</p>
+      {% endif %}
+      <a class="btn btn-outline-primary" href="{{ url_for('parent_portal.open_day') }}">Rückmeldung ändern</a>
+    {% else %}
+      <p class="mb-3">Wir laden Sie herzlich ein. Bitte sagen Sie uns kurz Bescheid, ob Sie kommen.</p>
+      <a class="btn btn-primary" href="{{ url_for('parent_portal.open_day') }}">Jetzt zurückmelden</a>
+    {% endif %}
+  </div></div>
+  {% endif %}
   <form method="post" action="{{ url_for('parent_portal.logout') }}" class="mt-4"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-outline-secondary">Abmelden</button></form>
 </div>
 {% endblock %}

@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mx-auto" style="max-width: 46rem">
+  <h1 class="h3">{{ event.titel }}</h1>
+  <p class="text-muted">
+    {{ event.datum.strftime('%d.%m.%Y') }}{% if event.ort %} · {{ event.ort }}{% endif %}
+  </p>
+
+  {% if eintrag and eintrag.teilnahme and plan %}
+  <div class="alert alert-success">
+    <p class="fw-semibold mb-2">Ihr Ablauf (Gruppe {{ eintrag.gruppe }}):</p>
+    <ul class="mb-0 list-unstyled">
+      {% for station, label in plan %}
+      <li>{{ station.beginn.strftime('%H:%M') }}–{{ station.ende.strftime('%H:%M') }} Uhr
+        &nbsp; {{ label }}{% if station.ort %} ({{ station.ort }}){% endif %}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if not event.anmeldung_offen %}
+  <div class="alert alert-warning">
+    Die Anmeldefrist ist abgelaufen. Wenn sich etwas ändert, melden Sie sich bitte
+    {% if contact %}unter <a href="mailto:{{ contact }}">{{ contact }}</a>{% else %}im Sekretariat{% endif %}.
+  </div>
+  {% endif %}
+
+  <form method="post" class="card"><div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <fieldset {% if not event.anmeldung_offen %}disabled{% endif %}>
+      <div class="row g-3 mb-4">
+        <div class="col-md-6">
+          <label class="form-label" for="name">Ihr Name</label>
+          <input class="form-control" id="name" name="name" required
+                 value="{{ vorschlag_name }}">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="email">Ihre E-Mail-Adresse</label>
+          <input class="form-control" id="email" name="email" type="email" required
+                 value="{{ vorschlag_email }}">
+          <div class="form-text">An diese Adresse schicken wir Ihren Ablaufplan.</div>
+        </div>
+      </div>
+
+      <p class="fw-semibold mb-2">Nehmen Sie teil?</p>
+      <div class="form-check">
+        <input class="form-check-input" type="radio" name="teilnahme" value="ja" id="teilnahme-ja"
+               {% if not eintrag or eintrag.teilnahme %}checked{% endif %}>
+        <label class="form-check-label" for="teilnahme-ja">Ja, wir kommen gerne.</label>
+      </div>
+      <div class="form-check mb-4">
+        <input class="form-check-input" type="radio" name="teilnahme" value="nein" id="teilnahme-nein"
+               {% if eintrag and not eintrag.teilnahme %}checked{% endif %}>
+        <label class="form-check-label" for="teilnahme-nein">Nein, wir können leider nicht.</label>
+      </div>
+
+      <div id="programm">
+        <p class="fw-semibold mb-1">Woran möchten Sie teilnehmen?</p>
+        <p class="text-muted small">Mehrfachauswahl möglich. Wir stellen daraus Ihren
+          persönlichen Ablauf zusammen und schicken ihn Ihnen per E-Mail.</p>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="fuehrung" value="ja" id="fuehrung"
+                 {% if eintrag and eintrag.wunsch_fuehrung %}checked{% endif %}>
+          <label class="form-check-label" for="fuehrung">Kurze Schulführung</label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="unterricht" value="ja" id="unterricht"
+                 {% if eintrag and eintrag.wunsch_unterricht %}checked{% endif %}>
+          <label class="form-check-label" for="unterricht">Teilnahme an einer Unterrichtsstunde</label>
+        </div>
+        <div class="form-check mb-4">
+          <input class="form-check-input" type="checkbox" name="ogs" value="ja" id="ogs"
+                 {% if eintrag and eintrag.wunsch_ogs %}checked{% endif %}>
+          <label class="form-check-label" for="ogs">Hospitation in einer OGS-Gruppe</label>
+        </div>
+      </div>
+
+      <label class="form-label" for="bemerkung">Möchten Sie uns noch etwas mitteilen?</label>
+      <textarea class="form-control mb-4" id="bemerkung" name="bemerkung" rows="2">{{ eintrag.bemerkung if eintrag and eintrag.bemerkung else '' }}</textarea>
+
+      <button class="btn btn-primary">Rückmeldung speichern</button>
+      <a class="btn btn-link" href="{{ url_for('parent_portal.dashboard') }}">Zurück</a>
+    </fieldset>
+  </div></form>
+</div>
+<script>
+  // Die Programmwünsche sind nur bei einer Zusage sinnvoll.
+  (function () {
+    const programm = document.getElementById('programm');
+    const optionen = document.querySelectorAll('input[name="teilnahme"]');
+    function anpassen() {
+      const zusage = document.getElementById('teilnahme-ja').checked;
+      programm.hidden = !zusage;
+    }
+    optionen.forEach(feld => feld.addEventListener('change', anpassen));
+    anpassen();
+  })();
+</script>
+{% endblock %}

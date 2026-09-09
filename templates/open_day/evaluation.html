@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+  <div>
+    <h2 class="mb-0">Auswertung: {{ event.titel }}</h2>
+    <p class="text-muted mb-0">{{ event.datum.strftime('%d.%m.%Y') }}</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="{{ url_for('open_day.rosters', event_id=event.id) }}">
+      <i class="bi bi-printer"></i> Teilnehmerlisten</a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('open_day.detail', event_id=event.id) }}">
+      Veranstaltung bearbeiten</a>
+  </div>
+</div>
+
+<div class="row g-2 mb-4">
+  {% set kacheln = [('Rückmeldungen', werte.rueckmeldungen, 'bg-primary'),
+                    ('Zusagen', werte.zusagen, 'bg-success'),
+                    ('Absagen', werte.absagen, 'bg-secondary'),
+                    ('Ohne Gruppe', werte.ohne_gruppe, 'bg-warning text-dark'),
+                    ('Mail offen', werte.plan_offen, 'bg-info text-dark'),
+                    ('Mail überholt', werte.plan_veraltet, 'bg-danger')] %}
+  {% for titel, wert, farbe in kacheln %}
+  <div class="col-6 col-md-2">
+    <div class="card {{ farbe }} h-100 shadow-sm"><div class="card-body text-center px-1 py-2">
+      <div class="small text-uppercase">{{ titel }}</div>
+      <div class="h4 mb-0">{{ wert }}</div>
+    </div></div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card mb-4"><div class="card-body">
+  <h3 class="h6">Auslastung der Stationen</h3>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0 align-middle">
+      <thead><tr><th>Station</th>{% for gruppe in gruppen %}<th class="text-end">Gruppe {{ gruppe }}</th>{% endfor %}<th class="text-end">gesamt</th></tr></thead>
+      <tbody>
+      {% for art, label in stationen %}
+        <tr>
+          <td>{{ label }}</td>
+          {% for gruppe in gruppen %}
+          <td class="text-end">
+            {{ werte[art][gruppe] }}
+            {% set station = plan[(gruppe, art)] %}
+            {% if station %}<span class="text-muted small">({{ zeitspanne(station) }})</span>{% endif %}
+          </td>
+          {% endfor %}
+          <td class="text-end fw-semibold">{{ werte[art].gesamt }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div></div>
+
+{% if not readonly %}
+<div class="d-flex flex-wrap gap-2 mb-4">
+  <form method="post" action="{{ url_for('open_day.assign', event_id=event.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-primary"><i class="bi bi-diagram-2"></i> Offene einteilen</button>
+  </form>
+  <form method="post" action="{{ url_for('open_day.assign', event_id=event.id) }}"
+        onsubmit="return confirm('Alle Zusagen neu verteilen? Bereits verschickte Ablaufpläne können dadurch überholt sein.')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="modus" value="neu">
+    <button class="btn btn-outline-primary">Alles neu verteilen</button>
+  </form>
+  <form method="post" action="{{ url_for('open_day.send', event_id=event.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-success"><i class="bi bi-envelope"></i> Offene Rückmeldungen versenden</button>
+  </form>
+  <form method="post" action="{{ url_for('open_day.send', event_id=event.id) }}"
+        onsubmit="return confirm('Wirklich an alle erneut versenden?')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="umfang" value="alle">
+    <button class="btn btn-outline-success">An alle erneut versenden</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead><tr>
+      <th>Kind</th><th>Rückmeldung von</th><th>Teilnahme</th><th>Wünsche</th>
+      <th>Gruppe</th><th>Ablauf</th><th>Mail</th>
+    </tr></thead>
+    <tbody>
+    {% for zeile in zeilen %}
+      {% set eintrag = zeile.eintrag %}
+      <tr>
+        <td>{{ zeile.kind.nachname }}, {{ zeile.kind.vorname }}</td>
+        <td>{{ eintrag.name }}<br><span class="text-muted small">{{ eintrag.email }}</span>
+          {% if eintrag.bemerkung %}<br><span class="small fst-italic">„{{ eintrag.bemerkung }}“</span>{% endif %}</td>
+        <td>{% if eintrag.teilnahme %}<span class="badge bg-success">ja</span>
+            {% else %}<span class="badge bg-secondary">nein</span>{% endif %}</td>
+        <td class="small">
+          {% for art, label in stationen %}{% if art in eintrag.wuensche %}{{ label }}<br>{% endif %}{% endfor %}
+          {% if eintrag.teilnahme and not eintrag.wuensche %}<span class="text-muted">kein Programmpunkt</span>{% endif %}
+        </td>
+        <td>
+          {% if eintrag.teilnahme and eintrag.wuensche %}
+          <form method="post" class="d-flex gap-1"
+                action="{{ url_for('open_day.set_group', event_id=event.id, registration_id=eintrag.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <select class="form-select form-select-sm" name="gruppe" style="width: 5.5rem"
+                    aria-label="Gruppe von {{ eintrag.name }}" {% if readonly %}disabled{% endif %}>
+              <option value="" {% if not eintrag.gruppe %}selected{% endif %}>–</option>
+              {% for gruppe in gruppen %}
+              <option value="{{ gruppe }}" {% if eintrag.gruppe == gruppe %}selected{% endif %}>{{ gruppe }}</option>
+              {% endfor %}
+            </select>
+            {% if not readonly %}<button class="btn btn-sm btn-outline-secondary">OK</button>{% endif %}
+          </form>
+          {% else %}<span class="text-muted">–</span>{% endif %}
+        </td>
+        <td class="small">
+          {% for station, label in zeile.plan %}
+            {{ zeitspanne(station) }} {{ label }}<br>
+          {% else %}<span class="text-muted">–</span>{% endfor %}
+        </td>
+        <td>
+          {% if eintrag.plan_veraltet %}
+            <span class="badge bg-danger">überholt</span>
+          {% elif eintrag.plan_gesendet_am %}
+            <span class="badge bg-success">{{ eintrag.plan_gesendet_am.strftime('%d.%m.') }}</span>
+          {% else %}<span class="badge bg-light text-dark">offen</span>{% endif %}
+          {% if not readonly %}
+          <form method="post" class="d-inline"
+                action="{{ url_for('open_day.send_single', event_id=event.id, registration_id=eintrag.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-link p-0" title="Ablaufplan senden">senden</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7"><div class="alert alert-info mb-0">Noch keine Rückmeldungen.</div></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

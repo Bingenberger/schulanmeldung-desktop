@@ -131,6 +131,7 @@ FIELDS = {
     "frist": "Frist für die Terminbuchung aus dem Druckformular",
     "kontakt": "E-Mail-Adresse für Rückfragen",
     "schulleitung": "Name der Schulleitung aus dem Briefkopf",
+    "tdot": "Datum des Tags der offenen Tür, aus der Veranstaltungsverwaltung",
 }
 
 DEFAULT_TITLE = "Einladung zur Schulanmeldung für das Schuljahr {schuljahr}"
@@ -188,9 +189,9 @@ Die gewünschte Schule wird sodann diesen Anmeldeschein mit der Bestätigung der
 
 Erstmalig erhalten Sie mit den Unterlagen auch unseren Erziehungsvertrag. Er beschreibt die Werte und Schwerpunkte, die uns in der Erziehungsarbeit wichtig sind, und soll deutlich machen, wie wir als Schule gemeinsam mit Ihnen als Eltern zum Wohl Ihres Kindes handeln möchten. Bitte nehmen Sie sich Zeit, den Vertrag in Ruhe zu Hause zu lesen. Wenn Sie ihn bereits unterschrieben zur Anmeldung mitbringen, können wir von Anfang an auf einer gemeinsamen Grundlage starten – damit Ihr Kind sich bei uns gut aufgehoben fühlt und die bestmögliche Unterstützung erhält.
 
-# Tag der offenen Tür
+# Tag der offenen Tür am {tdot}
 
-Alle Informationen bzgl. des Tages der offenen Tür erhalten Sie über den diesem Schreiben beiliegenden Informationsflyer.
+Bevor Sie sich entscheiden, möchten wir Ihnen unsere Schule gerne zeigen, und laden Sie und Ihr Kind dazu herzlich ein. Sie können an einer kurzen Schulführung teilnehmen, eine Unterrichtsstunde miterleben und in einer Gruppe unserer OGS hospitieren. Bitte sagen Sie uns über Ihren persönlichen Zugang zum Elternportal kurz Bescheid, ob Sie kommen und was Sie sich ansehen möchten – wir stellen daraus einen Ablauf für Sie zusammen und schicken ihn Ihnen rechtzeitig per E-Mail.
 
 Wir freuen uns auf das Anmeldegespräch mit Ihnen und Ihrem Kind."""
 
@@ -502,6 +503,7 @@ def _draw_letter(pdf, student, school, letter, text, access_block):
         "kontakt": school.get("contact_mail", ""),
         "schulleitung": school.get("head", ""),
         "termin": letter.get("termin", ""),
+        "tdot": letter.get("tdot", ""),
     }
 
     flow.address_block(_address_lines(student))
@@ -543,6 +545,21 @@ def appointment_label(student_id):
     return f"{label}, {slot.location}" if slot.location else label
 
 
+def open_day_label(jahr=None):
+    """Datum des veröffentlichten Tags der offenen Tür, sonst "".
+
+    Ist keiner ausgeschrieben, bleibt der Platzhalter leer -- Überschrift und
+    Absatz entfallen dann von selbst, wie beim Anmeldezeitraum auch. Der Import
+    steht in der Funktion, weil das Modul seinerseits das Elternportal nutzt.
+    """
+    from sl_office.open_day.service import veroeffentlichtes_event
+    from sl_office.school_year import active_year
+
+    jahr = jahr if jahr is not None else active_year()
+    event = veroeffentlichtes_event(jahr) if jahr else None
+    return german_date(event.datum) if event else ""
+
+
 def letter_variant(student_id):
     """Welche Fassung dieses Kind bekommt: mit oder ohne festen Termin."""
     return ASSIGNED_TEXT_KEY if appointment_label(student_id) else TEXT_KEY
@@ -565,7 +582,8 @@ def build_letters(students, school, link_builder, created_by_user_id=None, deadl
     earlier letter; see :func:`issue_letter_tokens`. ``texts`` overrides the
     stored wording je Fassung und ist das, was die Vorschau des Editors mitgibt.
     """
-    letter = _letter_fields(letter_date, school_year, period, deadline)
+    letter = dict(_letter_fields(letter_date, school_year, period, deadline),
+                  tdot=open_day_label())
     texts = texts or {}
     buffer = BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=A4)
@@ -597,12 +615,16 @@ SAMPLE_URL = "https://beispiel.example/eltern/aktivieren/NUR-ZUR-ANSICHT"
 #: Termin des Beispielkindes in der Vorschau der zugewiesenen Fassung.
 SAMPLE_APPOINTMENT = "Mi 14.10.2026, 09:20–10:00 Uhr, Raum 1"
 
+#: Damit der Abschnitt zum Tag der offenen Tür auch dann in der Vorschau steht,
+#: wenn noch keine Veranstaltung ausgeschrieben ist.
+SAMPLE_OPEN_DAY = "12. September 2026"
+
 
 def build_preview(school, text, deadline=None, period=None, school_year=None, letter_date=None,
                   appointment=SAMPLE_APPOINTMENT):
     """Den Brief mit einem Beispielkind setzen, ohne Zugänge auszustellen."""
     letter = dict(_letter_fields(letter_date, school_year, period, deadline),
-                  termin=appointment)
+                  termin=appointment, tdot=open_day_label() or SAMPLE_OPEN_DAY)
     buffer = BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=A4)
     pdf.setTitle("Vorschau Elternbrief")
