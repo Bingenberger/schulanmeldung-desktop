@@ -14,6 +14,7 @@ from sl_office.appointments import notifications as appointment_mail
 from sl_office.appointments.service import (AssignedByStaff, BookingError,
                                             active_booking_for_student, book_slot, cancel_booking,
                                             moment_label, naive_utc, slot_label)
+from sl_office.parent_portal import letterhead, progress
 from sl_office.parent_portal.access_service import InvalidAccessToken, consume_activation_grant, consume_login_token, create_login_token, normalize_email
 from sl_office.parent_portal.mail_service import send_parent_login_link
 from sl_office.parent_portal import notifications as registration_mail
@@ -132,11 +133,15 @@ def dashboard(access):
     public_status = {"draft": "Formular in Bearbeitung", "submitted": "Formular eingereicht", "in_review": "Unterlagen werden geprüft", "completed": "Verfahren abgeschlossen"}
     appointment = active_booking_for_student(access.schueler_id)
     open_day_event, open_day_entry, _ = _open_day_context(access)
+    schritte = progress.prozessschritte(student, appointment, registration, slot_label,
+                                        open_day_event, open_day_entry)
     return render_template("parent_portal/dashboard.html", student=student, booking=booking,
                            appointment=appointment, slot_label=slot_label,
                            registration=registration, public_status=public_status,
                            submission_note=_submission_note(registration),
                            open_day_event=open_day_event, open_day_entry=open_day_entry,
+                           schritte=schritte, zustaende=progress.ZUSTAENDE,
+                           fortschritt=progress.fortschritt(schritte),
                            contact=current_app.config.get("SCHOOL_CONTACT_MAIL", ""))
 
 
@@ -289,7 +294,7 @@ def open_day(access):
     Antwort -- die Schule plant damit.
     """
     from sl_office.open_day.models import OpenDayRegistration
-    from sl_office.open_day.service import ablaufplan, stationsplan
+    from sl_office.open_day.service import ablaufplan, stationsplan, zuteilungen_pruefen
 
     event, eintrag, student = _open_day_context(access)
     if event is None:
@@ -322,6 +327,9 @@ def open_day(access):
             eintrag.gruppe = None
         eintrag.bemerkung = (request.form.get("bemerkung") or "").strip() or None
         db.session.flush()
+        # Wer einen Programmpunkt abwählt, darf nicht mit einer Einladung in
+        # eine Klasse dastehen, die er gar nicht mehr besucht.
+        zuteilungen_pruefen(event)
         record("open_day_registered", "open_day_registration", eintrag.id,
                actor_type="parent", actor_id=access.id)
         db.session.commit()
@@ -335,6 +343,22 @@ def open_day(access):
         vorschlag_email=(eintrag.email if eintrag else access.email_normalized) or "",
         plan=ablaufplan(eintrag, stationsplan(event)) if eintrag else [],
         contact=current_app.config.get("SCHOOL_CONTACT_MAIL", ""))
+
+
+@parent_portal_bp.get("/tag-der-offenen-tuer/ablaufplan.pdf")
+@parent_access_required
+def open_day_plan(access):
+    """Der eigene Ablaufplan als PDF -- dieselbe Datei wie im Mailanhang."""
+    from sl_office.open_day import plan_pdf
+    from sl_office.open_day.service import ablaufplan
+
+    event, eintrag, _ = _open_day_context(access)
+    if event is None or eintrag is None or not ablaufplan(eintrag):
+        flash("Es liegt noch kein Ablaufplan für Sie vor.")
+        return redirect(url_for("parent_portal.dashboard"))
+    payload = plan_pdf.build_plan(event, eintrag, letterhead.branding(current_app.config))
+    return send_file(BytesIO(payload), mimetype="application/pdf",
+                     as_attachment=True, download_name=plan_pdf.dateiname(event))
 
 
 def _submission_note(form):

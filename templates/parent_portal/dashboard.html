@@ -2,6 +2,36 @@
 {% block content %}
 <div class="mx-auto" style="max-width: 52rem">
   <h1>Schulanmeldung für {{ student.vorname }} {{ student.nachname }}</h1>
+
+  <div class="card my-4"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-baseline">
+      <h2 class="h5 mb-1">Ihr aktueller Stand</h2>
+      <span class="text-muted small">{{ fortschritt }} % erledigt</span>
+    </div>
+    <div class="progress mb-3" style="height:.5rem" role="progressbar"
+         aria-label="Fortschritt der Anmeldung" aria-valuenow="{{ fortschritt }}"
+         aria-valuemin="0" aria-valuemax="100">
+      <div class="progress-bar bg-success" style="width: {{ fortschritt }}%"></div>
+    </div>
+    <ul class="list-unstyled mb-0">
+      {% for schritt in schritte %}
+      {% set label, farbe, symbol = zustaende[schritt.zustand] %}
+      <li class="d-flex gap-3 py-2 {% if not loop.first %}border-top{% endif %}">
+        <i class="bi {{ symbol }} text-{{ farbe }} fs-5 lh-1 mt-1"></i>
+        <div class="flex-grow-1">
+          <div class="d-flex justify-content-between align-items-baseline gap-2 flex-wrap">
+            <span class="fw-semibold">{{ schritt.titel }}</span>
+            <span class="badge bg-{{ farbe }}{% if farbe == 'warning' %} text-dark{% endif %}">{{ label }}</span>
+          </div>
+          <p class="mb-0 small text-muted">{{ schritt.text }}</p>
+          {% if schritt.link and schritt.link_text %}
+          <a class="small" href="{{ url_for(schritt.link) }}">{{ schritt.link_text }}</a>
+          {% endif %}
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </div></div>
   <div class="card my-4"><div class="card-body">
     <h2 class="h5">Anmeldetermin</h2>
     {% if appointment %}
@@ -28,19 +58,23 @@
     {% endif %}
     {% else %}<p>Es wurde noch kein Termin gebucht.</p><a class="btn btn-primary" href="{{ url_for('parent_portal.appointments') }}">Termin auswählen</a>{% endif %}
   </div></div>
-  <div class="card"><div class="card-body"><h2 class="h5">Digitales Anmeldeformular</h2><p class="mb-1">Status: {{ public_status.get(registration.status, 'Noch nicht begonnen') if registration else 'Noch nicht begonnen' }}</p>
-    {% if submission_note %}<p class="text-muted small">{{ submission_note }}</p>{% endif %}<a class="btn btn-outline-primary" href="{{ url_for('parent_portal.registration') }}">Formular öffnen</a></div></div>
+  <div class="card"><div class="card-body">
+    <h2 class="h5">Digitales Anmeldeformular</h2>
+    {% if submission_note %}<p class="text-muted small">{{ submission_note }}</p>{% endif %}
+    <a class="btn btn-outline-primary" href="{{ url_for('parent_portal.registration') }}">Formular öffnen</a>
+  </div></div>
   {% if open_day_event %}
   <div class="card mt-4"><div class="card-body">
     <h2 class="h5">{{ open_day_event.titel }}</h2>
     <p class="mb-1">{{ open_day_event.datum.strftime('%d.%m.%Y') }}{% if open_day_event.ort %} · {{ open_day_event.ort }}{% endif %}</p>
     {% if open_day_entry %}
-      {% if open_day_entry.teilnahme %}
-      <p class="text-success mb-3"><i class="bi bi-check-circle"></i> Sie haben sich angemeldet.</p>
-      {% else %}
-      <p class="text-muted mb-3"><i class="bi bi-dash-circle"></i> Sie haben abgesagt.</p>
-      {% endif %}
-      <a class="btn btn-outline-primary" href="{{ url_for('parent_portal.open_day') }}">Rückmeldung ändern</a>
+      <div class="d-flex flex-wrap gap-2 mt-3">
+        <a class="btn btn-outline-primary" href="{{ url_for('parent_portal.open_day') }}">Rückmeldung ändern</a>
+        {% if open_day_entry.teilnahme and open_day_entry.gruppe %}
+        <a class="btn btn-outline-success" href="{{ url_for('parent_portal.open_day_plan') }}">
+          <i class="bi bi-file-earmark-pdf"></i> Ablaufplan als PDF</a>
+        {% endif %}
+      </div>
     {% else %}
       <p class="mb-3">Wir laden Sie herzlich ein. Bitte sagen Sie uns kurz Bescheid, ob Sie kommen.</p>
       <a class="btn btn-primary" href="{{ url_for('parent_portal.open_day') }}">Jetzt zurückmelden</a>

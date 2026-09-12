@@ -13,7 +13,11 @@
 <div class="card mb-3"><div class="card-body">
   <h3 class="h6 mb-1">
     Gruppe {{ liste.station.gruppe }} · {{ liste.station.label }}
-    <span class="text-muted">{{ zeitspanne(liste.station) }}{% if liste.station.ort %} · {{ liste.station.ort }}{% endif %}</span>
+    {% if liste.platz %}<strong>· {{ liste.platz.bezeichnung }}</strong>
+      {% if liste.platz.ort %}<span class="text-muted">({{ liste.platz.ort }})</span>{% endif %}
+    {% elif liste.unverteilt %}<span class="badge bg-warning text-dark">noch ohne Platz</span>
+    {% endif %}
+    <span class="text-muted">{{ zeitspanne(liste.station) }}{% if not liste.platz and liste.station.ort %} · {{ liste.station.ort }}{% endif %}</span>
     <span class="badge bg-secondary">{{ liste.familien|length }}</span>
   </h3>
   {% if liste.familien %}

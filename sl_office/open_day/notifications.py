@@ -6,10 +6,12 @@ hat -- eine vollständige Programmübersicht wäre für die meisten falsch.
 """
 
 from models import Schueler, db
+from sl_office.open_day import plan_pdf
 from sl_office.open_day.service import (
     ablaufplan, plan_vermerken, stationsplan, zeitspanne)
+from sl_office.parent_portal.letterhead import branding
 from sl_office.parent_portal.letters import german_date
-from sl_office.parent_portal.mail_service import build_message, send_message
+from sl_office.parent_portal.mail_service import attach_pdf, build_message, send_message
 
 
 def _anrede(eintrag):
@@ -45,11 +47,14 @@ def plan_text(eintrag, event, plan=None, schule=""):
         zeilen.append(f"Sie sind der Gruppe {eintrag.gruppe} zugeteilt. "
                       "Ihr persönlicher Ablauf:")
         zeilen.append("")
-        for station, label in geplant:
-            ort = f" ({station.ort})" if station.ort else ""
-            zeilen.append(f"  {zeitspanne(station)}   {label}{ort}")
+        for station, label, platz in geplant:
+            # Der Platz geht vor: "Klasse 2b (Raum 12)" sagt mehr als der
+            # allgemeine Ort der Station.
+            ort = platz.beschriftung if platz else (station.ort or "")
+            zeilen.append(f"  {zeitspanne(station)}   {label}" + (f"   {ort}" if ort else ""))
         zeilen.append("")
         zeilen.append("Bitte finden Sie sich einige Minuten vor dem ersten Punkt ein.")
+        zeilen.append("Den Ablauf finden Sie auch im beigefügten PDF zum Ausdrucken.")
     else:
         zeilen.append("Sie haben keinen der angebotenen Programmpunkte ausgewählt. "
                       "Schauen Sie sich gerne in Ruhe bei uns um -- wir freuen uns "
@@ -76,9 +81,18 @@ def send_plan(app, eintrag, event=None, plan=None):
     schule = app.config.get("SCHOOL_NAME", "")
     betreff = (f"{event.titel} am {german_date(event.datum)}"
                if eintrag.teilnahme else f"Ihre Absage zum {event.titel}")
-    return send_message(app, build_message(
-        app, eintrag.email, betreff,
-        plan_text(eintrag, event, plan=plan, schule=schule)))
+    nachricht = build_message(app, eintrag.email, betreff,
+                              plan_text(eintrag, event, plan=plan, schule=schule))
+    if eintrag.teilnahme and ablaufplan(eintrag, plan):
+        # Ein klemmender Briefkopf darf die Nachricht nicht verhindern: der
+        # Ablauf steht ja auch im Text.
+        try:
+            attach_pdf(nachricht, plan_pdf.dateiname(event),
+                       plan_pdf.build_plan(event, eintrag, branding(app.config), plan))
+        except Exception:
+            app.logger.exception("Ablaufplan-PDF nicht erzeugt",
+                                 extra={"registration_id": eintrag.id})
+    return send_message(app, nachricht)
 
 
 def send_plans(app, eintraege, event, nur_offene=True):

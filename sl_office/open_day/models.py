@@ -10,6 +10,13 @@ Der Ablauf besteht aus drei Stationen, die zwei Gruppen in unterschiedlicher
 Reihenfolge durchlaufen. Welche Station wann und für welche Gruppe stattfindet,
 steht als Zeile in :class:`OpenDayStation` -- so lassen sich die Zeiten pflegen,
 ohne die Reihenfolge im Code zu verdrahten.
+
+Eine Station kann sich in mehrere :class:`OpenDayPlatz` aufteilen: In die
+Unterrichtshospitation geht niemand "in den Unterricht", sondern in die 2b bei
+Frau Meier in Raum 12; die OGS-Hospitation verteilt sich ebenso auf ihre
+Gruppen. Die Eltern wählen davon nichts aus -- sie kreuzen nur die Station an,
+die Verteilung auf die Plätze ist Sache der Schule. Stationen ohne Plätze
+bleiben, wie sie sind; die Schulführung braucht keine.
 """
 
 import datetime
@@ -107,9 +114,65 @@ class OpenDayStation(db.Model):
     ende = db.Column(db.Time, nullable=False)
     ort = db.Column(db.String(200))
 
+    plaetze = db.relationship("OpenDayPlatz", backref="station", cascade="all, delete-orphan",
+                              order_by="OpenDayPlatz.bezeichnung")
+
     @property
     def label(self):
         return STATION_LABELS.get(self.art, self.art)
+
+    @property
+    def teilt_sich_auf(self):
+        return bool(self.plaetze)
+
+
+class OpenDayPlatz(db.Model):
+    """Ein konkreter Hospitationsplatz innerhalb einer Station.
+
+    Für die Unterrichtshospitation eine Klasse mit Raum, für die OGS eine
+    Gruppe. ``kapazitaet`` bleibt leer, wenn die Zahl nicht begrenzt ist.
+    """
+
+    __tablename__ = "open_day_platz"
+    __table_args__ = (
+        db.UniqueConstraint("station_id", "bezeichnung", name="uq_open_day_platz"),
+        db.CheckConstraint("kapazitaet IS NULL OR kapazitaet > 0",
+                           name="ck_open_day_platz_kapazitaet"),
+    )
+    id = db.Column(db.Integer, primary_key=True)
+    station_id = db.Column(db.Integer, db.ForeignKey("open_day_station.id", ondelete="CASCADE"),
+                           nullable=False, index=True)
+    bezeichnung = db.Column(db.String(120), nullable=False)
+    ort = db.Column(db.String(200))
+    kapazitaet = db.Column(db.Integer)
+
+    @property
+    def beschriftung(self):
+        """Bezeichnung samt Ort, wie sie Eltern zu lesen bekommen."""
+        return f"{self.bezeichnung} ({self.ort})" if self.ort else self.bezeichnung
+
+
+class OpenDayZuteilung(db.Model):
+    """Welche Familie an welcher Station auf welchem Platz hospitiert.
+
+    Je Familie und Station höchstens eine Zeile -- das sichert die Datenbank
+    zu, damit niemand versehentlich in zwei Klassen gleichzeitig steht.
+    """
+
+    __tablename__ = "open_day_zuteilung"
+    __table_args__ = (
+        db.UniqueConstraint("registration_id", "station_id", name="uq_open_day_zuteilung"),
+    )
+    id = db.Column(db.Integer, primary_key=True)
+    registration_id = db.Column(db.Integer,
+                                db.ForeignKey("open_day_registration.id", ondelete="CASCADE"),
+                                nullable=False, index=True)
+    station_id = db.Column(db.Integer, db.ForeignKey("open_day_station.id", ondelete="CASCADE"),
+                           nullable=False, index=True)
+    platz_id = db.Column(db.Integer, db.ForeignKey("open_day_platz.id", ondelete="CASCADE"),
+                         nullable=False, index=True)
+
+    platz = db.relationship("OpenDayPlatz")
 
 
 class OpenDayRegistration(db.Model):
@@ -150,6 +213,9 @@ class OpenDayRegistration(db.Model):
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow,
                            onupdate=utcnow)
 
+    zuteilungen = db.relationship("OpenDayZuteilung", backref="registration",
+                                  cascade="all, delete-orphan")
+
     @property
     def wuensche(self):
         """Die gewünschten Stationen in natürlicher Reihenfolge."""
@@ -159,8 +225,15 @@ class OpenDayRegistration(db.Model):
 
     @property
     def signatur(self):
-        """Kurzform dessen, was im Ablaufplan steht."""
-        return f"{self.gruppe or 0}:{','.join(self.wuensche)}"
+        """Kurzform dessen, was im Ablaufplan steht.
+
+        Die Plätze gehören dazu: Wird eine Familie in eine andere Klasse
+        verschoben, ist der verschickte Plan überholt, auch wenn Gruppe und
+        Wünsche gleich geblieben sind.
+        """
+        plaetze = ",".join(str(zeile.platz_id)
+                           for zeile in sorted(self.zuteilungen, key=lambda z: z.station_id))
+        return f"{self.gruppe or 0}:{','.join(self.wuensche)}:{plaetze}"
 
     @property
     def plan_veraltet(self):

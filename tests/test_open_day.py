@@ -15,12 +15,14 @@ from werkzeug.security import generate_password_hash  # noqa: E402
 
 from app import create_app  # noqa: E402
 from models import Einschulungsjahr, GlobalSettings, Schueler, User, db  # noqa: E402
+from sl_office.parent_portal.models import ParentRegistration  # noqa: E402
 from sl_office.open_day import notifications  # noqa: E402
 from sl_office.open_day.models import (  # noqa: E402
-    GRUPPEN, OpenDayEvent, OpenDayRegistration, OpenDayStation,
+    GRUPPEN, OpenDayEvent, OpenDayPlatz, OpenDayRegistration, OpenDayStation, OpenDayZuteilung,
 )
 from sl_office.open_day.service import (  # noqa: E402
-    ablaufplan, einteilen, standard_stationen, stationsplan, veroeffentlichtes_event, zaehlung,
+    ablaufplan, einteilen, ohne_platz, plaetze_zuteilen, standard_stationen, stationsplan,
+    veroeffentlichtes_event, zaehlung, zuteilung_je_station,
 )
 from sl_office.parent_portal.access_service import create_activation_grant  # noqa: E402
 
@@ -153,16 +155,16 @@ class GroupingTests(_OpenDayFixture, unittest.TestCase):
             zweite = self._anmelden("Zwei", ("fuehrung", "unterricht", "ogs"), gruppe=2)
             plan = stationsplan(db.session.get(OpenDayEvent, self.event_id))
 
-            self.assertEqual([station.art for station, _ in ablaufplan(erste, plan)],
+            self.assertEqual([station.art for station, _, _ in ablaufplan(erste, plan)],
                              ["fuehrung", "unterricht", "ogs"])
-            self.assertEqual([station.art for station, _ in ablaufplan(zweite, plan)],
+            self.assertEqual([station.art for station, _, _ in ablaufplan(zweite, plan)],
                              ["unterricht", "fuehrung", "ogs"])
 
     def test_der_ablauf_enthaelt_nur_die_gewaehlten_stationen(self):
         with self.app.app_context():
             eintrag = self._anmelden("Wenig", ("ogs",), gruppe=1)
             plan = ablaufplan(eintrag, stationsplan(db.session.get(OpenDayEvent, self.event_id)))
-            self.assertEqual([station.art for station, _ in plan], ["ogs"])
+            self.assertEqual([station.art for station, _, _ in plan], ["ogs"])
 
 
 class ParentFormTests(_OpenDayFixture, unittest.TestCase):
@@ -429,6 +431,340 @@ class LetterTests(_OpenDayFixture, unittest.TestCase):
         ueberschrift = next(zeile for zeile in DEFAULT_BODY.splitlines()
                             if zeile.startswith("# Tag der offenen Tür"))
         self.assertIsNone(fill(ueberschrift, {"tdot": ""}))
+
+
+class PlatzTests(_OpenDayFixture, unittest.TestCase):
+    """Die Feineinteilung: Eltern wählen die Station, die Schule die Klasse."""
+
+    def _plaetze(self, art, namen, kapazitaet=None):
+        """Je Gruppe dieselben Plätze anlegen; liefert {gruppe: [platz, ...]}."""
+        plan = stationsplan(db.session.get(OpenDayEvent, self.event_id))
+        angelegt = {}
+        for gruppe in GRUPPEN:
+            station = plan[(gruppe, art)]
+            for name in namen:
+                station.plaetze.append(OpenDayPlatz(bezeichnung=name, ort=f"Raum {name[-2:]}",
+                                                    kapazitaet=kapazitaet))
+            angelegt[gruppe] = station.plaetze
+        db.session.commit()
+        return angelegt
+
+    def test_familien_verteilen_sich_gleichmaessig_auf_die_klassen(self):
+        with self.app.app_context():
+            self._plaetze("unterricht", ["Klasse 1a", "Klasse 2b", "Klasse 3c"])
+            for nummer in range(12):
+                self._anmelden(f"Kind{nummer:02d}", ("unterricht",),
+                               gruppe=1 if nummer % 2 == 0 else 2)
+            event = db.session.get(OpenDayEvent, self.event_id)
+            zugeteilt, offen = plaetze_zuteilen(event)
+            db.session.commit()
+
+            self.assertEqual((zugeteilt, offen), (12, 0))
+            belegung = {}
+            for zeile in OpenDayZuteilung.query.all():
+                belegung[zeile.platz_id] = belegung.get(zeile.platz_id, 0) + 1
+            self.assertEqual(sorted(belegung.values()), [2] * 6)
+
+    def test_die_kapazitaet_wird_eingehalten_und_engpaesse_gemeldet(self):
+        with self.app.app_context():
+            self._plaetze("unterricht", ["Klasse 1a"], kapazitaet=2)
+            for nummer in range(4):
+                self._anmelden(f"Voll{nummer}", ("unterricht",), gruppe=1)
+            event = db.session.get(OpenDayEvent, self.event_id)
+            zugeteilt, offen = plaetze_zuteilen(event)
+            db.session.commit()
+
+            self.assertEqual((zugeteilt, offen), (2, 2))
+            self.assertEqual(len(ohne_platz(event)), 2)
+
+    def test_stationen_ohne_plaetze_bleiben_unberuehrt(self):
+        """Die Schulführung teilt sich nicht auf -- sie braucht keine Zuteilung."""
+        with self.app.app_context():
+            self._plaetze("unterricht", ["Klasse 1a"])
+            eintrag = self._anmelden("Beides", ("fuehrung", "unterricht"), gruppe=1)
+            event = db.session.get(OpenDayEvent, self.event_id)
+            plaetze_zuteilen(event)
+            db.session.commit()
+
+            self.assertEqual(len(eintrag.zuteilungen), 1)
+            plan = ablaufplan(eintrag, stationsplan(event))
+            self.assertIsNone(plan[0][2], "Führung ohne Platz")
+            self.assertIsNotNone(plan[1][2], "Unterricht mit Klasse")
+
+    def test_gruppenwechsel_raeumt_den_alten_platz_weg(self):
+        """Sonst stünde die Familie in einer Klasse, die ihre Gruppe nicht besucht."""
+        with self.app.app_context():
+            self._plaetze("unterricht", ["Klasse 1a"])
+            eintrag = self._anmelden("Wechsel", ("unterricht",), gruppe=1)
+            event = db.session.get(OpenDayEvent, self.event_id)
+            plaetze_zuteilen(event)
+            db.session.commit()
+            alte_station = next(iter(zuteilung_je_station(eintrag))) 
+
+            eintrag.gruppe = 2
+            db.session.flush()
+            plaetze_zuteilen(event)
+            db.session.commit()
+
+            neue = zuteilung_je_station(eintrag)
+            self.assertEqual(len(neue), 1)
+            self.assertNotIn(alte_station, neue)
+            self.assertEqual(neue[next(iter(neue))].platz.station.gruppe, 2)
+
+    def test_abgewaehlter_programmpunkt_hebt_die_zuteilung_auf(self):
+        with self.app.app_context():
+            self._plaetze("unterricht", ["Klasse 1a"])
+            eintrag = self._anmelden("Abwahl", ("unterricht",), gruppe=1)
+            event = db.session.get(OpenDayEvent, self.event_id)
+            plaetze_zuteilen(event)
+            db.session.commit()
+            self.assertEqual(len(eintrag.zuteilungen), 1)
+
+            eintrag.wunsch_unterricht = False
+            db.session.flush()
+            plaetze_zuteilen(event)
+            db.session.commit()
+            self.assertEqual(len(eintrag.zuteilungen), 0)
+
+    def test_ein_geaenderter_platz_macht_den_verschickten_plan_ueberholt(self):
+        with self.app.app_context():
+            plaetze = self._plaetze("unterricht", ["Klasse 1a", "Klasse 2b"])
+            eintrag = self._anmelden("Umzug", ("unterricht",), gruppe=1)
+            event = db.session.get(OpenDayEvent, self.event_id)
+            plaetze_zuteilen(event)
+            db.session.commit()
+            notifications.send_plans(self.app, [eintrag], event)
+            self.assertFalse(eintrag.plan_veraltet)
+
+            zeile = eintrag.zuteilungen[0]
+            anderer = next(platz for platz in plaetze[1] if platz.id != zeile.platz_id)
+            zeile.platz_id = anderer.id
+            db.session.commit()
+            self.assertTrue(eintrag.plan_veraltet)
+
+    def test_der_platz_steht_in_mail_und_pdf(self):
+        from sl_office.open_day import plan_pdf
+        from sl_office.parent_portal.letterhead import branding
+        with self.app.app_context():
+            self._plaetze("unterricht", ["Klasse 2b"])
+            eintrag = self._anmelden("Papier", ("unterricht",), gruppe=1)
+            event = db.session.get(OpenDayEvent, self.event_id)
+            plaetze_zuteilen(event)
+            db.session.commit()
+
+            self.assertIn("Klasse 2b", notifications.plan_text(eintrag, event))
+            daten = plan_pdf.build_plan(event, eintrag, branding(self.app.config))
+            self.assertTrue(daten.startswith(b"%PDF-"))
+
+    def test_die_mail_haengt_den_ablaufplan_als_pdf_an(self):
+        with self.app.app_context():
+            versendet = []
+            eintrag = self._anmelden("Anhang", ("unterricht",), gruppe=1)
+            event = db.session.get(OpenDayEvent, self.event_id)
+            from sl_office.open_day import notifications as modul
+            original = modul.send_message
+            modul.send_message = lambda app, message: versendet.append(message) or True
+            try:
+                modul.send_plan(self.app, eintrag, event)
+            finally:
+                modul.send_message = original
+
+            anhaenge = [teil.get_filename() for teil in versendet[0].iter_attachments()]
+            self.assertEqual(anhaenge, ["Ablaufplan Tag der offenen Tür.pdf"])
+
+    def test_handzuteilung_setzt_und_hebt_auf(self):
+        client = self._login_staff()
+        with self.app.app_context():
+            plaetze = self._plaetze("unterricht", ["Klasse 1a", "Klasse 2b"])
+            eintrag = self._anmelden("Hand", ("unterricht",), gruppe=1)
+            eintrag_id, station_id = eintrag.id, plaetze[1][0].station_id
+            ziel_id = plaetze[1][1].id
+        pfad = (f"/admin/tag-der-offenen-tuer/{self.event_id}/feineinteilung/"
+                f"{eintrag_id}/{station_id}")
+        client.post(pfad, data={"platz": str(ziel_id)}, follow_redirects=True)
+        with self.app.app_context():
+            eintrag = db.session.get(OpenDayRegistration, eintrag_id)
+            self.assertEqual(eintrag.zuteilungen[0].platz_id, ziel_id)
+        client.post(pfad, data={"platz": ""}, follow_redirects=True)
+        with self.app.app_context():
+            self.assertEqual(db.session.get(OpenDayRegistration, eintrag_id).zuteilungen, [])
+
+    def test_ein_platz_aus_einer_fremden_station_wird_abgewiesen(self):
+        client = self._login_staff()
+        with self.app.app_context():
+            plaetze = self._plaetze("unterricht", ["Klasse 1a"])
+            eintrag = self._anmelden("Fremd", ("unterricht",), gruppe=1)
+            eintrag_id = eintrag.id
+            station_id = plaetze[1][0].station_id      # Gruppe 1
+            fremder_platz = plaetze[2][0].id           # Gruppe 2
+        antwort = client.post(
+            f"/admin/tag-der-offenen-tuer/{self.event_id}/feineinteilung/"
+            f"{eintrag_id}/{station_id}",
+            data={"platz": str(fremder_platz)}, follow_redirects=True)
+        self.assertIn("gehört zu einer anderen Station", antwort.get_data(as_text=True))
+        with self.app.app_context():
+            self.assertEqual(db.session.get(OpenDayRegistration, eintrag_id).zuteilungen, [])
+
+    def test_klassen_lassen_sich_ueber_das_formular_pflegen(self):
+        """Die Felder liegen im großen Formular und tragen die Stationsnummer."""
+        client = self._login_staff()
+        with self.app.app_context():
+            station = OpenDayStation.query.filter_by(
+                event_id=self.event_id, gruppe=1, art="unterricht").one()
+            station_id = station.id
+            felder = {f"station-{s.id}-beginn": s.beginn.strftime("%H:%M")
+                      for s in OpenDayStation.query.filter_by(event_id=self.event_id)}
+            felder.update({f"station-{s.id}-ende": s.ende.strftime("%H:%M")
+                           for s in OpenDayStation.query.filter_by(event_id=self.event_id)})
+
+        client.post(f"/admin/tag-der-offenen-tuer/{self.event_id}/station/{station_id}/platz",
+                    data=dict(felder, **{f"neuer-platz-{station_id}-bezeichnung": "Klasse 2b",
+                                         f"neuer-platz-{station_id}-ort": "Raum 12",
+                                         f"neuer-platz-{station_id}-kapazitaet": "8"}),
+                    follow_redirects=True)
+        with self.app.app_context():
+            platz = OpenDayPlatz.query.one()
+            self.assertEqual((platz.bezeichnung, platz.ort, platz.kapazitaet),
+                             ("Klasse 2b", "Raum 12", 8))
+            platz_id = platz.id
+
+        # Umbenennen über das Hauptformular
+        with self.app.app_context():
+            felder = {f"station-{s.id}-beginn": s.beginn.strftime("%H:%M")
+                      for s in OpenDayStation.query.filter_by(event_id=self.event_id)}
+            felder.update({f"station-{s.id}-ende": s.ende.strftime("%H:%M")
+                           for s in OpenDayStation.query.filter_by(event_id=self.event_id)})
+        client.post(f"/admin/tag-der-offenen-tuer/{self.event_id}",
+                    data=dict(felder, titel="Tag der offenen Tür", datum="2027-03-05",
+                              **{f"platz-{platz_id}-bezeichnung": "Klasse 3c",
+                                 f"platz-{platz_id}-ort": "Raum 21",
+                                 f"platz-{platz_id}-kapazitaet": ""}),
+                    follow_redirects=True)
+        with self.app.app_context():
+            platz = db.session.get(OpenDayPlatz, platz_id)
+            self.assertEqual((platz.bezeichnung, platz.ort, platz.kapazitaet),
+                             ("Klasse 3c", "Raum 21", None))
+
+        client.post(f"/admin/tag-der-offenen-tuer/{self.event_id}/platz/{platz_id}/loeschen",
+                    follow_redirects=True)
+        with self.app.app_context():
+            self.assertEqual(OpenDayPlatz.query.count(), 0)
+
+    def test_teilnehmerlisten_werden_je_klasse_gefuehrt(self):
+        with self.app.app_context():
+            self._plaetze("unterricht", ["Klasse 1a", "Klasse 2b"])
+            self._anmelden("Listig", ("unterricht",), gruppe=1)
+            event = db.session.get(OpenDayEvent, self.event_id)
+            plaetze_zuteilen(event)
+            db.session.commit()
+        seite = self._login_staff().get(
+            f"/admin/tag-der-offenen-tuer/{self.event_id}/listen").get_data(as_text=True)
+        self.assertIn("Klasse 1a", seite)
+        self.assertIn("Klasse 2b", seite)
+
+
+class ProgressTests(unittest.TestCase):
+    """Der Stand des Anmeldeverfahrens, wie Eltern ihn im Portal sehen."""
+
+    def setUp(self):
+        self.app = create_app("testing")
+        self.client = self.app.test_client()
+        with self.app.app_context():
+            db.session.add_all([GlobalSettings(einschulungsjahr=JAHR),
+                                Einschulungsjahr(jahr=JAHR, ist_aktuell=True)])
+            kind = Schueler(vorname="Stand", nachname="Kind", einschulungsjahr=JAHR)
+            db.session.add(kind)
+            db.session.flush()
+            _, token = create_activation_grant(kind.id, "first_access")
+            db.session.commit()
+            self.student_id, self.token = kind.id, token
+
+    def tearDown(self):
+        with self.app.app_context():
+            db.session.remove()
+            db.drop_all()
+
+    def _anmelden(self):
+        self.client.post(f"/eltern/aktivieren/{self.token}",
+                         data={"email": "mutter@example.de", "display_name": "Anna Beispiel"},
+                         follow_redirects=True)
+
+    def test_das_dashboard_zeigt_die_schritte_des_verfahrens(self):
+        self._anmelden()
+        seite = self.client.get("/eltern/uebersicht").get_data(as_text=True)
+        self.assertIn("Ihr aktueller Stand", seite)
+        for titel in ("Zugang eingerichtet", "Anmeldetermin wählen",
+                      "Anmeldeformular ausfüllen", "Anmeldegespräch"):
+            self.assertIn(titel, seite)
+
+    def test_der_zweite_zugang_wird_als_offen_vermerkt(self):
+        self._anmelden()
+        seite = self.client.get("/eltern/uebersicht").get_data(as_text=True)
+        self.assertIn("zweite Zugang aus dem Anmeldeschreiben", seite)
+
+    def test_ein_begonnenes_formular_gilt_als_in_bearbeitung(self):
+        from sl_office.parent_portal.progress import prozessschritte
+        with self.app.app_context():
+            kind = db.session.get(Schueler, self.student_id)
+            entwurf = ParentRegistration(schueler_id=kind.id, status="draft",
+                                         data={"kind_vorname": "Stand"})
+            db.session.add(entwurf)
+            db.session.commit()
+            schritte = prozessschritte(kind, None, entwurf, lambda slot, event: "")
+            formular = next(s for s in schritte if s["titel"].startswith("Anmeldeformular"))
+            self.assertEqual(formular["zustand"], "laeuft")
+
+    def test_ein_uebermitteltes_formular_gilt_als_erledigt(self):
+        from sl_office.parent_portal.progress import fortschritt, prozessschritte
+        with self.app.app_context():
+            kind = db.session.get(Schueler, self.student_id)
+            abgegeben = ParentRegistration(
+                schueler_id=kind.id, status="submitted", data={"kind_vorname": "Stand"},
+                submitted_at=datetime.datetime(2026, 10, 1, tzinfo=datetime.UTC))
+            db.session.add(abgegeben)
+            db.session.commit()
+            schritte = prozessschritte(kind, None, abgegeben, lambda slot, event: "")
+            formular = next(s for s in schritte if s["titel"].startswith("Anmeldeformular"))
+            self.assertEqual(formular["zustand"], "erledigt")
+            self.assertIn("01.10.2026", formular["text"])
+            self.assertGreater(fortschritt(schritte), 0)
+
+    def test_der_tag_der_offenen_tuer_erscheint_nur_wenn_ausgeschrieben(self):
+        from sl_office.parent_portal.progress import prozessschritte
+        with self.app.app_context():
+            kind = db.session.get(Schueler, self.student_id)
+            ohne = prozessschritte(kind, None, None, lambda slot, event: "")
+            self.assertFalse(any("offenen Tür" in s["titel"] for s in ohne))
+
+            event = OpenDayEvent(school_year=JAHR, status="published",
+                                 datum=datetime.date(2026, 11, 14))
+            standard_stationen(event)
+            db.session.add(event)
+            db.session.commit()
+            mit = prozessschritte(kind, None, None, lambda slot, event: "",
+                                  open_day_event=event)
+            tag = next(s for s in mit if "offenen Tür" in s["titel"])
+            self.assertEqual(tag["zustand"], "offen")
+
+    def test_ein_vergangenes_gespraech_gilt_als_gefuehrt(self):
+        from sl_office.parent_portal.models import AppointmentEvent, AppointmentSlot
+        from sl_office.parent_portal.progress import prozessschritte
+        with self.app.app_context():
+            kind = db.session.get(Schueler, self.student_id)
+            frueher = datetime.datetime(2026, 1, 5, 9, 0)
+            event = AppointmentEvent(title="Anmeldung", school_year=JAHR, status="published")
+            db.session.add(event)
+            db.session.flush()
+            slot = AppointmentSlot(event_id=event.id, starts_at=frueher,
+                                   ends_at=frueher + datetime.timedelta(minutes=40))
+            db.session.add(slot)
+            db.session.commit()
+            schritte = prozessschritte(kind, (None, slot, event), None,
+                                       lambda slot, event: "Mo 05.01.2026, 09:00 Uhr",
+                                       jetzt=datetime.datetime(2026, 3, 1))
+            gespraech = next(s for s in schritte if s["titel"] == "Anmeldegespräch")
+            self.assertEqual(gespraech["zustand"], "erledigt")
+            self.assertIn("stattgefunden", gespraech["text"])
 
 
 if __name__ == "__main__":

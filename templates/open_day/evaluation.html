@@ -6,6 +6,8 @@
     <p class="text-muted mb-0">{{ event.datum.strftime('%d.%m.%Y') }}</p>
   </div>
   <div class="d-flex gap-2">
+    <a class="btn btn-outline-primary" href="{{ url_for('open_day.fine_assignment', event_id=event.id) }}">
+      <i class="bi bi-diagram-3"></i> Feineinteilung</a>
     <a class="btn btn-outline-secondary" href="{{ url_for('open_day.rosters', event_id=event.id) }}">
       <i class="bi bi-printer"></i> Teilnehmerlisten</a>
     <a class="btn btn-outline-secondary" href="{{ url_for('open_day.detail', event_id=event.id) }}">
@@ -18,10 +20,11 @@
                     ('Zusagen', werte.zusagen, 'bg-success'),
                     ('Absagen', werte.absagen, 'bg-secondary'),
                     ('Ohne Gruppe', werte.ohne_gruppe, 'bg-warning text-dark'),
+                    ('Ohne Platz', werte.ohne_platz, 'bg-warning text-dark'),
                     ('Mail offen', werte.plan_offen, 'bg-info text-dark'),
                     ('Mail überholt', werte.plan_veraltet, 'bg-danger')] %}
   {% for titel, wert, farbe in kacheln %}
-  <div class="col-6 col-md-2">
+  <div class="col-6 col-md-2 col-lg">
     <div class="card {{ farbe }} h-100 shadow-sm"><div class="card-body text-center px-1 py-2">
       <div class="small text-uppercase">{{ titel }}</div>
       <div class="h4 mb-0">{{ wert }}</div>
@@ -115,8 +118,12 @@
           {% else %}<span class="text-muted">–</span>{% endif %}
         </td>
         <td class="small">
-          {% for station, label in zeile.plan %}
-            {{ zeitspanne(station) }} {{ label }}<br>
+          {% for station, label, platz in zeile.plan %}
+            {{ zeitspanne(station) }} {{ label }}{% if platz %}
+              <span class="text-muted">· {{ platz.beschriftung }}</span>
+            {% elif station.plaetze %}
+              <span class="badge bg-warning text-dark">ohne Platz</span>
+            {% endif %}<br>
           {% else %}<span class="text-muted">–</span>{% endfor %}
         </td>
         <td>
@@ -125,12 +132,17 @@
           {% elif eintrag.plan_gesendet_am %}
             <span class="badge bg-success">{{ eintrag.plan_gesendet_am.strftime('%d.%m.') }}</span>
           {% else %}<span class="badge bg-light text-dark">offen</span>{% endif %}
+          <br>
           {% if not readonly %}
           <form method="post" class="d-inline"
                 action="{{ url_for('open_day.send_single', event_id=event.id, registration_id=eintrag.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="btn btn-sm btn-link p-0" title="Ablaufplan senden">senden</button>
           </form>
+          {% endif %}
+          {% if eintrag.teilnahme %}
+          <a class="btn btn-sm btn-link p-0 ms-1" title="Ablaufplan als PDF"
+             href="{{ url_for('open_day.plan_document', event_id=event.id, registration_id=eintrag.id) }}">PDF</a>
           {% endif %}
         </td>
       </tr>

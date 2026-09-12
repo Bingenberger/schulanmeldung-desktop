@@ -54,7 +54,10 @@
 
     <h3 class="h5">Ablauf der beiden Gruppen</h3>
     <p class="text-muted">Beide Gruppen sehen dasselbe Programm in unterschiedlicher Reihenfolge.
-      Familien werden nur zu den Stationen eingeteilt, die sie angekreuzt haben.</p>
+      Familien werden nur zu den Stationen eingeteilt, die sie angekreuzt haben.
+      Wo sich eine Station auf mehrere Klassen oder OGS-Gruppen verteilt, legt ihr sie hier an –
+      die Eltern wählen davon nichts aus, die Verteilung nehmt ihr in der
+      <a href="{{ url_for('open_day.fine_assignment', event_id=event.id) }}">Feineinteilung</a> vor.</p>
     <div class="row g-3 mb-4">
       {% for gruppe in gruppen %}
       <div class="col-lg-6">
@@ -79,6 +82,46 @@
               <input class="form-control form-control-sm" name="station-{{ station.id }}-ort"
                      placeholder="Ort" value="{{ station.ort or '' }}"
                      aria-label="{{ station.label }} Ort">
+            </div>
+            {% for platz in station.plaetze %}
+            <div class="col-5">
+              <input class="form-control form-control-sm" required
+                     name="platz-{{ platz.id }}-bezeichnung" value="{{ platz.bezeichnung }}"
+                     aria-label="Bezeichnung">
+            </div>
+            <div class="col-4">
+              <input class="form-control form-control-sm" name="platz-{{ platz.id }}-ort"
+                     placeholder="Raum" value="{{ platz.ort or '' }}" aria-label="Raum">
+            </div>
+            <div class="col-2">
+              <input class="form-control form-control-sm" type="number" min="1"
+                     name="platz-{{ platz.id }}-kapazitaet" placeholder="max"
+                     value="{{ platz.kapazitaet or '' }}" aria-label="Höchstzahl">
+            </div>
+            <div class="col-1 text-end">
+              <button class="btn btn-sm btn-link text-danger p-0" formnovalidate
+                      formaction="{{ url_for('open_day.delete_platz', event_id=event.id, platz_id=platz.id) }}"
+                      title="„{{ platz.bezeichnung }}“ entfernen">&times;</button>
+            </div>
+            {% endfor %}
+            <div class="col-12">
+              <details class="small">
+                <summary class="text-muted">Klasse bzw. Gruppe hinzufügen</summary>
+                <div class="row g-2 mt-1">
+                  <div class="col-5"><input class="form-control form-control-sm"
+                    name="neuer-platz-{{ station.id }}-bezeichnung" placeholder="z. B. Klasse 2b"
+                    aria-label="Bezeichnung"></div>
+                  <div class="col-4"><input class="form-control form-control-sm"
+                    name="neuer-platz-{{ station.id }}-ort" placeholder="Raum" aria-label="Raum"></div>
+                  <div class="col-2"><input class="form-control form-control-sm" type="number"
+                    min="1" name="neuer-platz-{{ station.id }}-kapazitaet" placeholder="max"
+                    aria-label="Höchstzahl"></div>
+                  <div class="col-1 text-end"><button class="btn btn-sm btn-outline-secondary"
+                    formnovalidate
+                    formaction="{{ url_for('open_day.add_platz', event_id=event.id, station_id=station.id) }}"
+                    >+</button></div>
+                </div>
+              </details>
             </div>
           </div>
           {% endif %}

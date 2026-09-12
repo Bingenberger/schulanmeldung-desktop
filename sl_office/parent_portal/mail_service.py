@@ -35,6 +35,12 @@ def build_message(app, recipient, subject, body):
     return message
 
 
+def attach_pdf(message, filename, payload):
+    """Ein PDF an eine fertige Nachricht hängen."""
+    message.add_attachment(payload, maintype="application", subtype="pdf", filename=filename)
+    return message
+
+
 def staff_recipient(app):
     """Adresse der Schule für Benachrichtigungen; ohne Angabe geht nichts raus."""
     return app.config.get("NOTIFY_MAIL") or app.config.get("SCHOOL_CONTACT_MAIL") or ""

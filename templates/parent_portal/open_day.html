@@ -9,12 +9,14 @@
   {% if eintrag and eintrag.teilnahme and plan %}
   <div class="alert alert-success">
     <p class="fw-semibold mb-2">Ihr Ablauf (Gruppe {{ eintrag.gruppe }}):</p>
-    <ul class="mb-0 list-unstyled">
-      {% for station, label in plan %}
+    <ul class="mb-2 list-unstyled">
+      {% for station, label, platz in plan %}
       <li>{{ station.beginn.strftime('%H:%M') }}–{{ station.ende.strftime('%H:%M') }} Uhr
-        &nbsp; {{ label }}{% if station.ort %} ({{ station.ort }}){% endif %}</li>
+        &nbsp; {{ label }}{% if platz %} – {{ platz.beschriftung }}{% elif station.ort %} ({{ station.ort }}){% endif %}</li>
       {% endfor %}
     </ul>
+    <a class="btn btn-sm btn-outline-success" href="{{ url_for('parent_portal.open_day_plan') }}">
+      <i class="bi bi-file-earmark-pdf"></i> Ablaufplan als PDF</a>
   </div>
   {% endif %}
 
