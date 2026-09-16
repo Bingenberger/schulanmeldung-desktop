@@ -27,15 +27,29 @@
 
   <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
     <div class="container">
-      <a class="navbar-brand" href="{{ url_for('index') }}">
-        <i class="bi bi-mortarboard-fill"></i> Einschulung
-        {% if current_user.is_authenticated and active_school_year %}
+      <a class="navbar-brand" href="{{ url_for('parent_portal.start') if parent_area else url_for('index') }}">
+        <i class="bi bi-mortarboard-fill"></i> {{ 'Elternportal' if parent_area else 'Einschulung' }}
+        {% if not parent_area and current_user.is_authenticated and active_school_year %}
         <span class="badge {{ 'bg-secondary' if not on_current_school_year else 'bg-primary' }} align-middle ms-1"
               style="font-size:.7rem">{{ active_school_year }}</span>
         {% endif %}
       </a>
 
-      {% if current_user.is_authenticated %}
+      {% if parent_area %}
+      {# Im Elternbereich gibt es keine Verwaltungsnavigation: "Anmelden" führte
+         sonst zur Passwortanmeldung der Schule, die Eltern nichts nützt. #}
+      {% if parent_access %}
+      <div class="d-flex align-items-center gap-3">
+        <a class="nav-link text-white" href="{{ url_for('parent_portal.dashboard') }}">
+          <i class="bi bi-house"></i> Übersicht</a>
+        <form method="post" action="{{ url_for('parent_portal.logout') }}" class="m-0">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-link nav-link text-white p-0">
+            <i class="bi bi-box-arrow-right"></i> Abmelden</button>
+        </form>
+      </div>
+      {% endif %}
+      {% elif current_user.is_authenticated %}
       {% set may_manage = current_user.role in ['Administrator', 'Schulleitung', 'Sekretariat'] %}
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#hauptnavigation"
               aria-controls="hauptnavigation" aria-expanded="false" aria-label="Navigation umschalten">

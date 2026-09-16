@@ -46,10 +46,28 @@ def staff_recipient(app):
     return app.config.get("NOTIFY_MAIL") or app.config.get("SCHOOL_CONTACT_MAIL") or ""
 
 
-def send_parent_login_link(app, recipient, link, child_name):
-    message = build_message(
-        app, recipient, "Ihr Zugangslink zur Schulanmeldung",
-        f"Guten Tag,\n\nüber diesen Link erreichen Sie den Elternbereich für {child_name}:\n{link}\n\n"
-        "Der Link ist 15 Minuten gültig und kann nur einmal verwendet werden.\n",
-    )
-    return send_message(app, message)
+def send_parent_login_link(app, recipient, link, child_name, start_url=""):
+    zeilen = [
+        "Guten Tag,",
+        "",
+        f"über diesen Link melden Sie sich im Elternportal für {child_name} an:",
+        link,
+        "",
+        "Der Link ist 15 Minuten gültig und funktioniert nur einmal. Ein Passwort "
+        "brauchen Sie nicht.",
+    ]
+    if start_url:
+        zeilen += [
+            "",
+            "Wenn Sie sich später wieder anmelden möchten, geben Sie einfach auf",
+            start_url,
+            "Ihre E-Mail-Adresse ein – Sie bekommen dann einen neuen Link.",
+        ]
+    zeilen += [
+        "",
+        "Falls Sie keinen Anmeldelink angefordert haben, können Sie diese Nachricht "
+        "ignorieren.",
+        "",
+    ]
+    return send_message(app, build_message(
+        app, recipient, "Ihr Anmeldelink zum Elternportal", "\n".join(zeilen)))

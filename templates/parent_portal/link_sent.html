@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mx-auto text-center" style="max-width: 36rem">
+  <i class="bi bi-envelope-check text-success" style="font-size: 3.5rem"></i>
+  <h1 class="h3 mt-2">Schauen Sie jetzt in Ihr Postfach</h1>
+  {% if masked %}
+  <p class="lead">Wir haben einen Anmeldelink an <strong>{{ email }}</strong> geschickt.</p>
+  {% else %}
+  <p class="lead">Wenn <strong>{{ email }}</strong> bei uns hinterlegt ist, ist der Anmeldelink
+    jetzt unterwegs.</p>
+  {% endif %}
+  <p>Öffnen Sie die Mail und tippen Sie auf den Link. Er ist <strong>15 Minuten</strong>
+    gültig.</p>
+
+  <div class="card text-start mt-4"><div class="card-body small">
+    <p class="fw-semibold mb-2">Keine Mail angekommen?</p>
+    <ul class="mb-0">
+      <li>Warten Sie ein bis zwei Minuten und schauen Sie auch im Spam-Ordner nach.</li>
+      {% if not masked %}
+      <li>Prüfen Sie, ob Sie dieselbe Adresse eingegeben haben wie beim ersten Einrichten.</li>
+      {% endif %}
+      <li>Haben Sie noch nie einen Zugang eingerichtet, nutzen Sie bitte den Link aus dem Brief
+        der Schule.</li>
+    </ul>
+  </div></div>
+  <a class="btn btn-link mt-3" href="{{ url_for('parent_portal.start') }}">Andere Adresse eingeben</a>
+</div>
+{% endblock %}

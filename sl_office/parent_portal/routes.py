@@ -15,7 +15,10 @@ from sl_office.appointments.service import (AssignedByStaff, BookingError,
                                             active_booking_for_student, book_slot, cancel_booking,
                                             moment_label, naive_utc, slot_label)
 from sl_office.parent_portal import letterhead, progress
-from sl_office.parent_portal.access_service import InvalidAccessToken, consume_activation_grant, consume_login_token, create_login_token, normalize_email
+from sl_office.parent_portal.access_service import (
+    InvalidAccessToken, consume_activation_grant, consume_login_token, create_login_token,
+    letter_link_state, login_link_recently_sent, mask_email, normalize_email,
+)
 from sl_office.parent_portal.mail_service import send_parent_login_link
 from sl_office.parent_portal import notifications as registration_mail
 from sl_office.parent_portal.models import AppointmentBooking, AppointmentEvent, AppointmentSlot, ParentAccess, ParentRegistration, utcnow
@@ -55,34 +58,66 @@ def _start_session(access):
     session.permanent = True
 
 
+@parent_portal_bp.context_processor
+def _parent_navigation():
+    """Die Navigation des Elternbereichs statt der der Schulverwaltung.
+
+    Ohne das führten Schriftzug und "Anmelden" oben auf jeder Elternseite zur
+    Anmeldung der Verwaltung -- dort suchen Eltern dann nach einem Passwort,
+    das es für sie gar nicht gibt.
+    """
+    return {"parent_area": True, "parent_access": _current_parent_access()}
+
+
 @parent_portal_bp.get("/")
 def start():
+    """Die Anmeldung für Eltern: E-Mail-Adresse eingeben, Link kommt per Mail."""
     if _current_parent_access():
         return redirect(url_for("parent_portal.dashboard"))
     return render_template("parent_portal/start.html")
 
 
+def _send_login_link(access):
+    """Einen Anmeldelink an die hinterlegte Adresse schicken.
+
+    Innerhalb der Sperrfrist geht nichts hinaus; die Eltern sehen trotzdem
+    dieselbe Bestätigung -- die erste Mail ist ja unterwegs.
+    """
+    if login_link_recently_sent(access.id):
+        return
+    _, token = create_login_token(access.id)
+    record("parent_login_link_requested", "parent_access", access.id,
+           actor_type="parent", actor_id=access.id)
+    db.session.commit()
+    link = url_for("parent_portal.login", token=token, _external=True)
+    student = db.session.get(Schueler, access.schueler_id)
+    try:
+        send_parent_login_link(current_app, access.email_normalized, link,
+                               f"{student.vorname} {student.nachname}",
+                               url_for("parent_portal.start", _external=True))
+    except Exception:
+        current_app.logger.exception("Parent login mail failed")
+
+
 @parent_portal_bp.route("/link-anfordern", methods=["GET", "POST"])
 def request_login_link():
-    if request.method == "POST":
-        email = normalize_email(request.form.get("email", ""))
-        access = db.session.scalar(select(ParentAccess).where(
-            ParentAccess.email_normalized == email, ParentAccess.status == "active"
-        )) if email else None
-        if access:
-            _, token = create_login_token(access.id)
-            db.session.commit()
-            link = url_for("parent_portal.login", token=token, _external=True)
-            student = db.session.get(Schueler, access.schueler_id)
-            try:
-                send_parent_login_link(current_app, email, link, f"{student.vorname} {student.nachname}")
-            except Exception:
-                current_app.logger.exception("Parent login mail failed")
-        else:
-            db.session.rollback()
-        flash("Wenn ein aktiver Zugang zu dieser Adresse besteht, wurde ein neuer Link versendet.")
+    if request.method == "GET":
+        # Die Adresse stand früher in Mails und Aushängen; sie führt jetzt auf
+        # die Anmeldeseite, auf der das Formular selbst steht.
         return redirect(url_for("parent_portal.start"))
-    return render_template("parent_portal/request_link.html")
+    email = normalize_email(request.form.get("email", ""))
+    # Ein Elternteil kann mehrere Kinder angemeldet haben -- dann hat jedes
+    # Kind seinen eigenen Zugang, und jeder bekommt seinen Link.
+    accesses = list(db.session.scalars(select(ParentAccess).where(
+        ParentAccess.email_normalized == email, ParentAccess.status == "active"
+    ))) if email else []
+    for access in accesses:
+        _send_login_link(access)
+    if not accesses:
+        db.session.rollback()
+    # Immer dieselbe Antwort: sonst ließe sich ausprobieren, welche Adressen
+    # bei der Schule hinterlegt sind.
+    return render_template("parent_portal/link_sent.html", email=email)
 
 
 @parent_portal_bp.route("/aktivieren/<token>", methods=["GET", "POST"])
@@ -98,7 +133,35 @@ def activate(token):
         else:
             _start_session(access)
             return redirect(url_for("parent_portal.dashboard"))
+
+    zustand, access = letter_link_state(token)
+    if zustand == "eingerichtet":
+        # Wer schon angemeldet ist und nur den QR-Code erneut scannt, will
+        # einfach hinein.
+        current = _current_parent_access()
+        if current is not None and current.id == access.id:
+            return redirect(url_for("parent_portal.dashboard"))
+        return render_template("parent_portal/already_active.html", token=token,
+                               masked_email=mask_email(access.email_normalized))
+    if zustand == "ungueltig":
+        return render_template("parent_portal/link_invalid.html"), 410
     return render_template("parent_portal/activate.html")
+
+
+@parent_portal_bp.post("/aktivieren/<token>/anmeldelink")
+def resend_from_letter(token):
+    """Aus dem Brief heraus einen Anmeldelink an die hinterlegte Adresse senden.
+
+    Die Eltern müssen dafür nichts eintippen. Der Link geht ausschließlich an
+    die Adresse, die beim ersten Öffnen hinterlegt wurde -- wer nur den Brief
+    hat, bekommt ihn also nicht.
+    """
+    zustand, access = letter_link_state(token)
+    if zustand != "eingerichtet":
+        return render_template("parent_portal/link_invalid.html"), 410
+    _send_login_link(access)
+    return render_template("parent_portal/link_sent.html",
+                           email=mask_email(access.email_normalized), masked=True)
 
 
 @parent_portal_bp.get("/anmelden/<token>")
@@ -107,9 +170,10 @@ def login(token):
         access = consume_login_token(token)
         record("parent_login", "parent_access", access.id, actor_type="parent", actor_id=access.id)
         db.session.commit()
-    except InvalidAccessToken as exc:
+    except InvalidAccessToken:
         db.session.rollback()
-        flash(str(exc))
+        flash("Dieser Anmeldelink ist abgelaufen oder wurde schon benutzt. Geben Sie "
+              "unten einfach Ihre E-Mail-Adresse ein – Sie bekommen sofort einen neuen.")
         return redirect(url_for("parent_portal.start"))
     _start_session(access)
     return redirect(url_for("parent_portal.dashboard"))

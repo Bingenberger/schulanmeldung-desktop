@@ -1,9 +1,33 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="mx-auto" style="max-width: 42rem">
-  <h1>Schulanmeldung</h1>
-  <p>Bitte öffnen Sie den persönlichen Zugangslink aus Ihrem Brief oder Ihrer E-Mail.</p>
-  <p class="text-muted">Sie benötigen keinen Benutzernamen und kein Passwort.</p>
-  <a href="{{ url_for('parent_portal.request_login_link') }}">Neuen Zugangslink per E-Mail anfordern</a>
+<div class="mx-auto" style="max-width: 38rem">
+  <h1 class="h2 mb-1">Elternportal</h1>
+  <p class="text-muted">Schulanmeldung, Termin und Anmeldeformular für Ihr Kind</p>
+
+  <div class="card shadow-sm my-4"><div class="card-body p-4">
+    <h2 class="h5">Anmelden</h2>
+    <p>Geben Sie die E-Mail-Adresse ein, die Sie bei der Einrichtung Ihres Zugangs
+      hinterlegt haben. Wir schicken Ihnen einen Link, mit dem Sie sich anmelden.</p>
+    <form method="post" action="{{ url_for('parent_portal.request_login_link') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="form-label" for="email">Ihre E-Mail-Adresse</label>
+      <input class="form-control form-control-lg mb-3" id="email" type="email" name="email"
+             required maxlength="320" autocomplete="email" inputmode="email" autofocus>
+      <button class="btn btn-primary btn-lg w-100">
+        <i class="bi bi-envelope-arrow-up"></i> Anmeldelink zusenden
+      </button>
+    </form>
+    <p class="text-muted small mt-3 mb-0">
+      <i class="bi bi-info-circle"></i> Sie brauchen kein Passwort. Der Link in der Mail
+      ersetzt es.
+    </p>
+  </div></div>
+
+  <div class="card border-0 bg-light"><div class="card-body">
+    <h2 class="h6">Zum ersten Mal hier?</h2>
+    <p class="mb-0">Dann nutzen Sie bitte den <strong>Link oder QR-Code aus dem Brief</strong>,
+      den Sie von der Schule erhalten haben. Dort hinterlegen Sie Ihre E-Mail-Adresse – danach
+      melden Sie sich immer hier an.</p>
+  </div></div>
 </div>
 {% endblock %}

@@ -127,3 +127,64 @@ def consume_login_token(token):
     login_token.used_at = now
     access.last_used_at = now
     return access
+
+
+#: Wie lange nach einem verschickten Anmeldelink kein weiterer hinausgeht.
+#: Eltern drücken den Knopf gern zweimal, wenn die Mail auf sich warten lässt --
+#: das soll ihr Postfach nicht füllen und niemand soll es gezielt fluten können.
+LOGIN_LINK_COOLDOWN_SECONDS = 120
+
+
+def mask_email(email):
+    """``anna.beispiel@example.de`` -> ``a***@example.de``.
+
+    Genug, damit Eltern wissen, in welches Postfach sie schauen sollen; zu wenig,
+    um die Adresse jemandem zu verraten, der nur den Brief in der Hand hält.
+    """
+    local, _, domain = (email or "").partition("@")
+    if not domain:
+        return "***"
+    return f"{local[:1]}***@{domain}"
+
+
+def login_link_recently_sent(parent_access_id, now=None):
+    """True, wenn für diesen Zugang gerade erst ein Anmeldelink erzeugt wurde."""
+    now = now or utcnow()
+    latest = db.session.scalar(
+        select(ParentLoginToken.created_at)
+        .where(ParentLoginToken.parent_access_id == parent_access_id,
+               ParentLoginToken.purpose == "login")
+        .order_by(ParentLoginToken.created_at.desc())
+        .limit(1))
+    if latest is None:
+        return False
+    if latest.tzinfo is None:
+        now = now.replace(tzinfo=None)
+    return (now - latest).total_seconds() < LOGIN_LINK_COOLDOWN_SECONDS
+
+
+def letter_link_state(token):
+    """Was ein erneut geöffneter Brieflink bedeutet.
+
+    Liefert ``(zustand, zugang)``:
+
+    ``"offen"``          noch nicht eingelöst -- das Aktivierungsformular
+    ``"eingerichtet"``   bereits eingelöst, der Zugang ist aktiv
+    ``"ungueltig"``      unbekannt, abgelaufen, widerrufen oder Zugang gesperrt
+
+    Der Brieflink bleibt dabei, was er ist: ein Einmalschlüssel. Nach der
+    Einlösung öffnet er nichts mehr selbst, er führt nur noch zum Anmeldelink an
+    die hinterlegte Adresse -- wer bloß den Brief findet, kommt so nicht hinein.
+    """
+    grant = db.session.scalar(select(ActivationGrant).where(
+        ActivationGrant.token_hash == hash_token(token)))
+    if grant is None or grant.revoked_at:
+        return "ungueltig", None
+    if grant.used_at is None:
+        if _is_expired(grant.expires_at, utcnow()):
+            return "ungueltig", None
+        return "offen", None
+    access = db.session.get(ParentAccess, grant.parent_access_id) if grant.parent_access_id else None
+    if access is None or access.status != "active":
+        return "ungueltig", None
+    return "eingerichtet", access
