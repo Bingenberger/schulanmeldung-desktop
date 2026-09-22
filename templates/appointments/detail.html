@@ -8,6 +8,9 @@
   </div>
   <div class="d-flex gap-2 align-items-center">
     <span id="save-indicator" class="badge bg-success d-none"><i class="bi bi-check-lg"></i> Gespeichert</span>
+    <a class="btn btn-outline-warning" href="{{ url_for('appointments.without_appointment', event_id=event.id) }}">
+      <i class="bi bi-person-exclamation"></i> Ohne Termin
+    </a>
     <a class="btn btn-outline-secondary" href="{{ url_for('appointments.bookings', event_id=event.id) }}">
       <i class="bi bi-list-check"></i> Buchungen
     </a>

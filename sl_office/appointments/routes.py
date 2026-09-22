@@ -13,7 +13,8 @@ from models import db, Schueler
 from sl_office.authorization import role_required
 from sl_office.appointments import calendar
 from sl_office.appointments.service import (
-    ALLOWED_DURATIONS, GRID_MINUTES, MAX_CAPACITY, BookingError, assign_slot,
+    ALLOWED_DURATIONS, GRID_MINUTES, MAX_CAPACITY, OHNE_TERMIN_GRUENDE, BookingError,
+    assign_slot, assignable_slots, students_without_appointment,
     cancel_booking_as_staff, create_slot, delete_slot, generate_slots, local_date, move_slot,
     set_capacity, slot_label,
 )
@@ -329,6 +330,31 @@ def bookings(event_id):
     ).all()
     return render_template("appointments/bookings.html", event=event, rows=rows,
                            slot_label=slot_label)
+
+
+@appointments_bp.get("/<int:event_id>/ohne-termin")
+@role_required(MANAGE_ROLES)
+def without_appointment(event_id):
+    """Kinder, für die weder selbst gebucht noch ein Termin vergeben wurde.
+
+    Nach dem Grund gefiltert, weil jeder Grund etwas anderes verlangt: an eine
+    Familie mit Zugang geht eine Erinnerung, bei einer ohne Zugang hilft nur
+    ein Anruf oder ein vergebener Termin.
+    """
+    event = db.get_or_404(AppointmentEvent, event_id)
+    alle = students_without_appointment()
+    filter_ = request.args.get("filter")
+    zeilen = [zeile for zeile in alle if zeile["grund"] == filter_] \
+        if filter_ in OHNE_TERMIN_GRUENDE else alle
+    anzahl = {grund: sum(1 for zeile in alle if zeile["grund"] == grund)
+              for grund in OHNE_TERMIN_GRUENDE}
+    freie = [{"id": slot.id, "label": slot_label(slot, event), "frei": slot.capacity - belegt}
+             for slot, belegt in assignable_slots(event.id)]
+    adressen = sorted({access.email_normalized for zeile in zeilen for access in zeile["eltern"]})
+    return render_template(
+        "appointments/without_appointment.html", event=event, zeilen=zeilen, gesamt=len(alle),
+        anzahl=anzahl, gruende=OHNE_TERMIN_GRUENDE, filter_=filter_, freie=freie,
+        adressen=adressen, hier=request.full_path.rstrip("?"))
 
 
 @appointments_bp.get("/<int:event_id>/buchungen.ics")

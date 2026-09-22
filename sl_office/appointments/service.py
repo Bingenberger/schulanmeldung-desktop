@@ -11,9 +11,9 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 
-from models import db
+from models import Schueler, db
 from sl_office.parent_portal.models import (
-    AppointmentBooking, AppointmentEvent, AppointmentSlot, ParentAccess, utcnow,
+    ActivationGrant, AppointmentBooking, AppointmentEvent, AppointmentSlot, ParentAccess, utcnow,
 )
 
 #: Slots start on a ten minute grid; the planner snaps to the same raster.
@@ -421,3 +421,56 @@ def cancel_booking_as_staff(booking_id):
     booking.cancelled_at = utcnow()
     db.session.flush()
     return booking
+
+
+#: Warum ein Kind noch keinen Termin hat -- daran hängt, was die Schule tun kann.
+#: ``zugang``: Eltern könnten selbst buchen, haben es aber nicht getan -> erinnern.
+#: ``brief``: Brief ist raus, der Zugang aber nie eingerichtet -> nachfragen.
+#: ``kein_brief``: Es gibt noch nicht einmal ein Anschreiben -> Brief drucken.
+OHNE_TERMIN_GRUENDE = {
+    "zugang": "Zugang eingerichtet, aber nicht gebucht",
+    "brief": "Brief erhalten, Zugang nicht eingerichtet",
+    "kein_brief": "Noch kein Brief erstellt",
+}
+
+
+def students_without_appointment():
+    """Kinder des geöffneten Jahrgangs ohne bestätigten Termin.
+
+    Weder selbst gebucht noch von der Schule vergeben. Je Kind kommt mit, wie weit
+    die Eltern sind (siehe :data:`OHNE_TERMIN_GRUENDE`) und ob schon einmal ein
+    Termin bestand, der storniert wurde -- das ist ein anderer Fall als eine
+    Familie, die sich nie gerührt hat.
+
+    Der Jahrgangsfilter aus ``sl_office/school_year`` greift auf ``Schueler``, die
+    Liste zeigt also nur Kinder des Jahrgangs, an dem gerade gearbeitet wird.
+    """
+    gebucht = select(AppointmentBooking.schueler_id).where(
+        AppointmentBooking.status == "confirmed")
+    kinder = list(db.session.scalars(
+        select(Schueler).where(Schueler.id.not_in(gebucht))
+        .order_by(Schueler.nachname, Schueler.vorname)))
+    ids = [kind.id for kind in kinder]
+    if not ids:
+        return []
+
+    zugaenge = {}
+    for access in db.session.scalars(select(ParentAccess).where(
+            ParentAccess.schueler_id.in_(ids), ParentAccess.status == "active")
+            .order_by(ParentAccess.created_at)):
+        zugaenge.setdefault(access.schueler_id, []).append(access)
+    mit_brief = set(db.session.scalars(select(ActivationGrant.schueler_id).where(
+        ActivationGrant.schueler_id.in_(ids), ActivationGrant.revoked_at.is_(None))))
+    storniert = dict(db.session.execute(
+        select(AppointmentBooking.schueler_id, func.max(AppointmentBooking.cancelled_at))
+        .where(AppointmentBooking.schueler_id.in_(ids),
+               AppointmentBooking.status == "cancelled")
+        .group_by(AppointmentBooking.schueler_id)).all())
+
+    zeilen = []
+    for kind in kinder:
+        eltern = zugaenge.get(kind.id, [])
+        grund = "zugang" if eltern else "brief" if kind.id in mit_brief else "kein_brief"
+        zeilen.append({"kind": kind, "grund": grund, "eltern": eltern,
+                       "storniert_am": storniert.get(kind.id)})
+    return zeilen
