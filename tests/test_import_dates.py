@@ -111,6 +111,27 @@ class ImportDateTests(unittest.TestCase):
             self.assertEqual(Schueler.query.filter_by(nachname="Eindeutig").one().geburtsdatum,
                              datetime.date(2021, 3, 25))
 
+    def test_eine_spalte_darf_nicht_zwei_feldern_zugeordnet_werden(self):
+        """So landete der Name des Vaters in der Kita-Spalte."""
+        from sl_office.students.city_import import InvalidWorkbook, import_rows, load_staged, stage_upload
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["Nachname", "Vorname", "Geburtsdatum", "Vater"])
+        sheet.append(["Beispiel", "Mia", datetime.datetime(2021, 3, 12), "Max Beispiel"])
+        puffer = io.BytesIO()
+        workbook.save(puffer)
+        token, _headers, _preview = stage_upload(puffer.getvalue())
+        staged = load_staged(token)
+        mapping = {"nachname": "Nachname", "vorname": "Vorname",
+                   "geburtsdatum": "Geburtsdatum", "erzb_2_name": "Vater", "kita": "Vater"}
+        with self.app.app_context():
+            with self.assertRaises(InvalidWorkbook) as fehler:
+                import_rows(staged, mapping)
+            self.assertIn("mehrfach zugeordnet", str(fehler.exception))
+            self.assertIn("Vater", str(fehler.exception))
+            self.assertEqual(Schueler.query.count(), 0)
+
     def test_vertauschter_geburtstag_kippt_den_kann_kind_status_nicht_mehr(self):
         """Aus 12.03.2021 (Muss-Kind) wurde der 03.12.2021 -- ein Kann-Kind."""
         from sl_office.students.excel import import_students

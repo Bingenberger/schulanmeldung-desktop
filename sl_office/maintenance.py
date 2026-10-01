@@ -163,6 +163,51 @@ def kann_kind_kennzeichen_richtigstellen(falsch):
     return len(falsch)
 
 
+def kita_mit_elternnamen():
+    """Kinder, bei denen in der Kita-Spalte ein Elternname steht.
+
+    Beim Import der Städteliste lässt sich dieselbe Spalte versehentlich
+    mehrfach zuordnen; dann trägt die Kita den Namen einer erziehungs-
+    berechtigten Person. Auffallen tut das erst spät -- etwa auf dem
+    gedruckten Protokollbogen des Anmeldespiels.
+
+    Liefert ``[(kind, ersatz), ...]``. ``ersatz`` ist die Einrichtung aus dem
+    Anmeldeformular der Eltern, sofern sie sie angegeben haben -- die Familie
+    weiß es besser als jede importierte Spalte.
+    """
+    from sl_office.appointments.protocol_pdf import kita_aus_anmeldung
+
+    befunde = []
+    for kind in db.session.scalars(
+            select(Schueler).order_by(Schueler.einschulungsjahr, Schueler.nachname)):
+        kita = (kind.kita or "").strip()
+        if not kita:
+            continue
+        namen = {(kind.erzb_1_name or "").strip(), (kind.erzb_2_name or "").strip()} - {""}
+        if kita in namen:
+            befunde.append(kind)
+    aus_anmeldung = kita_aus_anmeldung([kind.id for kind in befunde])
+    return [(kind, aus_anmeldung.get(kind.id)) for kind in befunde]
+
+
+def kita_eintraege_richtigstellen(befunde):
+    """Die Angabe der Eltern eintragen, sonst das falsche Feld leeren.
+
+    Liefert ``(ersetzt, geleert)``. Wo die Eltern nichts angegeben haben, bleibt
+    das Feld leer: Die richtige Einrichtung steht dann nirgends in der
+    Anwendung, und ein Elternname wäre schlechter als gar nichts.
+    """
+    ersetzt = geleert = 0
+    for kind, ersatz in befunde:
+        kind.kita = ersatz or None
+        if ersatz:
+            ersetzt += 1
+        else:
+            geleert += 1
+    db.session.commit()
+    return ersetzt, geleert
+
+
 def _kann_kind_hinweis(kind, neues_datum, jahr):
     """Vermerk, wenn eine Datumskorrektur die Einschulungsentscheidung dreht."""
     vorher = ist_kann_kind(kind.geburtsdatum, jahr)
@@ -250,6 +295,33 @@ def register_cli(app):
             return
         click.echo(f"\n{kann_kind_kennzeichen_richtigstellen(falsch)} Kennzeichen "
                    "richtiggestellt.")
+
+    @app.cli.command("check-kita")
+    @click.option("--fix", "fix", is_flag=True,
+                  help="Falsche Einträge leeren statt nur zu melden.")
+    @with_appcontext
+    def check_kita(fix):
+        """Kita-Angaben suchen, in denen ein Elternname steht."""
+        befunde = kita_mit_elternnamen()
+        if not befunde:
+            click.echo("Keine Kita-Angabe trägt einen Elternnamen.")
+            return
+        mit_ersatz = sum(1 for _kind, ersatz in befunde if ersatz)
+        click.echo(f"Kita-Angabe ist ein Elternname: {len(befunde)} "
+                   f"({mit_ersatz} davon stehen im Anmeldeformular der Eltern)")
+        for kind, ersatz in befunde:
+            click.echo(f"  id={kind.id:<5} {kind.vorname} {kind.nachname} "
+                       f"(ESJ {kind.einschulungsjahr}): „{kind.kita}“ -> "
+                       + (f"„{ersatz}“" if ersatz else "leer (Eltern haben nichts angegeben)"))
+        if not fix:
+            click.echo("\nZum Richtigstellen: flask --app app check-kita --fix")
+            click.echo("Wo die Eltern nichts angegeben haben, bleibt das Feld leer. Die "
+                       "Einrichtung lässt sich danach über „Liste der Stadt“ mit richtiger "
+                       "Spaltenzuordnung nachtragen.")
+            return
+        ersetzt, geleert = kita_eintraege_richtigstellen(befunde)
+        click.echo(f"\n{ersetzt} Einträge aus dem Anmeldeformular übernommen, "
+                   f"{geleert} geleert.")
 
     @app.cli.command("check-schriften")
     @with_appcontext

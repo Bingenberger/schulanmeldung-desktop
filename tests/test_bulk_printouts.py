@@ -135,6 +135,35 @@ class ProtocolTests(_Fixture, unittest.TestCase):
                      "Kita Regenbogen", "04.11.2021", erwarteter_termin):
             self.assertIn(wert, seite, wert)
 
+    def test_die_kita_kommt_aus_dem_anmeldeformular_der_eltern(self):
+        """Das Stammdatenfeld stammt aus dem Import und kann falsch belegt sein."""
+        with self.app.app_context():
+            student = self._kind("Ammer", "Lina", kita="Max Ammer")   # Importfehler
+            db.session.add(ParentRegistration(
+                schueler_id=student.id, status="submitted",
+                data={"besuchte_kita": "Kita Pappelweg"}))
+            db.session.commit()
+            seite = _seitentexte(protocol_pdf.build(student))[0]
+        self.assertIn("Kita Pappelweg", seite)
+        self.assertNotIn("Max Ammer", seite)
+
+    def test_andere_einrichtung_nimmt_das_freitextfeld(self):
+        with self.app.app_context():
+            student = self._kind("Berg", "Tom")
+            db.session.add(ParentRegistration(
+                schueler_id=student.id, status="submitted",
+                data={"besuchte_kita": "Andere", "besuchte_kita_andere": "Waldkita Ranzel"}))
+            db.session.commit()
+            seite = _seitentexte(protocol_pdf.build(student))[0]
+        self.assertIn("Waldkita Ranzel", seite)
+
+    def test_ohne_formularangabe_bleibt_das_stammdatenfeld(self):
+        with self.app.app_context():
+            student = self._kind("Conte", "Luca", kita="Kiga Weidenstraße")
+            db.session.commit()
+            seite = _seitentexte(protocol_pdf.build(student))[0]
+        self.assertIn("Kiga Weidenstraße", seite)
+
     def test_ohne_termin_bleibt_die_zeile_leer_statt_zu_scheitern(self):
         with self.app.app_context():
             student = self._kind("Ohne", "Termin")
@@ -186,6 +215,59 @@ class ProtocolTests(_Fixture, unittest.TestCase):
         antwort = self._client().get(f"/admin/appointments/schueler/{student_id}/protokoll.pdf")
         self.assertEqual(antwort.status_code, 200)
         self.assertIn("Lina", _seitentexte(antwort.data)[0])
+
+
+class DuplexTests(unittest.TestCase):
+    """Beim beidseitigen Druck muss jedes Kind auf einem frischen Blatt beginnen."""
+
+    @staticmethod
+    def _vorlage(seiten, pfad):
+        from reportlab.pdfgen import canvas
+        pdf = canvas.Canvas(str(pfad), pagesize=(595.3, 841.9))
+        for nummer in range(seiten):
+            pdf.drawString(50, 700, f"Vorlagenseite {nummer + 1}")
+            pdf.showPage()
+        pdf.save()
+        return pfad
+
+    @staticmethod
+    def _ebene(seiten):
+        from io import BytesIO as _BytesIO
+        from reportlab.pdfgen import canvas
+        puffer = _BytesIO()
+        pdf = canvas.Canvas(puffer, pagesize=(595.3, 841.9))
+        for _ in range(seiten):
+            pdf.showPage()
+        pdf.save()
+        return puffer.getvalue()
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        self.ordner = tempfile.TemporaryDirectory()
+        self.addCleanup(self.ordner.cleanup)
+        self.pfad = Path(self.ordner.name)
+
+    def test_ungerade_vorlage_bekommt_eine_leerseite(self):
+        from sl_office.services.pdf_forms import stack
+        vorlage = self._vorlage(9, self.pfad / "ungerade.pdf")
+        ebenen = [self._ebene(9), self._ebene(9)]
+        seiten = _seitentexte(stack(vorlage, ebenen, doppelseitig=True))
+        self.assertEqual(len(seiten), 20)
+        self.assertEqual(seiten[9].strip(), "", "zehnte Seite ist leer")
+        self.assertIn("Vorlagenseite 1", seiten[10], "das zweite Kind beginnt auf Blatt 6")
+
+    def test_gerade_vorlage_bleibt_unveraendert(self):
+        from sl_office.services.pdf_forms import stack
+        vorlage = self._vorlage(8, self.pfad / "gerade.pdf")
+        seiten = _seitentexte(stack(vorlage, [self._ebene(8)] * 2, doppelseitig=True))
+        self.assertEqual(len(seiten), 16)
+        self.assertIn("Vorlagenseite 1", seiten[8])
+
+    def test_ohne_die_option_wird_nichts_ergaenzt(self):
+        from sl_office.services.pdf_forms import stack
+        vorlage = self._vorlage(9, self.pfad / "ungerade.pdf")
+        self.assertEqual(len(_seitentexte(stack(vorlage, [self._ebene(9)] * 2))), 18)
 
 
 class RegistrationBulkTests(_Fixture, unittest.TestCase):

@@ -177,6 +177,22 @@ def import_rows(staged, mapping):
     unknown = [column for column in mapping.values() if column and column not in headers]
     if unknown:
         raise InvalidWorkbook("Die Zuordnung passt nicht zur hochgeladenen Datei.")
+    # Eine Spalte zweimal zuzuordnen ist immer ein Versehen -- und ein teures:
+    # So stand im Jahrgang 2027 der Name des Vaters in der Kita-Spalte, und das
+    # fiel erst Monate später auf einem gedruckten Protokollbogen auf.
+    belegt = {}
+    for feld, spalte in mapping.items():
+        if spalte:
+            belegt.setdefault(spalte, []).append(feld)
+    beschriftung = {name: label for name, label, _, _ in TARGET_FIELDS}
+    doppelt = [(spalte, felder) for spalte, felder in belegt.items() if len(felder) > 1]
+    if doppelt:
+        hinweise = "; ".join(
+            f"„{spalte}“ für {' und '.join(beschriftung.get(feld, feld) for feld in felder)}"
+            for spalte, felder in doppelt)
+        raise InvalidWorkbook(
+            f"Dieselbe Spalte ist mehrfach zugeordnet: {hinweise}. Bitte je Feld eine "
+            "eigene Spalte wählen oder das Feld leer lassen.")
 
     def value(row, field):
         column = mapping.get(field)

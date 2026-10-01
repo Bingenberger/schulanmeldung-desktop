@@ -23,6 +23,19 @@ KITAS = ("Kita St. Matthäus", "Kita Pappelweg", "Kita Weidenstraße", "Wilde 13
          "Kita Sanddornstraße", "Andere")
 
 
+def kita_angabe(data):
+    """Die von den Eltern genannte Einrichtung, oder "".
+
+    Die Auswahlliste endet auf „Andere"; dann zählt das Freitextfeld daneben.
+    Diese Angabe ist verlässlicher als das Stammdatenfeld der Schule, denn sie
+    kommt von der Familie selbst.
+    """
+    gewaehlt = ((data or {}).get("besuchte_kita") or "").strip()
+    if gewaehlt.casefold() == "andere":
+        return ((data or {}).get("besuchte_kita_andere") or "").strip()
+    return gewaehlt
+
+
 #: Monat und Jahr, mit oder ohne Trennzeichen. Der zweite Zweig lässt einen
 #: einstelligen Monat zu, dann aber mit Trennzeichen -- "82023" wäre sonst
 #: nicht zu entscheiden.

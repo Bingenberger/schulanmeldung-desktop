@@ -278,7 +278,21 @@ steht als Feld auf dem Bogen, und beides weiß die Anwendung.
 
 In der Terminverwaltung liefert „Protokollbögen" alle Kinder des Jahrgangs in
 einem PDF, **sortiert nach Anmeldetermin**; Kinder ohne Termin stehen am Ende.
-Einen einzelnen Bogen gibt es auf der Detailseite des Kindes.
+Einen einzelnen Bogen gibt es auf der Detailseite des Kindes. Hat die Vorlage
+eine ungerade Seitenzahl, wird je Kind eine leere Seite ergänzt, damit beim
+beidseitigen Druck jedes Kind auf einem frischen Blatt beginnt.
+
+Die Kita nehmen die Bögen aus dem **Anmeldeformular der Eltern** (`besuchte_kita`,
+bei „Andere" das Freitextfeld daneben); nur wenn dort nichts steht, tritt das
+Stammdatenfeld aus dem Import ein. Steht dort ein Elternname, weil beim Import
+der Städteliste eine Spalte doppelt zugeordnet wurde, findet und berichtigt das
+
+```bash
+venv/bin/flask --app app check-kita        # meldet nur
+venv/bin/flask --app app check-kita --fix  # trägt die Angabe der Eltern ein
+```
+
+Der Import weist eine solche Zuordnung inzwischen zurück.
 
 **Wird die ODT geändert, muss die PDF-Vorlage neu erzeugt werden:**
 

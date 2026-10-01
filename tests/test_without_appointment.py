@@ -135,3 +135,58 @@ class WithoutAppointmentTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class KitaRepairTests(unittest.TestCase):
+    """Beim Import war dieselbe Spalte zweimal zugeordnet -- die Kita trug den Vaternamen."""
+
+    def setUp(self):
+        self.app = create_app("testing")
+        with self.app.app_context():
+            db.session.add_all([GlobalSettings(einschulungsjahr=2027),
+                                Einschulungsjahr(jahr=2027, ist_aktuell=True)])
+            kinder = [
+                Schueler(vorname="Falsch", nachname="Eins", einschulungsjahr=2027,
+                         erzb_1_name="Anna Eins", erzb_2_name="Max Eins", kita="Max Eins"),
+                Schueler(vorname="Falsch", nachname="Zwei", einschulungsjahr=2027,
+                         erzb_1_name="Bea Zwei", erzb_2_name="", kita="Bea Zwei"),
+                Schueler(vorname="Richtig", nachname="Drei", einschulungsjahr=2027,
+                         erzb_1_name="Cem Drei", erzb_2_name="Dana Drei",
+                         kita="Kiga Pappelweg"),
+                Schueler(vorname="Ohne", nachname="Vier", einschulungsjahr=2027,
+                         erzb_1_name="", erzb_2_name="", kita=""),
+            ]
+            db.session.add_all(kinder)
+            db.session.flush()
+            # "Eins" haben die Eltern im Formular beantwortet, "Zwei" nicht.
+            from sl_office.parent_portal.models import ParentRegistration
+            db.session.add_all([
+                ParentRegistration(schueler_id=kinder[0].id, status="submitted",
+                                   data={"besuchte_kita": "Kita Pappelweg"}),
+                ParentRegistration(schueler_id=kinder[1].id, status="submitted",
+                                   data={"besuchte_kita": ""}),
+            ])
+            db.session.commit()
+
+    def tearDown(self):
+        with self.app.app_context():
+            db.session.remove()
+            db.drop_all()
+
+    def test_nur_die_falschen_werden_gefunden(self):
+        from sl_office.maintenance import kita_mit_elternnamen
+        with self.app.app_context():
+            gefunden = {kind.nachname: ersatz for kind, ersatz in kita_mit_elternnamen()}
+        self.assertEqual(sorted(gefunden), ["Eins", "Zwei"])
+        self.assertEqual(gefunden["Eins"], "Kita Pappelweg", "aus dem Anmeldeformular")
+        self.assertIsNone(gefunden["Zwei"], "Eltern haben nichts angegeben")
+
+    def test_die_angabe_der_eltern_ersetzt_den_falschen_eintrag(self):
+        from sl_office.maintenance import kita_eintraege_richtigstellen, kita_mit_elternnamen
+        with self.app.app_context():
+            self.assertEqual(kita_eintraege_richtigstellen(kita_mit_elternnamen()), (1, 1))
+            uebrig = {kind.nachname: kind.kita for kind in Schueler.query.all()}
+            self.assertEqual(kita_mit_elternnamen(), [], "danach ist nichts mehr zu melden")
+        self.assertEqual(uebrig["Eins"], "Kita Pappelweg")
+        self.assertIsNone(uebrig["Zwei"])
+        self.assertEqual(uebrig["Drei"], "Kiga Pappelweg", "war nie falsch")

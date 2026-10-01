@@ -22,7 +22,8 @@ from sqlalchemy import select
 from models import Schueler, db
 from sl_office.appointments.service import active_booking_for_student, slot_label
 from sl_office.parent_portal import letterhead
-from sl_office.parent_portal.models import AppointmentBooking, AppointmentSlot
+from sl_office.parent_portal import registration_form
+from sl_office.parent_portal.models import AppointmentBooking, AppointmentSlot, ParentRegistration
 from sl_office.services.pdf_forms import page_size, stack
 
 TEMPLATE = Path(__file__).resolve().parents[2] / "Protokoll_Anmeldespiel.pdf"
@@ -59,8 +60,29 @@ def _termin_text(appointment):
     return slot_label(slot, event)
 
 
-def werte(student, appointment=None):
-    """Was auf dem Protokoll dieses Kindes steht."""
+def kita_aus_anmeldung(schueler_ids=None):
+    """``{schueler_id: Einrichtung}`` aus den übermittelten Anmeldeformularen.
+
+    Einmal für alle Kinder zusammen, damit ein Sammeldruck nicht je Bogen
+    erneut fragt.
+    """
+    abfrage = select(ParentRegistration)
+    if schueler_ids is not None:
+        abfrage = abfrage.where(ParentRegistration.schueler_id.in_(schueler_ids))
+    gefunden = {}
+    for anmeldung in db.session.scalars(abfrage):
+        kita = registration_form.kita_angabe(anmeldung.data or {})
+        if kita:
+            gefunden[anmeldung.schueler_id] = kita
+    return gefunden
+
+
+def werte(student, appointment=None, kita=None):
+    """Was auf dem Protokoll dieses Kindes steht.
+
+    Die Kita nennen die Eltern im Anmeldeformular selbst; das Stammdatenfeld
+    der Schule tritt nur ein, wenn dort nichts steht.
+    """
     return {
         "termin": _termin_text(appointment),
         "vorname": (student.vorname or "").strip(),
@@ -68,7 +90,7 @@ def werte(student, appointment=None):
         "adresse": _adresse(student),
         "geburtstag": (student.geburtsdatum.strftime("%d.%m.%Y")
                        if student.geburtsdatum else ""),
-        "kita": (student.kita or "").strip(),
+        "kita": (kita or "").strip() or (student.kita or "").strip(),
     }
 
 
@@ -105,15 +127,19 @@ def _overlay(daten, kann_kind, seitenzahl, groesse):
 
 
 def _ebenen(eintraege, seitenzahl, groesse):
+    aus_anmeldung = kita_aus_anmeldung([student.id for student, _ in eintraege])
     for student, appointment in eintraege:
-        yield _overlay(werte(student, appointment), student.kann_kind, seitenzahl, groesse)
+        yield _overlay(werte(student, appointment, aus_anmeldung.get(student.id)),
+                       student.kann_kind, seitenzahl, groesse)
 
 
 def build_many(eintraege, title="Protokolle Anmeldespiel"):
     """Ein PDF aus mehreren Protokollen; ``eintraege`` sind (Kind, Termin)-Paare."""
     vorlage = PdfReader(str(TEMPLATE))
+    # Die Bögen werden beidseitig gedruckt; jedes Kind soll auf einem eigenen
+    # Blatt beginnen.
     return stack(TEMPLATE, _ebenen(list(eintraege), len(vorlage.pages), page_size(vorlage)),
-                 title=title)
+                 title=title, doppelseitig=True)
 
 
 def build(student, appointment=None):
