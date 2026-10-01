@@ -251,6 +251,35 @@ def register_cli(app):
         click.echo(f"\n{kann_kind_kennzeichen_richtigstellen(falsch)} Kennzeichen "
                    "richtiggestellt.")
 
+    @app.cli.command("check-schriften")
+    @with_appcontext
+    def check_schriften():
+        """Zeigen, aus welchen Dateien die Schreiben und Formulare gesetzt werden.
+
+        Alle PDFs der Anwendung entstehen auf dem Server. Fehlt eine Schriftdatei,
+        weicht ReportLab stillschweigend auf eine PDF-Standardschrift aus -- die
+        Briefe entstehen dann zwar, sehen aber anders aus als beabsichtigt.
+        """
+        from sl_office.parent_portal.letterhead import _CANDIDATES, _FALLBACK, _font_files
+
+        dateien = _font_files()
+        fehlend = []
+        for rolle, namen in _CANDIDATES.items():
+            pfad = next((dateien[name.lower()] for name in namen
+                         if name.lower() in dateien), None)
+            if pfad is None:
+                fehlend.append(rolle)
+                click.echo(f"  {rolle:<9} FEHLT -- ersatzweise {_FALLBACK[rolle]}")
+            else:
+                mitgeliefert = "Projekt" if "assets/briefkopf" in str(pfad) else "System"
+                click.echo(f"  {rolle:<9} {pfad}  [{mitgeliefert}]")
+        if fehlend:
+            click.echo(f"\n{len(fehlend)} Schriftrolle(n) ohne Datei. Die mitgelieferten "
+                       "Dateien liegen in assets/briefkopf -- fehlen sie, ist beim "
+                       "Deployment etwas schiefgegangen.")
+        else:
+            click.echo("\nAlle Schriften vorhanden.")
+
     @app.cli.command("check-geburtsdaten")
     @click.option("--datei", "datei", required=True,
                   type=click.Path(exists=True, dir_okay=False),
