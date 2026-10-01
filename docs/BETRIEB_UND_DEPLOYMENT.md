@@ -294,6 +294,24 @@ venv/bin/flask --app app check-kita --fix  # trägt die Angabe der Eltern ein
 
 Der Import weist eine solche Zuordnung inzwischen zurück.
 
+### Protokoll der Verwaltungsanmeldung
+
+Der Laufzettel für den Verwaltungsteil (`Protokoll_Verwaltungsanmeldung.odt`)
+wird **nicht** aus einer Vorlage überlagert, sondern von
+`sl_office/appointments/admin_protocol_pdf.py` selbst gesetzt -- mit dem
+Briefkopf der Elternschreiben, echten Ankreuzfeldern, Gruppen und
+Schreiblinien. Gefüllt werden Name und Anmeldetermin; beim ersten Punkt steht
+ein Vermerk, falls die Eltern das Formular elektronisch übermittelt haben.
+
+Der Wortlaut steht unverändert in `ABSCHNITTE` am Kopf des Moduls -- dort wird
+er auch geändert, nicht mehr in der ODT. Die Zeilenhöhen sind so bemessen, dass
+alles auf **eine** Seite passt; wer Punkte ergänzt, prüft das am besten im
+Ausdruck nach, ein Test wacht darüber. Je Bogen folgt eine leere Seite, damit
+beim beidseitigen Druck jedes Kind ein eigenes Blatt bekommt.
+
+Die Knöpfe sitzen neben denen für die Protokollbögen: in der Terminverwaltung
+für alle Kinder, auf der Detailseite für eines.
+
 **Wird die ODT geändert, muss die PDF-Vorlage neu erzeugt werden:**
 
 ```bash

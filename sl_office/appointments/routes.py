@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from models import db, Schueler
 from sl_office.authorization import role_required
 from sl_office.appointments import calendar
-from sl_office.appointments import protocol_pdf
+from sl_office.appointments import admin_protocol_pdf, protocol_pdf
 from sl_office.appointments.service import (
     ALLOWED_DURATIONS, GRID_MINUTES, MAX_CAPACITY, OHNE_TERMIN_GRUENDE, BookingError,
     assign_slot, assignable_slots, active_booking_for_student,
@@ -20,6 +20,7 @@ from sl_office.appointments.service import (
     cancel_booking_as_staff, create_slot, delete_slot, generate_slots, local_date, move_slot,
     set_capacity, slot_label,
 )
+from sl_office.parent_portal.letterhead import branding
 from sl_office.parent_portal.models import (
     AppointmentBooking, AppointmentEvent, AppointmentSlot, ParentAccess,
 )
@@ -376,6 +377,34 @@ def protocols(event_id):
         eintraege, title=f"Protokolle Anmeldespiel ({len(eintraege)})")
     return send_file(BytesIO(payload), mimetype="application/pdf", as_attachment=True,
                      download_name=f"Protokolle_Anmeldespiel_{len(eintraege)}.pdf")
+
+
+@appointments_bp.get("/<int:event_id>/verwaltungsprotokolle.pdf")
+@role_required(MANAGE_ROLES)
+def admin_protocols(event_id):
+    """Die Laufzettel der Verwaltungsanmeldung, in derselben Reihenfolge."""
+    event = db.get_or_404(AppointmentEvent, event_id)
+    eintraege = protocol_pdf.fuer_veranstaltung(event)
+    if not eintraege:
+        flash("Für diesen Jahrgang sind noch keine Kinder erfasst.")
+        return redirect(url_for("appointments.detail", event_id=event.id))
+    payload = admin_protocol_pdf.build_many(
+        eintraege, branding(current_app.config),
+        title=f"Verwaltungsanmeldung ({len(eintraege)})")
+    return send_file(BytesIO(payload), mimetype="application/pdf", as_attachment=True,
+                     download_name=f"Verwaltungsanmeldung_{len(eintraege)}.pdf")
+
+
+@appointments_bp.get("/schueler/<int:student_id>/verwaltungsprotokoll.pdf")
+@role_required(MANAGE_ROLES)
+def admin_protocol(student_id):
+    """Der Laufzettel eines einzelnen Kindes, zur Ansicht im Browser."""
+    student = db.get_or_404(Schueler, student_id)
+    payload = admin_protocol_pdf.build(student, branding(current_app.config),
+                                       active_booking_for_student(student.id))
+    name = f"{student.nachname}_{student.vorname}".replace(" ", "-")
+    return send_file(BytesIO(payload), mimetype="application/pdf", as_attachment=False,
+                     download_name=f"Verwaltungsanmeldung_{name}.pdf")
 
 
 @appointments_bp.get("/schueler/<int:student_id>/protokoll.pdf")

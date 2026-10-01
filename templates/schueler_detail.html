@@ -97,6 +97,9 @@
                 <a class="btn btn-sm btn-outline-danger" target="_blank"
                    href="{{ url_for('appointments.protocol', student_id=schueler.id) }}">
                     <i class="bi bi-file-earmark-pdf"></i> Protokollbogen</a>
+                <a class="btn btn-sm btn-outline-danger" target="_blank"
+                   href="{{ url_for('appointments.admin_protocol', student_id=schueler.id) }}">
+                    <i class="bi bi-file-earmark-pdf"></i> Verwaltungsanmeldung</a>
                 {% endif %}
                 {% if appointment_event %}
                 <a class="btn btn-sm btn-outline-secondary"

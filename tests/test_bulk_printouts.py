@@ -217,6 +217,101 @@ class ProtocolTests(_Fixture, unittest.TestCase):
         self.assertIn("Lina", _seitentexte(antwort.data)[0])
 
 
+class AdminProtocolTests(_Fixture, unittest.TestCase):
+    """Der Laufzettel der Verwaltungsanmeldung wird selbst gesetzt, nicht überlagert."""
+
+    def _schule(self):
+        from sl_office.parent_portal.letterhead import branding
+        return branding(self.app.config)
+
+    def test_ein_bogen_passt_auf_eine_seite(self):
+        """Mit Unterschriftszeile -- die rutschte beim ersten Entwurf auf Seite 2."""
+        from sl_office.appointments import admin_protocol_pdf
+        with self.app.app_context():
+            student = self._kind("Asanović-Baumgartner", "Leonardo Maximilian")
+            self._termin(student, 9)
+            db.session.commit()
+            seiten = _seitentexte(admin_protocol_pdf.build(
+                student, self._schule(), (None, AppointmentSlot.query.one(),
+                                          db.session.get(AppointmentEvent, self.event_id))))
+        self.assertEqual(len(seiten), 1)
+        self.assertIn("Unterschrift Mitarbeiter:in Schule", seiten[0])
+
+    def test_name_und_termin_stehen_darauf(self):
+        from sl_office.appointments import admin_protocol_pdf
+        from sl_office.appointments.service import slot_label
+        with self.app.app_context():
+            student = self._kind("Yilmaz", "Ela")
+            slot = self._termin(student, 9)
+            db.session.commit()
+            event = db.session.get(AppointmentEvent, self.event_id)
+            erwartet = slot_label(slot, event)
+            seite = _seitentexte(admin_protocol_pdf.build(
+                student, self._schule(), (None, slot, event)))[0]
+        self.assertIn("Ela Yilmaz", seite)
+        self.assertIn(erwartet, seite)
+
+    def test_der_wortlaut_der_vorlage_steht_vollstaendig_darauf(self):
+        from sl_office.appointments import admin_protocol_pdf
+        with self.app.app_context():
+            student = self._kind("Ammer", "Lina")
+            db.session.commit()
+            seite = _seitentexte(admin_protocol_pdf.build(student, self._schule()))[0]
+        for abschnitt, punkte in admin_protocol_pdf.ABSCHNITTE:
+            self.assertIn(abschnitt, seite)
+            for punkt in punkte:
+                self.assertIn(punkt.text, seite, punkt.text)
+                for option in getattr(punkt, "optionen", ()):
+                    self.assertIn(option, seite, option)
+
+    def test_eine_uebermittelte_anmeldung_wird_vermerkt(self):
+        from sl_office.appointments import admin_protocol_pdf
+        with self.app.app_context():
+            student = self._kind("Berg", "Tom")
+            db.session.add(ParentRegistration(
+                schueler_id=student.id, status="submitted", data={},
+                submitted_at=datetime.datetime(2026, 9, 28, tzinfo=datetime.UTC)))
+            db.session.commit()
+            seite = _seitentexte(admin_protocol_pdf.build(student, self._schule()))[0]
+        self.assertIn("elektronisch übermittelt am 28.09.2026", seite)
+
+    def test_ein_entwurf_gilt_noch_nicht_als_uebermittelt(self):
+        from sl_office.appointments import admin_protocol_pdf
+        with self.app.app_context():
+            student = self._kind("Conte", "Luca")
+            db.session.add(ParentRegistration(schueler_id=student.id, status="draft", data={}))
+            db.session.commit()
+            seite = _seitentexte(admin_protocol_pdf.build(student, self._schule()))[0]
+        self.assertNotIn("elektronisch übermittelt", seite)
+
+    def test_der_stapel_laesst_jedem_kind_ein_eigenes_blatt(self):
+        from sl_office.appointments import admin_protocol_pdf
+        with self.app.app_context():
+            erste = self._kind("Ammer", "Lina")
+            zweite = self._kind("Berg", "Tom")
+            db.session.commit()
+            seiten = _seitentexte(admin_protocol_pdf.build_many(
+                [(erste, None), (zweite, None)], self._schule()))
+        self.assertEqual(len(seiten), 4, "je Kind ein Bogen und eine Leerseite")
+        self.assertIn("Lina", seiten[0])
+        self.assertEqual(seiten[1].strip(), "")
+        self.assertIn("Tom", seiten[2])
+
+    def test_ueber_die_oberflaeche(self):
+        with self.app.app_context():
+            student = self._kind("Ammer", "Lina")
+            self._termin(student, 9)
+            db.session.commit()
+            student_id = student.id
+        client = self._client()
+        stapel = client.get(f"/admin/appointments/{self.event_id}/verwaltungsprotokolle.pdf")
+        self.assertEqual(stapel.mimetype, "application/pdf")
+        self.assertIn("Verwaltungsanmeldung", stapel.headers["Content-Disposition"])
+        einzeln = client.get(
+            f"/admin/appointments/schueler/{student_id}/verwaltungsprotokoll.pdf")
+        self.assertIn("Lina", _seitentexte(einzeln.data)[0])
+
+
 class DuplexTests(unittest.TestCase):
     """Beim beidseitigen Druck muss jedes Kind auf einem frischen Blatt beginnen."""
 

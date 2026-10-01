@@ -35,6 +35,8 @@ Zwei-Faktor-Bestätigung)
   für den Termin vor Ort — einzeln oder alle übermittelten in einem PDF
 - Protokollbögen für das Anmeldespiel aus `Protokoll_Anmeldespiel.odt`, gefüllt
   mit Termin, Namen, Anschrift und Kita — alle auf einmal, nach Termin sortiert
+- Laufzettel für die Verwaltungsanmeldung, im Briefkopf der Schule gesetzt, mit
+  Name, Termin und einem Vermerk zur elektronisch übermittelten Anmeldung
 
 **Elternportal** (`/eltern`)
 
