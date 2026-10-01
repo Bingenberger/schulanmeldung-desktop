@@ -260,7 +260,42 @@ for nr, page in enumerate(PdfReader('Schulanmeldung.pdf').pages, 1):
 
 Der Ausdruck wird protokolliert (`registration_printed` im Audit-Log).
 
-## 10. Anmeldezeitraum und Gesprächstage
+### Sammeldruck
+
+*Anmeldungen* hat oben rechts „Alle übermittelten Formulare als PDF". Das
+Ergebnis ist ein Dokument mit allen Anmeldungen hintereinander, nach Nachnamen
+sortiert; Entwürfe bleiben außen vor. Ist in der Übersicht ein Status
+ausgewählt, druckt der Knopf genau diese Auswahl.
+
+## 10. Protokollbögen für das Anmeldespiel
+
+Die Vorlage der Schule ist `Protokoll_Anmeldespiel.odt` mit Seriendruckfeldern
+für Termin, Namen, Anschrift und Geburtstag. Gedruckt wird sie wie die
+Schulanmeldung: Die leere Fassung liegt als `Protokoll_Anmeldespiel.pdf` im
+Projekt, die Werte legt `sl_office/appointments/protocol_pdf.py` darüber.
+Zusätzlich werden die Kita und der Kann-Kind-Vermerk eingetragen -- beides
+steht als Feld auf dem Bogen, und beides weiß die Anwendung.
+
+In der Terminverwaltung liefert „Protokollbögen" alle Kinder des Jahrgangs in
+einem PDF, **sortiert nach Anmeldetermin**; Kinder ohne Termin stehen am Ende.
+Einen einzelnen Bogen gibt es auf der Detailseite des Kindes.
+
+**Wird die ODT geändert, muss die PDF-Vorlage neu erzeugt werden:**
+
+```bash
+venv/bin/python scripts/protokoll_vorlage.py
+```
+
+Das Skript braucht LibreOffice (`soffice`), läuft also auf dem Arbeitsplatz und
+nicht auf dem Server. Die Schriften des Briefkopfs -- FrenteH1, Calligraffiti
+und Calibri Light -- müssen dort **systemweit** installiert sein: LibreOffice
+liest `assets/briefkopf` nicht und würde eine fehlende Schrift stillschweigend
+ersetzen. Das Skript prüft das vorab und zeigt hinterher, was in der fertigen
+Vorlage eingebettet ist. Es schreibt `Protokoll_Anmeldespiel.pdf` neu und misst
+die Seriendruckfelder nach; verschobene Grundlinien gehören anschließend in
+`PLACEMENTS` am Kopf des Moduls. Das neue PDF gehört ins Projekt eingecheckt.
+
+## 11. Anmeldezeitraum und Gesprächstage
 
 Die Terminverwaltung kennt zwei Zeiträume, die nichts miteinander zu tun haben:
 
@@ -290,7 +325,7 @@ Die Uhrzeit wird dadurch nicht blockiert -- ein neues Fenster zur selben Zeit
 lässt sich wieder anlegen. Nur unter den nicht stornierten Fenstern ist ein
 Zeitraum einmalig (Index `uq_slot_event_period_active`).
 
-## 11. Verwaiste Elternportal-Daten
+## 12. Verwaiste Elternportal-Daten
 
 Bis zur Behebung nahm das Löschen eines Kindes seine Elternportal-Daten nicht
 mit: Zugänge, Anmeldelinks, Formular und Terminbuchung blieben liegen. SQLite
@@ -315,7 +350,7 @@ Ohne Fund meldet der Aufruf, dass nichts gefunden wurde, und ändert nichts. Der
 Befehl ist gefahrlos wiederholbar und eignet sich auch später als gelegentliche
 Kontrolle.
 
-## 12. Nachsehen, wenn etwas klemmt
+## 13. Nachsehen, wenn etwas klemmt
 
 ```bash
 sudo systemctl status sl-office
@@ -330,4 +365,4 @@ sudo tail -f /var/log/nginx/sl-office.error.log
 | 413 beim Hochladen | `client_max_body_size` kleiner als `SL_OFFICE_MAX_UPLOAD_BYTES` |
 | Push bricht bei „Dienst neu starten" ab | sudoers-Eintrag fehlt |
 | Push bricht bei „Migrationen" ab | siehe `docs/DATENBANKMIGRATIONEN.md` |
-| Neues Kind hat schon einen Elternzugang | verwaiste Zeilen aus einer früheren Fassung — siehe Abschnitt 11 |
+| Neues Kind hat schon einen Elternzugang | verwaiste Zeilen aus einer früheren Fassung — siehe Abschnitt 12 |

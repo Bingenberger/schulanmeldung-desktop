@@ -92,10 +92,17 @@
     <div class="card shadow-sm mb-4">
         <div class="card-header bg-light d-flex justify-content-between align-items-center">
             <h5 class="mb-0 text-dark"><i class="bi bi-calendar-check text-primary"></i> Anmeldegespräch</h5>
-            {% if appointment_event %}
-            <a class="btn btn-sm btn-outline-secondary"
-               href="{{ url_for('appointments.detail', event_id=appointment_event.id) }}">Planer öffnen</a>
-            {% endif %}
+            <div class="d-flex gap-2">
+                {% if current_user.role in ['Administrator', 'Schulleitung', 'Sekretariat'] %}
+                <a class="btn btn-sm btn-outline-danger" target="_blank"
+                   href="{{ url_for('appointments.protocol', student_id=schueler.id) }}">
+                    <i class="bi bi-file-earmark-pdf"></i> Protokollbogen</a>
+                {% endif %}
+                {% if appointment_event %}
+                <a class="btn btn-sm btn-outline-secondary"
+                   href="{{ url_for('appointments.detail', event_id=appointment_event.id) }}">Planer öffnen</a>
+                {% endif %}
+            </div>
         </div>
         <div class="card-body">
             {% if appointment %}

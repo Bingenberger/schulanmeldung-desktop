@@ -12,9 +12,11 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from models import db, Schueler
 from sl_office.authorization import role_required
 from sl_office.appointments import calendar
+from sl_office.appointments import protocol_pdf
 from sl_office.appointments.service import (
     ALLOWED_DURATIONS, GRID_MINUTES, MAX_CAPACITY, OHNE_TERMIN_GRUENDE, BookingError,
-    assign_slot, assignable_slots, students_without_appointment,
+    assign_slot, assignable_slots, active_booking_for_student,
+    students_without_appointment,
     cancel_booking_as_staff, create_slot, delete_slot, generate_slots, local_date, move_slot,
     set_capacity, slot_label,
 )
@@ -355,6 +357,36 @@ def without_appointment(event_id):
         "appointments/without_appointment.html", event=event, zeilen=zeilen, gesamt=len(alle),
         anzahl=anzahl, gruende=OHNE_TERMIN_GRUENDE, filter_=filter_, freie=freie,
         adressen=adressen, hier=request.full_path.rstrip("?"))
+
+
+@appointments_bp.get("/<int:event_id>/protokolle.pdf")
+@role_required(MANAGE_ROLES)
+def protocols(event_id):
+    """Die Protokolle des Anmeldespiels für alle Kinder, nach Termin sortiert.
+
+    Kinder ohne Termin stehen am Ende: Auch sie brauchen einen Bogen, wenn sie
+    kurzfristig erscheinen, einsortieren lassen sie sich aber nicht.
+    """
+    event = db.get_or_404(AppointmentEvent, event_id)
+    eintraege = protocol_pdf.fuer_veranstaltung(event)
+    if not eintraege:
+        flash("Für diesen Jahrgang sind noch keine Kinder erfasst.")
+        return redirect(url_for("appointments.detail", event_id=event.id))
+    payload = protocol_pdf.build_many(
+        eintraege, title=f"Protokolle Anmeldespiel ({len(eintraege)})")
+    return send_file(BytesIO(payload), mimetype="application/pdf", as_attachment=True,
+                     download_name=f"Protokolle_Anmeldespiel_{len(eintraege)}.pdf")
+
+
+@appointments_bp.get("/schueler/<int:student_id>/protokoll.pdf")
+@role_required(MANAGE_ROLES)
+def protocol(student_id):
+    """Der Protokollbogen eines einzelnen Kindes, zur Ansicht im Browser."""
+    student = db.get_or_404(Schueler, student_id)
+    payload = protocol_pdf.build(student, active_booking_for_student(student.id))
+    name = f"{student.nachname}_{student.vorname}".replace(" ", "-")
+    return send_file(BytesIO(payload), mimetype="application/pdf", as_attachment=False,
+                     download_name=f"Protokoll_{name}.pdf")
 
 
 @appointments_bp.get("/<int:event_id>/buchungen.ics")

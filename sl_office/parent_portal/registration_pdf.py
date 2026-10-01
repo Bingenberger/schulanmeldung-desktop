@@ -17,12 +17,12 @@ import datetime
 from io import BytesIO
 from pathlib import Path
 
-from pypdf import PdfReader, PdfWriter
-from reportlab.lib.pagesizes import A4
+from pypdf import PdfReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
 from sl_office.parent_portal import letterhead
+from sl_office.services.pdf_forms import page_size, stack
 
 TEMPLATE = Path(__file__).resolve().parents[2] / "Schulanmeldung.pdf"
 
@@ -244,22 +244,16 @@ def _overlay(data, page_count, page_size):
     return buffer.getvalue()
 
 
+def build_many(items, title="Anmeldeformulare"):
+    """Mehrere Anmeldungen in einem PDF; ``items`` sind (Daten, Kind)-Paare."""
+    vorlage = PdfReader(str(TEMPLATE))
+    anzahl, groesse = len(vorlage.pages), page_size(vorlage)
+    ebenen = (_overlay(with_master_data(daten, student), anzahl, groesse)
+              for daten, student in items)
+    return stack(TEMPLATE, ebenen, title=title)
+
+
 def build(data, student):
     """Die ausgefüllte Anmeldung als PDF-Bytes."""
-    # Erst klonen, dann überlagern: pypdf verlangt, dass die Seite bereits am
-    # Schreiber hängt, bevor sie zusammengeführt wird.
-    writer = PdfWriter(clone_from=str(TEMPLATE))
-    merged = with_master_data(data, student)
-    first = writer.pages[0]
-    size = (float(first.mediabox.width), float(first.mediabox.height))
-    overlay = PdfReader(BytesIO(_overlay(merged, len(writer.pages), size)))
-
-    for index, page in enumerate(writer.pages):
-        page.merge_page(overlay.pages[index])
-    writer.add_metadata({
-        "/Title": f"Schulanmeldung {student.vorname} {student.nachname}",
-        "/Producer": "SL-Office",
-    })
-    result = BytesIO()
-    writer.write(result)
-    return result.getvalue()
+    return build_many([(data, student)],
+                      title=f"Schulanmeldung {student.vorname} {student.nachname}")

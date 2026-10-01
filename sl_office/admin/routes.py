@@ -371,6 +371,42 @@ def registration_printout(registration_id):
     )
 
 
+@admin_bp.get("/anmeldungen/formulare.pdf")
+@role_required(["Administrator", "Schulleitung", "Sekretariat"])
+def registration_printouts():
+    """Alle übermittelten Anmeldungen in einem PDF, nach Namen sortiert.
+
+    Entwürfe bleiben außen vor -- sie sind noch in Arbeit und taugen nicht zum
+    Abheften. Mit ``?status=`` lässt sich genau das herunterladen, was die
+    Übersicht gerade zeigt.
+    """
+    status = request.args.get("status")
+    query = (db.session.query(ParentRegistration, Schueler)
+             .join(Schueler, Schueler.id == ParentRegistration.schueler_id))
+    if status in {"draft", "submitted", "in_review", "completed"}:
+        query = query.filter(ParentRegistration.status == status)
+    else:
+        query = query.filter(ParentRegistration.status != "draft")
+    eintraege = query.order_by(Schueler.nachname, Schueler.vorname).all()
+    if not eintraege:
+        flash("Es liegen keine übermittelten Anmeldungen zum Drucken vor.")
+        return redirect(url_for("admin.registrations", status=status))
+    try:
+        payload = registration_pdf.build_many(
+            [(registration.data or {}, student) for registration, student in eintraege],
+            title=f"Anmeldeformulare ({len(eintraege)})")
+    except Exception:
+        current_app.logger.exception("Bulk registration printout failed")
+        flash("Die Formulare konnten nicht erzeugt werden.", "error")
+        return redirect(url_for("admin.registrations", status=status))
+    for registration, _student in eintraege:
+        record("registration_printed", "parent_registration", registration.id,
+               actor_type="staff", actor_id=current_user.id)
+    db.session.commit()
+    return send_file(BytesIO(payload), mimetype="application/pdf", as_attachment=True,
+                     download_name=f"Anmeldeformulare_{len(eintraege)}.pdf")
+
+
 @admin_bp.route("/elternzugänge", methods=["GET", "POST"])
 @role_required(["Administrator", "Schulleitung", "Sekretariat"])
 def parent_accesses():

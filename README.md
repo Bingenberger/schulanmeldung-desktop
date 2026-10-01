@@ -32,7 +32,9 @@ Zwei-Faktor-Bestätigung)
 - Elternbrief in zwei Fassungen: Eltern wählen den Termin selbst, oder die
   Schule gibt ihn vor — je Kind wird beim Druck die passende gesetzt
 - eingegangene Anmeldungen als ausgefülltes `Schulanmeldung.pdf` zum Ausdrucken
-  für den Termin vor Ort
+  für den Termin vor Ort — einzeln oder alle übermittelten in einem PDF
+- Protokollbögen für das Anmeldespiel aus `Protokoll_Anmeldespiel.odt`, gefüllt
+  mit Termin, Namen, Anschrift und Kita — alle auf einmal, nach Termin sortiert
 
 **Elternportal** (`/eltern`)
 
