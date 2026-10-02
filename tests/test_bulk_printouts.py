@@ -87,13 +87,15 @@ class ProtocolTests(_Fixture, unittest.TestCase):
             db.session.commit()
             event = db.session.get(AppointmentEvent, self.event_id)
             seiten = _seitentexte(protocol_pdf.build_many(protocol_pdf.fuer_veranstaltung(event)))
+            je_kind = len(_seitentexte(protocol_pdf.build(erste)))
 
-        vorlage_seiten = len(PdfReader(str(protocol_pdf.TEMPLATE)).pages)
-        self.assertEqual(len(seiten), 2 * vorlage_seiten)
+        # Gerade Seitenzahl je Kind: beim beidseitigen Druck ein eigenes Blatt.
+        self.assertEqual(je_kind % 2, 0)
+        self.assertEqual(len(seiten), 2 * je_kind)
         self.assertIn("Lina", seiten[0])
         self.assertNotIn("Tom", seiten[0])
-        self.assertIn("Tom", seiten[vorlage_seiten])
-        self.assertNotIn("Lina", seiten[vorlage_seiten])
+        self.assertIn("Tom", seiten[je_kind])
+        self.assertNotIn("Lina", seiten[je_kind])
 
     def test_sortiert_nach_anmeldetermin(self):
         with self.app.app_context():
@@ -170,15 +172,16 @@ class ProtocolTests(_Fixture, unittest.TestCase):
             db.session.commit()
             seite = _seitentexte(protocol_pdf.build(student, None))[0]
         self.assertIn("Termin", seite)       # der Vorname
-        self.assertIn("Datum", seite)        # die Beschriftung der leeren Zeile
+        self.assertIn("ANMELDETERMIN", seite)    # die Beschriftung der leeren Zeile
 
     @staticmethod
-    def _kreuz_bei(payload):
-        """Die x-Position des gesetzten Kreuzes auf der ersten Seite."""
-        funde = []
+    def _positionen(payload):
+        """x-Positionen von Kreuz und den Beschriftungen „Ja“/„Nein“ auf Seite 1."""
+        funde = {}
         PdfReader(BytesIO(payload)).pages[0].extract_text(
             visitor_text=lambda text, cm, tm, fd, size:
-            funde.append(tm[4]) if text.strip() == "X" else None)
+            funde.setdefault(text.strip(), []).append(tm[4])
+            if text.strip() in {"X", "Ja", "Nein"} else None)
         return funde
 
     def test_der_kann_kind_vermerk_wird_angekreuzt(self):
@@ -187,15 +190,52 @@ class ProtocolTests(_Fixture, unittest.TestCase):
             kann = self._kind("Kann", "Kind", kann_kind=True)
             muss = self._kind("Muss", "Kind", kann_kind=False)
             db.session.commit()
-            bei_kann = self._kreuz_bei(protocol_pdf.build(kann))
-            bei_muss = self._kreuz_bei(protocol_pdf.build(muss))
+            bei_kann = self._positionen(protocol_pdf.build(kann))
+            bei_muss = self._positionen(protocol_pdf.build(muss))
 
-        ja_x, nein_x = protocol_pdf.KANN_KIND[True][0], protocol_pdf.KANN_KIND[False][0]
-        self.assertEqual(len(bei_kann), 1, "genau ein Kreuz")
-        self.assertEqual(len(bei_muss), 1)
-        # Das Kreuz sitzt mittig im vorgedruckten Kreis, also dicht an dessen Grundlinie.
-        self.assertLess(abs(bei_kann[0] - ja_x), 5)
-        self.assertLess(abs(bei_muss[0] - nein_x), 5)
+        self.assertEqual(len(bei_kann["X"]), 1, "genau ein Kreuz")
+        self.assertEqual(len(bei_muss["X"]), 1)
+        # Das Kreuz steht im Kästchen direkt vor der Beschriftung.
+        def naechste(funde):
+            return min(("Ja", "Nein"), key=lambda wort: abs(funde[wort][0] - funde["X"][0]))
+        self.assertEqual(naechste(bei_kann), "Ja")
+        self.assertEqual(naechste(bei_muss), "Nein")
+
+    def test_der_auswertungsbogen_folgt_den_kriterien(self):
+        from sl_office.criteria import service as criteria
+        from sl_office.criteria.models import Kriterium
+        with self.app.app_context():
+            student = self._kind("Ammer", "Lina")
+            db.session.commit()
+            criteria.ensure_catalog("diagnostik")
+            db.session.add(Kriterium(bogen="diagnostik", gruppe="Motorik", bezeichnung="Hüpfen auf einem Bein",
+                                     typ="janein", reihenfolge=999))
+            db.session.commit()
+            text = " ".join(_seitentexte(protocol_pdf.build(student)))
+        self.assertIn("Auswertung Anmeldespiel".upper(), text.upper())
+        self.assertIn("Wortschatz", text)
+        self.assertIn("Hüpfen auf einem Bein", text)
+
+    def test_das_material_der_schule_wird_eingebunden(self):
+        from reportlab.pdfgen import canvas as rl_canvas
+        from sl_office import vorlagen
+        puffer = BytesIO()
+        blatt = rl_canvas.Canvas(puffer)
+        for nummer in (1, 2, 3):
+            blatt.drawString(100, 700, f"Aufgabenblatt {nummer}")
+            blatt.showPage()
+        blatt.save()
+        with self.app.app_context():
+            student = self._kind("Ammer", "Lina")
+            ohne = len(_seitentexte(protocol_pdf.build(student)))
+            vorlagen.material_speichern(puffer.getvalue(), "Aufgaben.pdf")
+            db.session.commit()
+            seiten = _seitentexte(protocol_pdf.build(student))
+        self.assertIn("Lina", seiten[0])
+        self.assertIn("Aufgabenblatt 1", seiten[1])
+        self.assertIn("Aufgabenblatt 3", seiten[3])
+        self.assertEqual(len(seiten) % 2, 0)
+        self.assertGreater(len(seiten), ohne)
 
     def test_sammeldruck_ueber_die_oberflaeche(self):
         with self.app.app_context():
@@ -257,7 +297,11 @@ class AdminProtocolTests(_Fixture, unittest.TestCase):
             student = self._kind("Ammer", "Lina")
             db.session.commit()
             seite = _seitentexte(admin_protocol_pdf.build(student, self._schule()))[0]
-        for abschnitt, punkte in admin_protocol_pdf.ABSCHNITTE:
+        from sl_office.vorlagen import laufzettel_abschnitte
+        with self.app.app_context():
+            abschnitte = laufzettel_abschnitte(schule=self._schule())
+        self.assertTrue(abschnitte)
+        for abschnitt, punkte in abschnitte:
             self.assertIn(abschnitt, seite)
             for punkt in punkte:
                 self.assertIn(punkt.text, seite, punkt.text)

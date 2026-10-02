@@ -5,7 +5,7 @@ import datetime
 from flask import Blueprint, current_app, flash, redirect, render_template, request, send_file, session, url_for
 from flask_login import login_required
 
-from forms import SchuelerForm, SchuelerImportForm
+from forms import SchuelerForm, SchuelerImportForm, StadtImportForm
 from models import AOSF, Diagnostik, Rueckstellung, SchulaerztlicheUntersuchung, Schueler, db
 from sl_office.authorization import role_required
 from sl_office.services.student_classification import recalculate_kann_kind
@@ -25,11 +25,11 @@ WRITE_ROLES = ["Administrator", "Schulleitung", "Sekretariat"]
 @students_bp.route("/import", methods=["GET", "POST"])
 @role_required(WRITE_ROLES)
 def import_excel():
-    form = SchuelerImportForm()
+    form = StadtImportForm()
     if form.validate_on_submit():
         payload = form.file.data.read(current_app.config["MAX_EXCEL_IMPORT_BYTES"] + 1)
         if len(payload) > current_app.config["MAX_EXCEL_IMPORT_BYTES"]:
-            flash("Die Excel-Datei ist zu groß.", "error")
+            flash("Die Datei ist zu groß.", "error")
         else:
             try:
                 created, skipped, invalid = import_students(payload)
@@ -52,18 +52,18 @@ CITY_IMPORT_SESSION_KEY = "city_import_token"
 @role_required(WRITE_ROLES)
 def import_city():
     """Step 1: upload the municipal list and park it for column mapping."""
-    form = SchuelerImportForm()
+    form = StadtImportForm()
     if form.validate_on_submit():
         payload = form.file.data.read(current_app.config["MAX_EXCEL_IMPORT_BYTES"] + 1)
         if len(payload) > current_app.config["MAX_EXCEL_IMPORT_BYTES"]:
-            flash("Die Excel-Datei ist zu groß.", "error")
+            flash("Die Datei ist zu groß.", "error")
         else:
             try:
                 city_import.purge_stale_staging()
                 previous = session.pop(CITY_IMPORT_SESSION_KEY, None)
                 if previous:
                     city_import.discard_staged(previous)
-                token, headers, preview = city_import.stage_upload(payload)
+                token, headers, preview = city_import.stage_upload(payload, form.file.data.filename or "")
             except city_import.InvalidWorkbook as exc:
                 flash(str(exc), "error")
             except Exception:
@@ -76,7 +76,8 @@ def import_city():
                     fields=city_import.TARGET_FIELDS,
                     mapping=city_import.suggest_mapping(headers),
                 )
-    return render_template("import_stadt.html", form=form, headers=None)
+    return render_template("import_stadt.html", form=form, headers=None,
+                           remembered=bool(city_import.remembered_mapping()))
 
 
 @students_bp.post("/import/stadt/zuordnen")
@@ -102,7 +103,7 @@ def import_city_apply():
         db.session.rollback()
         flash(str(exc), "error")
         return render_template(
-            "import_stadt.html", form=SchuelerImportForm(), headers=staged["headers"],
+            "import_stadt.html", form=StadtImportForm(), headers=staged["headers"],
             preview=staged["rows"][:5], fields=city_import.TARGET_FIELDS, mapping=mapping,
         )
     except Exception:

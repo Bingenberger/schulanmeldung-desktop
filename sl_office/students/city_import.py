@@ -11,7 +11,7 @@ import os
 import re
 import secrets
 import tempfile
-from io import BytesIO
+from io import BytesIO, StringIO
 from zipfile import BadZipFile, ZipFile
 
 import pandas as pd
@@ -42,7 +42,8 @@ TARGET_FIELDS = (
     ("vorname", "Vorname", True, ("vorname", "rufname", "vornamen")),
     ("geburtsdatum", "Geburtsdatum", True, ("geburtsdatum", "geburtstag", "geboren", "geb", "geb.datum")),
     ("geschlecht", "Geschlecht", False, ("geschlecht", "sex", "gender")),
-    ("strasse", "Straße und Hausnummer", False, ("strasse", "straße", "strasse hausnummer", "anschrift", "adresse", "str")),
+    ("strasse", "Straße (ggf. mit Hausnummer)", False, ("strasse", "straße", "strasse hausnummer", "anschrift", "adresse", "str")),
+    ("hausnummer", "Hausnummer (falls eigene Spalte)", False, ("hausnummer", "hausnr", "hnr", "nr")),
     ("plz", "PLZ", False, ("plz", "postleitzahl")),
     ("ort", "Ort", False, ("ort", "wohnort", "stadt", "gemeinde")),
     ("erzb_1_name", "Erziehungsberechtigte:r 1", False,
@@ -70,28 +71,95 @@ def _normalize_header(value):
     return re.sub(r"[\s_.:-]+", " ", str(value)).strip().casefold()
 
 
-def suggest_mapping(headers):
-    """Pre-select a column per target field by matching known header aliases."""
+REMEMBERED_KEY = "import:stadt"
+#: Kurze Aliasse wie "nr" stecken in vielen Spaltenköpfen ("Straße / Nr.");
+#: diese Felder werden nur bei genau passender Überschrift vorgeschlagen.
+EXACT_ONLY = {"hausnummer"}
+
+
+def remembered_mapping():
+    """Die Zuordnung des letzten erfolgreichen Imports, ``{Feld: Spaltenkopf}``."""
+    from flask import has_app_context
+    from sl_office.school_profile import Schulprofil
+
+    if not has_app_context():
+        return {}
+    row = db.session.get(Schulprofil, REMEMBERED_KEY)
+    try:
+        stored = json.loads(row.wert) if row is not None else {}
+    except ValueError:
+        return {}
+    return {name: column for name, column in stored.items()
+            if isinstance(name, str) and isinstance(column, str)}
+
+
+def remember_mapping(mapping):
+    """Die Zuordnung merken: die Stadt liefert meist Jahr für Jahr dieselben Spalten."""
+    from sl_office.school_profile import Schulprofil
+
+    row = db.session.get(Schulprofil, REMEMBERED_KEY)
+    if row is None:
+        row = Schulprofil(key=REMEMBERED_KEY)
+        db.session.add(row)
+    row.wert = json.dumps(mapping, ensure_ascii=False)
+
+
+def suggest_mapping(headers, remembered=None):
+    """Pre-select a column per target field.
+
+    A column the school chose for this field last time wins; otherwise known
+    header aliases decide.
+    """
+    remembered = remembered_mapping() if remembered is None else remembered
     normalized = {_normalize_header(header): header for header in headers}
-    mapping = {}
+    mapping = {name: column for name, column in remembered.items() if column in headers}
     for name, _, _, aliases in TARGET_FIELDS:
+        if name in mapping:
+            continue
         match = next((normalized[alias] for alias in aliases if alias in normalized), None)
-        if match is None:
+        if match is None and name not in EXACT_ONLY:
             # Fall back to a header that merely contains an alias, e.g. "Straße/Nr.".
             match = next(
                 (original for key, original in normalized.items()
                  if any(alias in key for alias in aliases)),
                 None,
             )
-        if match is not None:
+        if match is not None and match not in mapping.values():
             mapping[name] = match
     return mapping
 
 
-def stage_upload(payload):
+def _read_csv(payload):
+    """CSV-Export einer Stadtverwaltung: Trennzeichen und Zeichensatz erraten.
+
+    Behördensoftware schreibt oft Windows-1252 mit Semikolon, andere UTF-8
+    mit Komma; beides kommt vor.
+    """
+    for encoding in ("utf-8-sig", "cp1252"):
+        try:
+            text = payload.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        raise InvalidWorkbook("Die CSV-Datei hat einen unbekannten Zeichensatz.")
+    first_line = text.splitlines()[0] if text.strip() else ""
+    separator = max((";", ",", "\t"), key=first_line.count)
+    try:
+        return pd.read_csv(StringIO(text), sep=separator, dtype=str, nrows=MAX_ROWS + 1)
+    except (pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
+        raise InvalidWorkbook("Die CSV-Datei ist nicht lesbar.") from exc
+
+
+def stage_upload(payload, filename=""):
     """Parse the workbook and park its rows; returns (token, headers, preview)."""
-    _validate_xlsx(payload)
-    frame = pd.read_excel(BytesIO(payload), engine="openpyxl", dtype=str)
+    if filename.lower().endswith(".csv") or not payload.startswith(b"PK"):
+        if b"\x00" in payload[:4096]:
+            raise InvalidWorkbook("Die Datei ist weder eine XLSX-Arbeitsmappe noch eine CSV-Datei.")
+        frame = _read_csv(payload)
+    else:
+        _validate_xlsx(payload)
+        frame = pd.read_excel(BytesIO(payload), engine="openpyxl", dtype=str)
     if frame.empty:
         raise InvalidWorkbook("Die Arbeitsmappe enthält keine Datenzeilen.")
     if len(frame.index) > MAX_ROWS or len(frame.columns) > MAX_COLUMNS:
@@ -211,8 +279,9 @@ def import_rows(staged, mapping):
             invalid += 1
             continue
 
+        strasse = " ".join(part for part in (value(row, "strasse"), value(row, "hausnummer")) if part)
         fields = {
-            "strasse": value(row, "strasse"), "plz": value(row, "plz"), "ort": value(row, "ort"),
+            "strasse": strasse, "plz": value(row, "plz"), "ort": value(row, "ort"),
             "erzb_1_name": value(row, "erzb_1_name"), "erzb_2_name": value(row, "erzb_2_name"),
         }
         kita = value(row, "kita")
@@ -234,5 +303,6 @@ def import_rows(staged, mapping):
             ))
             created += 1
     recalculate_kann_kind()
+    remember_mapping(mapping)
     db.session.commit()
     return created, updated, invalid

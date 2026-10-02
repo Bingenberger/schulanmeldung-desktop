@@ -14,7 +14,7 @@ from models import Einschulungsjahr, GlobalSettings, User, db
 from sl_office.authorization import role_required
 from sl_office import features
 from sl_office.features import parent_portal_enabled, portal_required
-from sl_office import school_profile
+from sl_office import school_profile, vorlagen
 from sl_office.services.student_classification import recalculate_kann_kind
 from sl_office.services.student_deletion import delete_all_students
 from sl_office.parent_portal.models import ParentAccess, ParentRegistration
@@ -240,6 +240,69 @@ def modules_page():
         return redirect(url_for("admin.modules"))
     return render_template("admin_modules.html", module_list=features.MODULES,
                            states=features.module_states())
+
+
+# --- Vorlagen -------------------------------------------------------------------
+
+@admin_bp.route("/vorlagen", methods=["GET", "POST"], endpoint="templates")
+@role_required(["Administrator", "Schulleitung"])
+def templates_page():
+    """Laufzettel der Verwaltungsanmeldung und Material zum Anmeldespiel."""
+    text = None
+    if request.method == "POST":
+        aktion = request.form.get("action", "")
+        try:
+            if aktion == "laufzettel":
+                text = request.form.get("laufzettel", "")
+                vorlagen.laufzettel_speichern(text)
+                meldung = "Der Laufzettel wurde gespeichert."
+            elif aktion == "laufzettel_standard":
+                vorlagen.laufzettel_zuruecksetzen()
+                meldung = "Der Laufzettel entspricht wieder der Vorbelegung."
+            elif aktion == "material":
+                upload = request.files.get("material")
+                if not upload or not upload.filename:
+                    raise vorlagen.VorlagenFehler("Bitte eine PDF-Datei auswählen.")
+                seiten = vorlagen.material_speichern(upload.read(), upload.filename)
+                meldung = f"Das Material ({seiten} Seiten) wird jetzt in jedes Protokoll eingebunden."
+            elif aktion == "material_entfernen":
+                vorlagen.material_entfernen()
+                meldung = "Das Material wurde entfernt."
+            else:
+                abort(400)
+        except vorlagen.VorlagenFehler as exc:
+            db.session.rollback()
+            flash(str(exc), "error")
+        else:
+            record("templates_saved", "vorlage", None, actor_type="staff", actor_id=current_user.id)
+            db.session.commit()
+            flash(meldung)
+            return redirect(url_for("admin.templates"))
+    return render_template(
+        "admin_templates.html",
+        laufzettel=text if text is not None else vorlagen.laufzettel_text(),
+        ist_standard=vorlagen.ist_standard(), material=vorlagen.material_info())
+
+
+@admin_bp.get("/vorlagen/vorschau/<art>", endpoint="template_preview")
+@role_required(["Administrator", "Schulleitung"])
+def template_preview(art):
+    """Laufzettel oder Protokoll mit einem Beispielkind, ohne etwas zu speichern."""
+    from types import SimpleNamespace
+    from sl_office.appointments import admin_protocol_pdf, protocol_pdf
+
+    beispiel = SimpleNamespace(
+        id=0, vorname="Mia", nachname="Musterkind", strasse="Musterweg 7", plz="12345",
+        ort="Musterstadt", geburtsdatum=datetime.date(datetime.date.today().year - 6, 3, 14),
+        kita="Kita Sonnenschein", kann_kind=False)
+    if art == "laufzettel":
+        payload = admin_protocol_pdf.build(beispiel, letterhead.branding())
+    elif art == "protokoll":
+        payload = protocol_pdf.build(beispiel)
+    else:
+        abort(404)
+    return send_file(BytesIO(payload), mimetype="application/pdf",
+                     download_name=f"Vorschau_{art}.pdf")
 
 
 # --- Einschulungsjahre ------------------------------------------------------

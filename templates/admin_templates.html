@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2><i class="bi bi-file-earmark-text"></i> Vorlagen</h2>
+<p class="text-muted">
+  Druckstücke für die Anmeldetage. Briefkopf, Logo und Unterschrift kommen aus dem
+  <a href="{{ url_for('admin.school_profile') }}">Schulprofil</a>, den Text des Elternbriefs bearbeiten
+  Sie unter <a href="{{ url_for('admin.parent_letter_text') }}">Elternbrief bearbeiten</a>.
+</p>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="card shadow-sm h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Laufzettel der Verwaltungsanmeldung</strong>
+        <a class="btn btn-sm btn-outline-secondary" target="_blank"
+           href="{{ url_for('admin.template_preview', art='laufzettel') }}">
+          <i class="bi bi-file-earmark-pdf"></i> Vorschau (gespeicherter Stand)</a>
+      </div>
+      <div class="card-body">
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <textarea class="form-control font-monospace mb-2" name="laufzettel" rows="18"
+                    spellcheck="true">{{ laufzettel }}</textarea>
+          <div class="d-flex gap-2">
+            <button class="btn btn-primary" name="action" value="laufzettel">
+              <i class="bi bi-check-lg"></i> Speichern</button>
+            {% if not ist_standard %}
+            <button class="btn btn-outline-secondary" name="action" value="laufzettel_standard"
+                    formnovalidate onclick="return confirm('Wieder die Vorbelegung verwenden?');">
+              Vorbelegung wiederherstellen</button>
+            {% endif %}
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header"><strong>So schreiben Sie den Laufzettel</strong></div>
+      <div class="card-body small">
+        <table class="table table-sm mb-2">
+          <tbody>
+            <tr><td class="font-monospace"># Titel</td><td>neuer Abschnitt</td></tr>
+            <tr><td class="font-monospace">- Text</td><td>Ankreuzpunkt</td></tr>
+            <tr><td class="font-monospace">- Text: A | B</td><td>Punkt mit Auswahl darunter</td></tr>
+            <tr><td class="font-monospace">~ oder</td><td>eingerücktes Zwischenwort</td></tr>
+            <tr><td class="font-monospace">{stadt}</td><td>Stadt aus dem Schulprofil</td></tr>
+            <tr><td class="font-monospace">{schule}</td><td>Name der Schule</td></tr>
+            {% if parent_portal_enabled %}
+            <tr><td class="font-monospace">{digital}</td><td>Vermerk „elektronisch übermittelt“</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+        Name des Kindes, Anmeldetermin, Notizzeilen und Unterschrift setzt die Anwendung selbst.
+      </div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Protokoll des Anmeldespiels</strong>
+        <a class="btn btn-sm btn-outline-secondary" target="_blank"
+           href="{{ url_for('admin.template_preview', art='protokoll') }}">
+          <i class="bi bi-file-earmark-pdf"></i> Vorschau</a>
+      </div>
+      <div class="card-body">
+        <p class="small">Jedes Protokoll besteht aus</p>
+        <ol class="small">
+          <li>einem Deckblatt mit den Daten des Kindes,</li>
+          <li>Ihrem eigenen Material (Aufgaben, Gesprächsfragen …) als PDF, falls hinterlegt,</li>
+          <li>einem Auswertungsbogen aus den
+            <a href="{{ url_for('criteria.catalog', bogen='diagnostik') }}">Kriterien der Pädagogischen Diagnostik</a>.</li>
+        </ol>
+        {% if material %}
+        <div class="alert alert-light border small">
+          <i class="bi bi-file-earmark-pdf text-danger"></i> {{ material.name }}
+          – {{ material.seiten }} Seite{{ '' if material.seiten == 1 else 'n' }},
+          {{ (material.groesse / 1024)|round|int }} KB
+        </div>
+        {% endif %}
+        <form method="post" enctype="multipart/form-data">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input class="form-control mb-2" type="file" name="material" accept="application/pdf">
+          <div class="form-text mb-2">PDF, höchstens 15 MB und 40 Seiten. Es wird unverändert eingebunden.</div>
+          <button class="btn btn-primary btn-sm" name="action" value="material">
+            <i class="bi bi-upload"></i> {{ 'Material ersetzen' if material else 'Material hochladen' }}</button>
+          {% if material %}
+          <button class="btn btn-outline-danger btn-sm" name="action" value="material_entfernen" formnovalidate>
+            Entfernen</button>
+          {% endif %}
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

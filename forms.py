@@ -106,6 +106,13 @@ class SchuelerForm(FlaskForm):
     bemerkung = TextAreaField('Interne Bemerkungen')
     submit = SubmitField('Datensatz Speichern')
 
+class StadtImportForm(FlaskForm):
+    file = FileField('Liste der Stadt (.xlsx oder .csv)', validators=[
+        InputRequired(),
+        FileAllowed(['xlsx', 'csv'], 'Nur XLSX- oder CSV-Dateien erlaubt!')
+    ])
+    submit = SubmitField('Hochladen')
+
 class SchuelerImportForm(FlaskForm):
     file = FileField('Excel-Datei (.xlsx)', validators=[
         InputRequired(),

@@ -1,17 +1,16 @@
 """Der Laufzettel für den Verwaltungsteil der Anmeldung.
 
-Anders als das Protokoll des Anmeldespiels wird dieser Bogen nicht aus einer
-Vorlage überlagert, sondern selbst gesetzt -- mit demselben Briefkopf wie die
+Der Bogen wird selbst gesetzt -- mit demselben Briefkopf wie die
 Elternschreiben. Er besteht nur aus einer Checkliste, und die gewinnt deutlich,
 wenn sie echte Ankreuzfelder, Gruppen und Schreiblinien bekommt statt
 getippter "O" und Tabulatoren.
 
-Der Wortlaut stammt aus ``Protokoll_Verwaltungsanmeldung.odt`` und steht
-unverändert in :data:`ABSCHNITTE`. Wer die Liste ändern will, ändert sie dort;
-die Seite richtet sich von selbst danach.
+Die Checkliste pflegt jede Schule unter „Verwaltung → Vorlagen“
+(:mod:`sl_office.vorlagen`); vorbelegt ist der Wortlaut aus
+``Protokoll_Verwaltungsanmeldung.odt``. Die Seite richtet sich von selbst
+nach der Liste.
 """
 
-from dataclasses import dataclass, field
 from io import BytesIO
 
 from reportlab.lib.pagesizes import A4
@@ -25,49 +24,8 @@ from sl_office.parent_portal.letterhead import (
     HEADING_RULE, INK, MARGIN_X, MUTED, RULE, TEXT_W, Flow,
 )
 from sl_office.parent_portal.models import ParentRegistration
+from sl_office.vorlagen import Reihe, Zwischenwort, laufzettel_abschnitte
 
-
-@dataclass(frozen=True)
-class Kasten:
-    """Ein Ankreuzpunkt. ``schluessel`` holt sich einen Hinweis aus den Daten."""
-    text: str
-    schluessel: str = ""
-
-
-@dataclass(frozen=True)
-class Reihe:
-    """Ein Ankreuzpunkt mit Unteroptionen in einer eigenen Zeile darunter."""
-    text: str
-    optionen: tuple = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class Zwischenwort:
-    """Ein eingerücktes Wort zwischen zwei Punkten, etwa „oder“."""
-    text: str
-
-
-#: Die Checkliste, gruppiert. Wortlaut wie in der Vorlage der Schule.
-ABSCHNITTE = (
-    ("Unterlagen", (
-        Kasten("Anmeldeformular vollständig ausgefüllt", schluessel="digital"),
-        Zwischenwort("oder"),
-        Kasten("Abgleich ausgedruckte Daten mit Unterschrift"),
-        Kasten("Anmeldeschein der Stadt Niederkassel ausgefüllt"),
-        Kasten("Abgleich Anmeldeformular mit Geburtsurkunde"),
-        Kasten("Masernschutz vorhanden"),
-        Kasten("Datenschutzerklärung ausgefüllt"),
-        Kasten("Schweigepflichtsentbindung Kita"),
-    )),
-    ("Betreuung", (
-        Reihe("OGS-Platz gewünscht", ("Ja", "Nein", "Anmeldeunterlagen OGS ausgeben")),
-        Reihe("ÜMI-Platz gewünscht", ("Ja", "Nein", "Anmeldeunterlagen ÜMI ausgeben")),
-    )),
-    ("Ausgegeben und vorgelegt", (
-        Kasten("Broschüre zur Grundschule ausgeben"),
-        Kasten("Erziehungsvertrag liegt vor"),
-    )),
-)
 
 TITEL = "Protokoll Verwaltungsanmeldung"
 TEXT_GROESSE = 11.0
@@ -201,8 +159,9 @@ def _bogen(flow, student, appointment):
     _kopfzeile(flow, "Name des Kindes", f"{student.vorname} {student.nachname}".strip())
     _kopfzeile(flow, "Anmeldetermin", _termin_text(appointment))
     vermerke = hinweise(student)
-    for titel, punkte in ABSCHNITTE:
-        _abschnitt(flow, titel)
+    for titel, punkte in laufzettel_abschnitte(schule=flow.school):
+        if titel:
+            _abschnitt(flow, titel)
         for punkt in punkte:
             if isinstance(punkt, Zwischenwort):
                 flow.y -= 0.42 * cm

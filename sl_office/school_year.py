@@ -189,7 +189,7 @@ READONLY_EXEMPT_ENDPOINTS = frozenset({
     "auth.logout", "auth.login", "auth.login_two_factor", "auth.setup_two_factor",
     "auth.security", "auth.change_password",
     # Das Schulprofil gilt für alle Jahrgänge, nicht für den geöffneten.
-    "admin.school_profile", "admin.school_profile_image", "admin.modules",
+    "admin.school_profile", "admin.school_profile_image", "admin.modules", "admin.templates",
     # Der Kriterienkatalog gilt ebenso für alle Jahrgänge.
     "criteria.index", "criteria.catalog", "criteria.create", "criteria.edit",
     "criteria.move", "criteria.toggle", "criteria.delete",

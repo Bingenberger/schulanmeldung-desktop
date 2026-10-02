@@ -1,49 +1,45 @@
-"""Das Protokoll des Anmeldespiels mit den Anmeldedaten füllen.
+"""Das Protokoll des Anmeldespiels.
 
-``Protokoll_Anmeldespiel.odt`` ist die Vorlage der Schule; sie trägt
-Seriendruckfelder für Termin, Namen, Anschrift und Geburtstag. Gedruckt wird
-sie wie die Schulanmeldung: Die leere Fassung liegt als
-``Protokoll_Anmeldespiel.pdf`` im Projekt, die Werte legt dieses Modul als
-zweite Ebene darüber.
+Jede Schule führt ihr Anmeldespiel anders. Das Protokoll eines Kindes setzt
+sich darum aus drei Teilen zusammen:
 
-Die Grundlinien in :data:`PLACEMENTS` stammen aus der Vorlage selbst. Wird die
-ODT geändert, erzeugt ``scripts/protokoll_vorlage.py`` das PDF neu und misst
-die Felder nach -- dann sind die Werte hier nachzutragen.
+1. ein **Deckblatt** im Briefkopf der Schule mit Termin, Name, Anschrift,
+   Geburtsdatum, Kita und Kann-Kind-Vermerk,
+2. das **Material der Schule** -- Aufgaben, Gesprächsfragen, Beobachtungs-
+   hilfen --, so wie es unter „Verwaltung → Vorlagen“ als PDF hinterlegt ist
+   (:mod:`sl_office.vorlagen`); ohne hinterlegtes Material entfällt der Teil,
+3. ein **Auswertungsbogen** aus den Kriterien der Pädagogischen Diagnostik
+   (:mod:`sl_office.criteria`): jedes Kriterium mit Ankreuzfeldern, so dass
+   sich das Ergebnis danach eins zu eins in die Anwendung übertragen lässt.
+
+Gedruckt wird beidseitig; jedes Kind beginnt auf einem eigenen Blatt.
 """
 
 from io import BytesIO
-from pathlib import Path
 
-from pypdf import PdfReader
+from pypdf import PdfReader, PdfWriter
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import cm
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 from sqlalchemy import select
 
 from models import Schueler, db
+from sl_office import features, vorlagen
+from sl_office.appointments.admin_protocol_pdf import (
+    KASTEN_SEITE, TEXT_GROESSE, ZEILE, _abschnitt, _kasten_zeichnen, _kopfzeile, _notizen,
+)
 from sl_office.appointments.service import active_booking_for_student, slot_label
-from sl_office.parent_portal import letterhead
-from sl_office.parent_portal import registration_form
+from sl_office.criteria import service as criteria
+from sl_office.parent_portal import letterhead, registration_form
+from sl_office.parent_portal.letterhead import INK, MARGIN_X, RULE, TEXT_W, Flow
 from sl_office.parent_portal.models import AppointmentBooking, AppointmentSlot, ParentRegistration
-from sl_office.services.pdf_forms import page_size, stack
 
-TEMPLATE = Path(__file__).resolve().parents[2] / "Protokoll_Anmeldespiel.pdf"
-
-WERT_GROESSE = 12.0
-#: Die Vorlage setzt ihre Ankreuzfelder als "O" in 12 pt.
-MARKE_GROESSE = 10.0
-KREIS_BREITE = 9.3
-
-#: Feld -> (x, Grundlinie, nutzbare Breite). Alles steht auf Seite 1.
-PLACEMENTS = {
-    "termin": (42.6, 651.8, 219.0),
-    "vorname": (42.6, 607.4, 219.0),
-    "nachname": (297.7, 607.4, 220.0),
-    "adresse": (42.6, 562.9, 219.0),
-    "geburtstag": (297.7, 562.9, 108.0),
-    "kita": (42.6, 518.5, 219.0),
-}
-#: Die vorgedruckten Kreise hinter "Kann-Kind".
-KANN_KIND = {True: (410.9, 562.9), False: (446.3, 562.9)}
+TITEL = "Protokoll Anmeldespiel"
+AUSWERTUNG = "Auswertung Anmeldespiel"
+SKALA = ("++", "+", "o", "–")
+#: Wo die Ankreuzfelder eines Kriteriums beginnen; links davon steht sein Name.
+SPALTE = 7.2 * cm
 
 
 def _adresse(student):
@@ -94,57 +90,152 @@ def werte(student, appointment=None, kita=None):
     }
 
 
-def _passend(text, schrift, breite):
-    """Schriftgröße, bei der der Wert in seine Spalte passt."""
-    groesse = WERT_GROESSE
-    while groesse > 7.0 and stringWidth(text, schrift, groesse) > breite:
+def _ankreuzen(flow, x, optionen, gesetzt=None):
+    """Kästchen mit Beschriftung nebeneinander; bricht um, wenn der Platz endet.
+
+    ``gesetzt`` ist die Option, die vorab angekreuzt wird.
+    """
+    rechts = MARGIN_X + TEXT_W
+    start = x
+    flow.pdf.setFont(flow.font["body"], TEXT_GROESSE - 0.5)
+    for option in optionen:
+        breite = KASTEN_SEITE + 0.22 * cm + stringWidth(option, flow.font["body"], TEXT_GROESSE - 0.5)
+        if x > start and x + breite > rechts:
+            flow.need(ZEILE)
+            flow.y -= ZEILE
+            x = start
+        _kasten_zeichnen(flow, x, flow.y + 0.04 * cm)
+        if option == gesetzt:
+            flow.pdf.setFont(flow.font["bold"], TEXT_GROESSE)
+            flow.pdf.drawCentredString(x + KASTEN_SEITE / 2, flow.y + 0.08 * cm, "X")
+            flow.pdf.setFont(flow.font["body"], TEXT_GROESSE - 0.5)
+        flow.pdf.setFillColor(INK)
+        flow.pdf.drawString(x + KASTEN_SEITE + 0.22 * cm, flow.y + 0.11 * cm, option)
+        x += breite + 0.7 * cm
+
+
+def _beschriftung(flow, text):
+    """Name eines Kriteriums links; zu lange Namen werden kleiner gesetzt."""
+    groesse = TEXT_GROESSE
+    while groesse > 8 and stringWidth(text, flow.font["body"], groesse) > SPALTE - 0.4 * cm:
         groesse -= 0.5
-    return groesse
+    flow.pdf.setFillColor(INK)
+    flow.pdf.setFont(flow.font["body"], groesse)
+    flow.pdf.drawString(MARGIN_X, flow.y + 0.11 * cm, text)
 
 
-def _overlay(daten, kann_kind, seitenzahl, groesse):
-    """Die Werteebene: beschriftete erste Seite, der Rest bleibt leer."""
+def _schreiblinie(flow, x):
+    flow.pdf.setStrokeColor(RULE)
+    flow.pdf.setLineWidth(0.6)
+    flow.pdf.line(x, flow.y + 0.02 * cm, MARGIN_X + TEXT_W, flow.y + 0.02 * cm)
+
+
+def _kriterium(flow, kriterium):
+    flow.need(ZEILE * 1.2)
+    flow.y -= ZEILE
+    _beschriftung(flow, kriterium.bezeichnung)
+    x = MARGIN_X + SPALTE
+    if kriterium.typ == "skala":
+        _ankreuzen(flow, x, SKALA)
+    elif kriterium.typ == "janein":
+        _ankreuzen(flow, x, ("ja",))
+    elif kriterium.typ in ("auswahl", "mehrfach"):
+        _ankreuzen(flow, x, kriterium.optionsliste)
+    else:
+        _schreiblinie(flow, x)
+
+
+def _deckblatt(flow, daten, kann_kind):
+    flow.title_bar(TITEL)
+    _kopfzeile(flow, "Anmeldetermin", daten["termin"])
+    _kopfzeile(flow, "Name des Kindes", f"{daten['vorname']} {daten['nachname']}".strip())
+    _kopfzeile(flow, "Anschrift", daten["adresse"])
+    _kopfzeile(flow, "Geburtsdatum", daten["geburtstag"])
+    _kopfzeile(flow, "Kita", daten["kita"])
+    flow.y -= ZEILE
+    _beschriftung(flow, "Kann-Kind")
+    _ankreuzen(flow, MARGIN_X + SPALTE, ("Ja", "Nein"), "Ja" if kann_kind else "Nein")
+    flow.y -= ZEILE
+    _beschriftung(flow, "Durchführende Lehrkraft")
+    _schreiblinie(flow, MARGIN_X + SPALTE)
+    _notizen(flow, "Gespräch mit den Eltern", 8)
+
+
+def _auswertung(flow, daten, module):
+    flow.title_bar(AUSWERTUNG)
+    _kopfzeile(flow, "Name des Kindes", f"{daten['vorname']} {daten['nachname']}".strip())
+    if module["diagnostik"]:
+        for gruppe, liste in criteria.gruppiert(criteria.kriterien("diagnostik")):
+            _abschnitt(flow, gruppe or "Beobachtungen")
+            for kriterium in liste:
+                _kriterium(flow, kriterium)
+        _abschnitt(flow, "Gesamteindruck")
+        for text in ("kognitiv", "Verhalten"):
+            flow.need(ZEILE)
+            flow.y -= ZEILE
+            _beschriftung(flow, text)
+            _ankreuzen(flow, MARGIN_X + SPALTE, SKALA)
+    weiteres = [(text, ("ja", "nein")) for schalter, text in (
+        ("schulspiel", "Einladung zum Schulspiel"),
+        ("aosf", "Verdacht auf AO-SF"),
+        ("rueckstellung", "Rückstellung empfehlen"),
+    ) if module[schalter]]
+    if weiteres:
+        _abschnitt(flow, "Weiteres Vorgehen")
+        for text, optionen in weiteres:
+            flow.need(ZEILE)
+            flow.y -= ZEILE
+            _beschriftung(flow, text)
+            _ankreuzen(flow, MARGIN_X + SPALTE, optionen)
+    # So viele Schreiblinien, wie noch auf die Seite passen -- eine
+    # Folgeseite nur für zwei Notizzeilen wäre Papierverschwendung.
+    platz = int((flow.y - flow._bottom - 0.9 * cm) / ZEILE)
+    _notizen(flow, "Sonstige Beobachtungen", max(2, min(6, platz)))
+
+
+def _seiten(zeichnen, school):
     puffer = BytesIO()
-    pdf = canvas.Canvas(puffer, pagesize=groesse)
-    schrift = letterhead.fonts()["body"]
-    pdf.setFillColorRGB(0, 0, 0)
-    for feld, (x, y, breite) in PLACEMENTS.items():
-        text = daten.get(feld) or ""
-        if not text:
-            continue
-        pdf.setFont(schrift, _passend(text, schrift, breite))
-        pdf.drawString(x, y, text)
-    if kann_kind is not None:
-        x, y = KANN_KIND[bool(kann_kind)]
-        pdf.setFont(schrift, MARKE_GROESSE)
-        versatz = (KREIS_BREITE - stringWidth("X", schrift, MARKE_GROESSE)) / 2
-        pdf.drawString(x + versatz, y + 0.5, "X")
-    pdf.showPage()
-    for _ in range(seitenzahl - 1):
-        pdf.showPage()
+    pdf = canvas.Canvas(puffer, pagesize=A4)
+    flow = Flow(pdf, school)
+    zeichnen(flow)
+    flow.finish()
     pdf.save()
-    return puffer.getvalue()
+    return PdfReader(BytesIO(puffer.getvalue()))
 
 
-def _ebenen(eintraege, seitenzahl, groesse):
-    aus_anmeldung = kita_aus_anmeldung([student.id for student, _ in eintraege])
-    for student, appointment in eintraege:
-        yield _overlay(werte(student, appointment, aus_anmeldung.get(student.id)),
-                       student.kann_kind, seitenzahl, groesse)
-
-
-def build_many(eintraege, title="Protokolle Anmeldespiel"):
+def build_many(eintraege, title="Protokolle Anmeldespiel", school=None):
     """Ein PDF aus mehreren Protokollen; ``eintraege`` sind (Kind, Termin)-Paare."""
-    vorlage = PdfReader(str(TEMPLATE))
-    # Die Bögen werden beidseitig gedruckt; jedes Kind soll auf einem eigenen
-    # Blatt beginnen.
-    return stack(TEMPLATE, _ebenen(list(eintraege), len(vorlage.pages), page_size(vorlage)),
-                 title=title, doppelseitig=True)
+    eintraege = list(eintraege)
+    school = school if school is not None else letterhead.branding()
+    module = features.module_states()
+    material = vorlagen.material()
+    material_reader = PdfReader(BytesIO(material)) if material else None
+    aus_anmeldung = kita_aus_anmeldung([student.id for student, _ in eintraege])
+
+    writer = PdfWriter()
+    for student, appointment in eintraege:
+        daten = werte(student, appointment, aus_anmeldung.get(student.id))
+        anfang = len(writer.pages)
+        writer.append(_seiten(lambda flow: _deckblatt(flow, daten, student.kann_kind), school))
+        if material_reader is not None:
+            writer.append(material_reader)
+        writer.append(_seiten(lambda flow: _auswertung(flow, daten, module), school))
+        # Beidseitiger Druck: jedes Kind beginnt auf einem eigenen Blatt.
+        if (len(writer.pages) - anfang) % 2:
+            writer.add_blank_page(*A4)
+    writer.add_metadata({"/Title": title, "/Producer": "SL-Office"})
+    try:
+        writer.compress_identical_objects()
+    except AttributeError:      # ältere pypdf-Fassung: dann eben größer
+        pass
+    ergebnis = BytesIO()
+    writer.write(ergebnis)
+    return ergebnis.getvalue()
 
 
-def build(student, appointment=None):
+def build(student, appointment=None, school=None):
     """Das Protokoll eines einzelnen Kindes."""
-    return build_many([(student, appointment)],
+    return build_many([(student, appointment)], school=school,
                       title=f"Protokoll Anmeldespiel {student.vorname} {student.nachname}")
 
 

@@ -269,18 +269,22 @@ ausgewählt, druckt der Knopf genau diese Auswahl.
 
 ## 10. Protokollbögen für das Anmeldespiel
 
-Die Vorlage der Schule ist `Protokoll_Anmeldespiel.odt` mit Seriendruckfeldern
-für Termin, Namen, Anschrift und Geburtstag. Gedruckt wird sie wie die
-Schulanmeldung: Die leere Fassung liegt als `Protokoll_Anmeldespiel.pdf` im
-Projekt, die Werte legt `sl_office/appointments/protocol_pdf.py` darüber.
-Zusätzlich werden die Kita und der Kann-Kind-Vermerk eingetragen -- beides
-steht als Feld auf dem Bogen, und beides weiß die Anwendung.
+Das Protokoll eines Kindes setzt `sl_office/appointments/protocol_pdf.py` aus
+drei Teilen zusammen:
+
+1. ein **Deckblatt** im Briefkopf der Schule mit Termin, Name, Anschrift,
+   Geburtsdatum, Kita und angekreuztem Kann-Kind-Vermerk,
+2. das **Material der Schule** (Aufgaben, Gesprächsfragen …) als PDF, so wie es
+   unter *Verwaltung → Vorlagen* hochgeladen ist -- unverändert eingebunden,
+3. ein **Auswertungsbogen** aus den Kriterien der Pädagogischen Diagnostik
+   (*Verwaltung → Kriterien*), dazu Gesamteindruck und, je nach eingeschalteten
+   Modulen, Schulspiel, AO-SF und Rückstellung.
 
 In der Terminverwaltung liefert „Protokollbögen" alle Kinder des Jahrgangs in
 einem PDF, **sortiert nach Anmeldetermin**; Kinder ohne Termin stehen am Ende.
-Einen einzelnen Bogen gibt es auf der Detailseite des Kindes. Hat die Vorlage
-eine ungerade Seitenzahl, wird je Kind eine leere Seite ergänzt, damit beim
-beidseitigen Druck jedes Kind auf einem frischen Blatt beginnt.
+Einen einzelnen Bogen gibt es auf der Detailseite des Kindes. Jedes Kind wird
+auf eine gerade Seitenzahl aufgefüllt, damit beim beidseitigen Druck jedes
+Kind auf einem frischen Blatt beginnt.
 
 Die Kita nehmen die Bögen aus dem **Anmeldeformular der Eltern** (`besuchte_kita`,
 bei „Andere" das Freitextfeld daneben); nur wenn dort nichts steht, tritt das
@@ -296,36 +300,21 @@ Der Import weist eine solche Zuordnung inzwischen zurück.
 
 ### Protokoll der Verwaltungsanmeldung
 
-Der Laufzettel für den Verwaltungsteil (`Protokoll_Verwaltungsanmeldung.odt`)
-wird **nicht** aus einer Vorlage überlagert, sondern von
+Der Laufzettel für den Verwaltungsteil wird von
 `sl_office/appointments/admin_protocol_pdf.py` selbst gesetzt -- mit dem
 Briefkopf der Elternschreiben, echten Ankreuzfeldern, Gruppen und
 Schreiblinien. Gefüllt werden Name und Anmeldetermin; beim ersten Punkt steht
 ein Vermerk, falls die Eltern das Formular elektronisch übermittelt haben.
 
-Der Wortlaut steht unverändert in `ABSCHNITTE` am Kopf des Moduls -- dort wird
-er auch geändert, nicht mehr in der ODT. Die Zeilenhöhen sind so bemessen, dass
-alles auf **eine** Seite passt; wer Punkte ergänzt, prüft das am besten im
-Ausdruck nach, ein Test wacht darüber. Je Bogen folgt eine leere Seite, damit
-beim beidseitigen Druck jedes Kind ein eigenes Blatt bekommt.
+Die Checkliste pflegt die Schule unter *Verwaltung → Vorlagen* als schlichten
+Text (`# Abschnitt`, `- Punkt`, `- Punkt: A | B`, `~ oder`, `{stadt}`); vorbelegt
+ist der bisherige Wortlaut (`sl_office/vorlagen.py`). Die Zeilenhöhen sind so
+bemessen, dass die vorbelegte Liste auf **eine** Seite passt; wer viele Punkte
+ergänzt, prüft das in der Vorschau. Je Bogen folgt eine leere Seite, damit beim
+beidseitigen Druck jedes Kind ein eigenes Blatt bekommt.
 
 Die Knöpfe sitzen neben denen für die Protokollbögen: in der Terminverwaltung
 für alle Kinder, auf der Detailseite für eines.
-
-**Wird die ODT geändert, muss die PDF-Vorlage neu erzeugt werden:**
-
-```bash
-venv/bin/python scripts/protokoll_vorlage.py
-```
-
-Das Skript braucht LibreOffice (`soffice`), läuft also auf dem Arbeitsplatz und
-nicht auf dem Server. Die Schriften des Briefkopfs -- FrenteH1, Calligraffiti
-und Calibri Light -- müssen dort **systemweit** installiert sein: LibreOffice
-liest `assets/briefkopf` nicht und würde eine fehlende Schrift stillschweigend
-ersetzen. Das Skript prüft das vorab und zeigt hinterher, was in der fertigen
-Vorlage eingebettet ist. Es schreibt `Protokoll_Anmeldespiel.pdf` neu und misst
-die Seriendruckfelder nach; verschobene Grundlinien gehören anschließend in
-`PLACEMENTS` am Kopf des Moduls. Das neue PDF gehört ins Projekt eingecheckt.
 
 ## 11. Anmeldezeitraum und Gesprächstage
 

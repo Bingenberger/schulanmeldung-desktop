@@ -207,6 +207,8 @@
                 <i class="bi bi-toggles me-2"></i>Module</a></li>
               <li><a class="dropdown-item" href="{{ url_for('criteria.index') }}">
                 <i class="bi bi-list-check me-2"></i>Kriterien</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('admin.templates') }}">
+                <i class="bi bi-file-earmark-text me-2"></i>Vorlagen</a></li>
               {% if current_user.role == 'Administrator' %}
               <li><a class="dropdown-item" href="{{ url_for('admin.users') }}">
                 <i class="bi bi-people-fill me-2"></i>Benutzerverwaltung</a></li>

@@ -1,8 +1,7 @@
 """Gesetzte Vorlagen mit Werten füllen -- einzeln oder als Stapel.
 
-Beide Formulare der Schule (``Schulanmeldung.pdf`` und
-``Protokoll_Anmeldespiel.pdf``) sind fertig gesetzte Dokumente ohne
-Formularfelder. Gefüllt werden sie, indem die Werte auf leere Seiten gleicher
+Das Anmeldeformular der Schule (``Schulanmeldung.pdf``) ist ein fertig
+gesetztes Dokument ohne Formularfelder. Gefüllt wird es, indem die Werte auf leere Seiten gleicher
 Größe gezeichnet und darübergelegt werden; herausgegeben wird also stets die
 Vorlage, nur eben beschriftet.
 """

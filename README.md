@@ -19,6 +19,10 @@
 >   *Verwaltung → Kriterien* selbst an (Skala, Ankreuzfeld, Auswahl,
 >   Mehrfachauswahl, Freitext, Datum). Vorbelegt ist der bisherige Katalog;
 >   Werte aus den alten festen Spalten werden dabei übernommen.
+> - **Vorlagen:** unter *Verwaltung → Vorlagen* pflegt jede Schule die
+>   Checkliste des Laufzettels und lädt ihr Material zum Anmeldespiel als PDF
+>   hoch; die Liste der Stadt darf auch eine CSV-Datei sein, die
+>   Spaltenzuordnung wird für das nächste Jahr gemerkt.
 >
 > Fehlerbehebungen aus der Serverfassung lassen sich über den Remote `upstream`
 > mit `git cherry-pick` übernehmen.
@@ -57,8 +61,9 @@ Zwei-Faktor-Bestätigung)
   Schule gibt ihn vor — je Kind wird beim Druck die passende gesetzt
 - eingegangene Anmeldungen als ausgefülltes `Schulanmeldung.pdf` zum Ausdrucken
   für den Termin vor Ort — einzeln oder alle übermittelten in einem PDF
-- Protokollbögen für das Anmeldespiel aus `Protokoll_Anmeldespiel.odt`, gefüllt
-  mit Termin, Namen, Anschrift und Kita — alle auf einmal, nach Termin sortiert
+- Protokollbögen für das Anmeldespiel: Deckblatt mit Termin, Namen, Anschrift
+  und Kita, das eigene Material der Schule und ein Auswertungsbogen aus den
+  Kriterien — alle auf einmal, nach Termin sortiert
 - Laufzettel für die Verwaltungsanmeldung, im Briefkopf der Schule gesetzt, mit
   Name, Termin und einem Vermerk zur elektronisch übermittelten Anmeldung
 
