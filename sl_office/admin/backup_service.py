@@ -60,9 +60,13 @@ def database_snapshot(app):
         staging.unlink(missing_ok=True)
 
 
-def create_backup(app, include_uploads=True):
-    """Write a timestamped folder with the database and the uploads."""
-    name = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
+def create_backup(app, include_uploads=True, prefix=""):
+    """Write a timestamped folder with the database and the uploads.
+
+    ``prefix`` marks automatic backups (``auto-``) so that pruning them never
+    touches the ones made by hand.
+    """
+    name = prefix + datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
     target = backup_root(app) / name
     suffix = 1
     while target.exists():

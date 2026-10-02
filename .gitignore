@@ -13,3 +13,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .DS_Store
+
+# Gebaute Windows-Fassung
+build/
+dist/

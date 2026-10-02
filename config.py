@@ -131,17 +131,74 @@ class ProductionConfig(BaseConfig):
         return {"SECRET_KEY": secret_key, "SQLALCHEMY_DATABASE_URI": database_url}
 
 
+def desktop_data_dir() -> Path:
+    """Wo die Desktop-Fassung ihre Daten ablegt.
+
+    Unter Windows ``%APPDATA%\\SL-Office`` -- das gehört der angemeldeten
+    Person und wird von der Schul-IT meist mitgesichert. ``SL_OFFICE_DATA_DIR``
+    legt einen anderen Ort fest, etwa ein Netzlaufwerk.
+    """
+    configured = os.getenv("SL_OFFICE_DATA_DIR")
+    if configured:
+        return Path(configured).expanduser()
+    if os.name == "nt" and os.getenv("APPDATA"):
+        return Path(os.environ["APPDATA"]) / "SL-Office"
+    return Path(os.getenv("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "sl-office"
+
+
+def _persistent_secret(path: Path) -> str:
+    """Schlüssel für Sitzungen und CSRF, einmal erzeugt und dann beibehalten."""
+    try:
+        return path.read_text(encoding="ascii").strip()
+    except FileNotFoundError:
+        secret = secrets.token_hex(32)
+        path.write_text(secret, encoding="ascii")
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+        return secret
+
+
+class DesktopConfig(BaseConfig):
+    """Eigenständige Anwendung auf einem Schulrechner (siehe desktop.py).
+
+    Der Server lauscht nur auf 127.0.0.1; Datenbank, hochgeladene Dateien,
+    Sicherungen und der Sitzungsschlüssel liegen im Datenordner. Mails gehen
+    nur hinaus, wenn ein Mailserver eingetragen ist.
+    """
+    ENV_NAME = "desktop"
+    AUTO_CREATE_DB = False
+    FIRST_RUN_SETUP = True
+    SESSION_COOKIE_SECURE = False
+
+    @classmethod
+    def values(cls) -> dict:
+        data_dir = desktop_data_dir()
+        for folder in (data_dir, data_dir / "uploads", data_dir / "Datensicherungen"):
+            folder.mkdir(parents=True, exist_ok=True)
+        return {
+            "DATA_DIR": str(data_dir),
+            "SECRET_KEY": os.getenv("SL_OFFICE_SECRET_KEY") or _persistent_secret(data_dir / ".secret-key"),
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///" + str(data_dir / "sl-office.db").replace("\\", "/"),
+            "UPLOAD_FOLDER": str(data_dir / "uploads"),
+            "BACKUP_FOLDER": str(data_dir / "Datensicherungen"),
+            "MAIL_SUPPRESS_SEND": not os.getenv("SL_OFFICE_MAIL_SERVER"),
+        }
+
+
 def load_config(app, environment: str | None = None) -> None:
     environment = (environment or os.getenv("SL_OFFICE_ENV", "development")).lower()
-    configurations = {"development": DevelopmentConfig, "testing": TestingConfig, "production": ProductionConfig}
+    configurations = {"development": DevelopmentConfig, "testing": TestingConfig,
+                      "production": ProductionConfig, "desktop": DesktopConfig}
     try:
         config_class = configurations[environment]
     except KeyError as exc:
         raise RuntimeError(f"Unbekannte SL_OFFICE_ENV: {environment}") from exc
     app.config.from_object(config_class)
-    if config_class is ProductionConfig:
+    if config_class in (ProductionConfig, DesktopConfig):
         app.config.update(config_class.values())
     elif config_class is DevelopmentConfig:
         app.config["SECRET_KEY"] = _development_secret()
-    if environment != "production":
+    if environment not in ("production", "desktop"):
         app.config["SESSION_COOKIE_SECURE"] = _env_bool("SL_OFFICE_SECURE_COOKIES", app.config["SESSION_COOKIE_SECURE"])

@@ -47,6 +47,19 @@ class PasswordResetForm(FlaskForm):
     submit = SubmitField("Passwort setzen")
 
 
+class FirstRunForm(FlaskForm):
+    """Das erste Administrationskonto einer neuen Installation."""
+
+    username = StringField("Benutzername", validators=[DataRequired(), Length(max=80)])
+    new_password = PasswordField(
+        "Passwort",
+        validators=[DataRequired(),
+                    Length(min=MIN_PASSWORD_LENGTH,
+                           message=f"Mindestens {MIN_PASSWORD_LENGTH} Zeichen.")])
+    confirm_password = PasswordField("Passwort bestätigen", validators=[DataRequired()])
+    submit = SubmitField("Konto anlegen")
+
+
 class ChangePasswordForm(FlaskForm):
     old_password = PasswordField('Aktuelles Passwort', validators=[DataRequired()])
     new_password = PasswordField('Neues Passwort', validators=[DataRequired()])

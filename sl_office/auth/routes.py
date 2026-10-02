@@ -11,7 +11,7 @@ from flask import Blueprint, current_app, flash, redirect, render_template, requ
 from flask_login import current_user, login_required, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from forms import ChangePasswordForm, LoginForm, TwoFactorForm, TwoFactorSetupForm
+from forms import ChangePasswordForm, FirstRunForm, LoginForm, TwoFactorForm, TwoFactorSetupForm
 from models import User, db
 from sl_office.audit import record
 from sl_office.auth import two_factor
@@ -25,6 +25,45 @@ PENDING_USER_KEY = "pending_2fa_user"
 PENDING_SECRET_KEY = "pending_2fa_secret"
 #: Recovery codes shown exactly once, right after enrolment.
 FRESH_CODES_KEY = "fresh_recovery_codes"
+
+
+def _needs_setup():
+    """Eine frische Installation hat noch kein Konto."""
+    return (current_app.config.get("FIRST_RUN_SETUP")
+            and db.session.scalar(db.select(User.id).limit(1)) is None)
+
+
+def install_first_run_redirect(app):
+    """Solange es kein Konto gibt, führt jede Seite zur Einrichtung."""
+    @app.before_request
+    def _first_run():
+        if request.endpoint in {"auth.first_run", "static", "lebenszeichen"}:
+            return None
+        if _needs_setup():
+            return redirect(url_for("auth.first_run"))
+        return None
+
+
+@auth_bp.route("/einrichtung", methods=["GET", "POST"])
+def first_run():
+    """Das erste Administrationskonto anlegen -- nur, solange es keines gibt."""
+    if not _needs_setup():
+        return redirect(url_for("auth.login"))
+    form = FirstRunForm()
+    if form.validate_on_submit():
+        if form.new_password.data != form.confirm_password.data:
+            flash("Die beiden Passwörter stimmen nicht überein.", "error")
+        else:
+            user = User(username=form.username.data.strip(), role="Administrator",
+                        password_hash=generate_password_hash(form.new_password.data))
+            db.session.add(user)
+            db.session.flush()
+            record("first_admin_created", "user", user.id, actor_type="system")
+            db.session.commit()
+            flash("Das Konto ist angelegt. Bitte melden Sie sich jetzt an; danach richten Sie "
+                  "die Bestätigung per Authenticator-App ein.")
+            return redirect(url_for("auth.login"))
+    return render_template("first_run.html", form=form)
 
 
 def _issuer():

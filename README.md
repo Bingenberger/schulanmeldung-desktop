@@ -27,6 +27,36 @@
 > Fehlerbehebungen aus der Serverfassung lassen sich über den Remote `upstream`
 > mit `git cherry-pick` übernehmen.
 
+## Windows-Fassung
+
+**Installieren:** `SL-Office-Setup-<Version>.exe` ausführen (keine
+Administratorrechte nötig). SL-Office startet einen Webserver nur für diesen
+Rechner und öffnet sich im Browser; ein kleines Fenster zeigt, dass es läuft,
+und beendet es wieder. Beim ersten Start legt man das Administrationskonto an,
+danach geht es über *Verwaltung* weiter: Schulprofil, Module, Kriterien,
+Vorlagen, Benutzer.
+
+**Daten:** alles liegt in `%APPDATA%\SL-Office` – Datenbank
+(`sl-office.db`), hochgeladene Dateien, das Protokoll und unter
+`Datensicherungen` eine automatische Sicherung je Tag (die letzten 14 bleiben).
+Ein anderer Ort, etwa ein Netzlaufwerk, lässt sich mit der Umgebungsvariablen
+`SL_OFFICE_DATA_DIR` festlegen. Deinstallieren oder Aktualisieren lässt die
+Daten unberührt.
+
+**Bauen:** der Workflow `.github/workflows/windows-build.yml` testet, baut mit
+PyInstaller (`packaging/sl-office.spec`), startet die gebaute Fassung einmal
+probehalber und erzeugt das Setup mit Inno Setup (`packaging/sl-office.iss`).
+Das Setup hängt als Artefakt am Workflow-Lauf; ein Tag `v1.2.3` legt ein
+Release an. Von Hand unter Windows:
+
+```bat
+pip install -r requirements.txt -r requirements-desktop.txt
+pyinstaller packaging\sl-office.spec --noconfirm
+iscc /DAppVersion=1.0.0 packaging\sl-office.iss
+```
+
+Zum Ausprobieren ohne Paket genügt `python desktop.py`.
+
 
 Fachanwendung für die Schuleinschreibung an der Gemeinschaftsgrundschule
 Niederkassel. SL-Office begleitet ein Kind von der Anmeldung bis zur

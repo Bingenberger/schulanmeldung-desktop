@@ -22,6 +22,7 @@ from sl_office import school_year
 from document_service import find_managed_document
 from migrations_ext import migrate
 from sl_office.auth import auth_bp
+from sl_office.auth.routes import install_first_run_redirect
 from sl_office.admin import admin_bp
 from sl_office.students import students_bp
 from sl_office.appointments import appointments_bp
@@ -1801,6 +1802,7 @@ def create_app(environment=None, config_overrides=None):
         flask_app.register_blueprint(parent_portal_bp)
     features.install_template_context(flask_app)
     features.install_module_guard(flask_app)
+    install_first_run_redirect(flask_app)
     register_appointment_cli(flask_app)
     register_maintenance_cli(flask_app)
 
@@ -1811,6 +1813,11 @@ def create_app(environment=None, config_overrides=None):
         school_year._scope_installed = True
     school_year.install_readonly_guard(flask_app)
     school_year.install_template_context(flask_app)
+
+    # Woran desktop.py eine schon laufende Instanz erkennt; ohne Anmeldung.
+    flask_app.add_url_rule(
+        "/lebenszeichen", "lebenszeichen",
+        lambda: ("SL-Office", 200, {"Content-Type": "text/plain; charset=utf-8"}))
 
     for rule, options, view_function in _route_definitions:
         endpoint = options.get('endpoint', view_function.__name__)

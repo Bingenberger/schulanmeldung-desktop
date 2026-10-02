@@ -17,8 +17,8 @@ def init_security(app):
         response.headers.setdefault(
             "Content-Security-Policy",
             "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; "
-            "object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net",
+            "object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline'; font-src 'self'",
         )
         response.headers.setdefault("Cache-Control", "no-store")
         if app.config.get("ENV_NAME") == "production":
