@@ -19,6 +19,7 @@ from sl_office.parent_portal.models import (
 )
 from sl_office.services.student_classification import recalculate_kann_kind
 from sl_office.services.student_deletion import delete_student
+from sl_office.criteria.models import KriteriumWert
 
 #: Felder des Kindes, die der Import selbst füllt -- sie belegen keine Arbeit.
 _AUS_DEM_IMPORT = {
@@ -73,7 +74,8 @@ def datenspuren(kind):
         if zeile is not None and _zeile_hat_inhalt(zeile, ignorieren):
             spuren.append(bezeichnung)
 
-    for bezeichnung, modell in (("Elternzugang", ParentAccess),
+    for bezeichnung, modell in (("Erfasste Kriterien", KriteriumWert),
+                                ("Elternzugang", ParentAccess),
                                 ("Elternanmeldung", ParentRegistration),
                                 ("Freischaltung", ActivationGrant),
                                 ("Terminbuchung", AppointmentBooking)):

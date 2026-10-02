@@ -30,6 +30,9 @@ from sl_office.maintenance import register_cli as register_maintenance_cli
 from sl_office.open_day import open_day_bp
 from sl_office.parent_portal import parent_portal_bp
 from sl_office import features
+from sl_office.criteria import service as criteria
+from sl_office.criteria.routes import criteria_bp
+import sl_office.criteria.models  # noqa: F401, E402
 # Import new domain models so SQLAlchemy and Alembic include their metadata.
 import sl_office.parent_portal.models  # noqa: F401, E402
 import sl_office.open_day.models  # noqa: F401, E402
@@ -235,99 +238,85 @@ def aosf_prozess(id):
 @login_required
 def diagnostik(id):
     schueler = Schueler.query.get_or_404(id)
-    # Check if diagnostics already exist
     diagnostik_entry = Diagnostik.query.filter_by(schueler_id=id).first()
-    
-    form = DiagnostikForm(obj=diagnostik_entry) # Pre-fill if exists via obj
-    
-    if form.validate_on_submit():
-        if not diagnostik_entry:
-            diagnostik_entry = Diagnostik(schueler_id=id)
-            db.session.add(diagnostik_entry)
-        
-        # Populate from form
-        form.populate_obj(diagnostik_entry)
-        
-        # Manuelle bool handling für schulspiel (SelectField '0'/'1')
-        diagnostik_entry.schulspiel = bool(form.schulspiel.data)
-        
-        # Automatisch Status auf Abgeschlossen setzen
-        schueler.diag_status = 'Abgeschlossen'
-        
-        # File Upload Handling
-        if form.pdf_datei.data:
-            file = form.pdf_datei.data
-            filename = secure_filename(f"schueler_{id}_{file.filename}")
-            file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], filename))
-            diagnostik_entry.pdf_dateiname = filename
-        
-        try:
-            db.session.commit()
-            flash('Diagnostik erfolgreich gespeichert!')
-            return redirect(url_for('index'))
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Fehler beim Speichern: {e}')
-    
-    # Debug: Show validation errors if submit failed
-    if form.errors:
-        flash(f"Fehler bei der Validierung: {form.errors}", 'error')
+    form = DiagnostikForm(obj=diagnostik_entry)
+    werte = criteria.werte(id, 'diagnostik')
 
-    return render_template('diagnostik.html', form=form, schueler=schueler, diagnostik=diagnostik_entry)
+    if form.validate_on_submit():
+        try:
+            criteria.speichern(id, 'diagnostik', request.form)
+        except criteria.Eingabefehler as fehler:
+            flash("Bitte prüfen: " + "; ".join(fehler.fehler), 'error')
+            werte = criteria.formular_werte('diagnostik', request.form)
+        else:
+            if not diagnostik_entry:
+                diagnostik_entry = Diagnostik(schueler_id=id)
+                db.session.add(diagnostik_entry)
+            form.populate_obj(diagnostik_entry)
+            diagnostik_entry.schulspiel = bool(form.schulspiel.data)
+            schueler.diag_status = 'Abgeschlossen'
+            if form.pdf_datei.data:
+                file = form.pdf_datei.data
+                filename = secure_filename(f"schueler_{id}_{file.filename}")
+                file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], filename))
+                diagnostik_entry.pdf_dateiname = filename
+            try:
+                db.session.commit()
+                flash('Diagnostik erfolgreich gespeichert!')
+                return redirect(url_for('index'))
+            except Exception as e:
+                db.session.rollback()
+                flash(f'Fehler beim Speichern: {e}')
+    elif form.errors:
+        flash(f"Fehler bei der Validierung: {form.errors}", 'error')
+        werte = criteria.formular_werte('diagnostik', request.form)
+
+    return render_template('diagnostik.html', form=form, schueler=schueler, diagnostik=diagnostik_entry,
+                           gruppen=criteria.gruppiert(criteria.kriterien('diagnostik')), werte=werte)
 
 @route('/schueler/<int:id>/schulspiel', methods=['GET', 'POST'])
 @login_required
 def schulspiel(id):
     schueler = Schueler.query.get_or_404(id)
     schulspiel_entry = SchulspielDiagnostik.query.filter_by(schueler_id=id).first()
-    
     form = SchulspielForm(obj=schulspiel_entry)
-    
-    if form.validate_on_submit():
-        if not schulspiel_entry:
-            schulspiel_entry = SchulspielDiagnostik(schueler_id=id)
-            db.session.add(schulspiel_entry)
-            
-        form.populate_obj(schulspiel_entry)
-        
-        # Calculate Gesamtwert
-        total = 0
-        items = ['aufgabenverstaendnis', 'konzentration', 'anstrengungsbereitschaft', 'merkfaehigkeit', 
-                 'ausdauer', 'selbstbewusstsein', 'kontaktfaehigkeit', 'regelverhalten', 
-                 'versteht_anweisungen', 'ausdruck_altersangemessen', 'vollstaendige_saetze', 
-                 'richtige_verbformen', 'richtige_artikel', 'konzept_von_schrift', 'schreibt_eigenen_namen', 
-                 'koerperkoordination', 'fingerkoordination', 'farben_und_formen', 'figur_grund_wahrnehmung', 
-                 'mengeninvarianz', 'kognition', 'raum_lage_beziehung', 'auditive_wahrnehmung', 
-                 'silben_segmentieren', 'reime_erkennen']
-        
-        for item in items:
-            val = getattr(schulspiel_entry, item)
-            if val is not None:
-                total += val
-                
-        schulspiel_entry.gesamtwert = total
-        
-        # File Upload Handling
-        if form.pdf_datei.data:
-            file = form.pdf_datei.data
-            filename = secure_filename(f"schulspiel_{id}_{file.filename}")
-            file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], filename))
-            schulspiel_entry.pdf_dateiname = filename
-            
-        schueler.schulspiel_status = 'Abgeschlossen'
-        
-        try:
-            db.session.commit()
-            flash('Schulspiel-Diagnostik erfolgreich gespeichert!')
-            return redirect(url_for('index'))
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Fehler beim Speichern: {e}')
-            
-    if form.errors:
-        flash(f"Fehler bei der Validierung: {form.errors}", 'error')
+    werte = criteria.werte(id, 'schulspiel')
 
-    return render_template('schulspiel.html', form=form, schueler=schueler, schulspiel=schulspiel_entry)
+    if form.validate_on_submit():
+        try:
+            criteria.speichern(id, 'schulspiel', request.form)
+        except criteria.Eingabefehler as fehler:
+            flash("Bitte prüfen: " + "; ".join(fehler.fehler), 'error')
+            werte = criteria.formular_werte('schulspiel', request.form)
+        else:
+            if not schulspiel_entry:
+                schulspiel_entry = SchulspielDiagnostik(schueler_id=id)
+                db.session.add(schulspiel_entry)
+            form.populate_obj(schulspiel_entry)
+            db.session.flush()
+            # Gesamtwert und erreichbarer Höchstwert hängen am Kriterienkatalog.
+            summe, _, hoechstwert = criteria.wertung(id, 'schulspiel')
+            schulspiel_entry.gesamtwert = summe
+            schulspiel_entry.gesamtwert_max = hoechstwert
+            if form.pdf_datei.data:
+                file = form.pdf_datei.data
+                filename = secure_filename(f"schulspiel_{id}_{file.filename}")
+                file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], filename))
+                schulspiel_entry.pdf_dateiname = filename
+            schueler.schulspiel_status = 'Abgeschlossen'
+            try:
+                db.session.commit()
+                flash('Schulspiel-Diagnostik erfolgreich gespeichert!')
+                return redirect(url_for('index'))
+            except Exception as e:
+                db.session.rollback()
+                flash(f'Fehler beim Speichern: {e}')
+    elif form.errors:
+        flash(f"Fehler bei der Validierung: {form.errors}", 'error')
+        werte = criteria.formular_werte('schulspiel', request.form)
+
+    return render_template('schulspiel.html', form=form, schueler=schueler, schulspiel=schulspiel_entry,
+                           gruppen=criteria.gruppiert(criteria.kriterien('schulspiel')), werte=werte)
 
 
 @route('/schueler/<int:id>/freunde', methods=['GET', 'POST'])
@@ -379,51 +368,39 @@ def freunde_bearbeiten(id):
 def schularzt(id):
     schueler = Schueler.query.get_or_404(id)
     untersuchung = SchulaerztlicheUntersuchung.query.filter_by(schueler_id=id).first()
-    
-    if untersuchung:
-        form = SchularztForm(obj=untersuchung)
-        # Handle custom multiple select loading
-        if untersuchung.foerder_sprache:
-            form.foerder_sprache.data = untersuchung.foerder_sprache.split(',')
-    else:
-        form = SchularztForm()
+    form = SchularztForm(obj=untersuchung)
+    werte = criteria.werte(id, 'schularzt')
 
     if form.validate_on_submit():
-        if not untersuchung:
-            untersuchung = SchulaerztlicheUntersuchung(schueler_id=id)
-            db.session.add(untersuchung)
-        
-        form.populate_obj(untersuchung)
-        # Manual boolean/list handling only if needed, but populate_obj handles basic fields usually.
-        # Stringify list
-        if form.foerder_sprache.data:
-            untersuchung.foerder_sprache = ','.join(form.foerder_sprache.data)
-        else:
-            untersuchung.foerder_sprache = ''
-
-        # Handle file upload
-        if form.pdf_datei.data:
-            file = form.pdf_datei.data
-            filename = secure_filename(file.filename)
-            # Make unique
-            base, ext = os.path.splitext(filename)
-            filename = f"schularzt_{id}_{base}{ext}"
-            filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
-            file.save(filepath)
-            untersuchung.pdf_dateiname = filename
-            
-        # Update status in Schueler
-        schueler.arzt_status = 'Abgeschlossen'
-
         try:
-            db.session.commit()
-            flash('Schulärztliche Untersuchung gespeichert!')
-            return redirect(url_for('index'))
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Fehler beim Speichern: {e}')
-    
-    return render_template('schularzt.html', form=form, schueler=schueler)
+            criteria.speichern(id, 'schularzt', request.form)
+        except criteria.Eingabefehler as fehler:
+            flash("Bitte prüfen: " + "; ".join(fehler.fehler), 'error')
+            werte = criteria.formular_werte('schularzt', request.form)
+        else:
+            if not untersuchung:
+                untersuchung = SchulaerztlicheUntersuchung(schueler_id=id)
+                db.session.add(untersuchung)
+            form.populate_obj(untersuchung)
+            if form.pdf_datei.data:
+                file = form.pdf_datei.data
+                base, ext = os.path.splitext(secure_filename(file.filename))
+                filename = f"schularzt_{id}_{base}{ext}"
+                file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], filename))
+                untersuchung.pdf_dateiname = filename
+            schueler.arzt_status = 'Abgeschlossen'
+            try:
+                db.session.commit()
+                flash('Schulärztliche Untersuchung gespeichert!')
+                return redirect(url_for('index'))
+            except Exception as e:
+                db.session.rollback()
+                flash(f'Fehler beim Speichern: {e}')
+    elif form.errors:
+        werte = criteria.formular_werte('schularzt', request.form)
+
+    return render_template('schularzt.html', form=form, schueler=schueler, untersuchung=untersuchung,
+                           gruppen=criteria.gruppiert(criteria.kriterien('schularzt')), werte=werte)
 
 @route('/uploads/<filename>')
 @login_required
@@ -701,21 +678,8 @@ def export_cards():
             draw_badge(c, margin_left + bx, line_start_y - 2*line_height - 0.1*cm, "Abholung", col_grey, width=2.2*cm)
             
         # Row 4: Förderung (New)
-        needs = []
-        if arzt:
-            if arzt.foerder_grobmotorik: needs.append("Grobmotorik")
-            if arzt.foerder_fein_visuomotorik: needs.append("Feinmotorik")
-            if arzt.foerder_visuelle_wahrnehmung: needs.append("Visuell")
-            if arzt.foerder_auditive_wahrnehmung: needs.append("Auditiv")
-            if arzt.foerder_deutschkenntnisse: needs.append("Deutsch") # General
-            if arzt.foerder_zahlen_mengen: needs.append("Zahlen")
-            if arzt.foerder_konzentration: needs.append("Konzentration")
-            if arzt.foerder_psychosozial: needs.append("Psychosozial")
-            
-            # Add Language Items
-            if arzt.foerder_sprache:
-                needs.extend([item.strip() for item in arzt.foerder_sprache.split(',') if item.strip()])
-        
+        needs = criteria.foerderhinweise(s.id) if arzt else []
+
         if needs:
             c.setFont("Helvetica-Bold", 10)
             c.drawString(margin_left + 0.5*cm, line_start_y - 3*line_height + 0.2*cm, "Förderung:")
@@ -953,6 +917,11 @@ def export_klassenmappe():
             c.setFillColorRGB(0, 0, 0)
             c.setFont('Helvetica', 9)
             c.drawString(x + 0.2*cm, y + 0.1*cm, label)
+            if isinstance(val, str):
+                # Kriterien, die keine Skala sind (Auswahl, Text, ...), als Text.
+                c.setFont('Helvetica-Bold', 8)
+                c.drawRightString(x + col_w - 0.2*cm, y + 0.1*cm, val or '-')
+                continue
             badge_x = x + col_w - 1.6*cm
             draw_badge(c, badge_x, y - 0.03*cm, SCORE_TEXT[val], SCORE_RGB[val], w=1.4*cm, h=0.52*cm)
         # After last row
@@ -1226,24 +1195,8 @@ def export_klassenmappe():
         # --- Pädagogische Diagnostik ---
         y = draw_section_title(c, y, 'Pädagogische Diagnostik')
 
-        diag_items = [
-            ('Wortschatz', diag.wortschatz if diag else None),
-            ('Grammatik', diag.grammatik if diag else None),
-            ('Aussprache', diag.aussprache if diag else None),
-            ('Gesprächsverhalten', diag.gespraechsverhalten if diag else None),
-            ('Sätze nachsprechen', diag.saetze_nachsprechen if diag else None),
-            ('Reimen', diag.reimen if diag else None),
-            ('Pluralbildung', diag.pluralbildung if diag else None),
-            ('Wörter segmentieren', diag.woerter_segmentieren if diag else None),
-            ('Mengenerfassung', diag.mengenerfassung if diag else None),
-            ('Menge herstellen', diag.menge_herstellen if diag else None),
-            ('Zahlen erkennen', diag.zahlen_erkennen if diag else None),
-            ('Rückwärts zählen', diag.rueckwaerts_zaehlen if diag else None),
-            ('Zahlreihe erzeugen', diag.zahlreihe_erzeugen if diag else None),
-            ('Logische Reihe', diag.logische_reihe if diag else None),
-            ('Bild malen', diag.bild_malen if diag else None),
-            ('Komplexe Figur', diag.komplexe_figur if diag else None),
-        ]
+        diag_items = [(k.kurzname, criteria.anzeigetext(k, wert) if k.typ != 'skala' else wert)
+                      for k, wert in criteria.eintraege(schueler.id, 'diagnostik')]
         y = draw_two_col_items(c, y, diag_items)
 
         # Gesamteindruck
@@ -1265,33 +1218,8 @@ def export_klassenmappe():
         # --- Schulspiel ---
         if spiel or (diag and diag.schulspiel):
             y = draw_section_title(c, y, 'Schulspiel-Diagnostik')
-            spiel_items = [
-                ('Aufgabenverständnis', spiel.aufgabenverstaendnis if spiel else None),
-                ('Konzentration', spiel.konzentration if spiel else None),
-                ('Anstrengungsbereitschaft', spiel.anstrengungsbereitschaft if spiel else None),
-                ('Merkfähigkeit', spiel.merkfaehigkeit if spiel else None),
-                ('Ausdauer', spiel.ausdauer if spiel else None),
-                ('Selbstbewusstsein', spiel.selbstbewusstsein if spiel else None),
-                ('Kontaktfähigkeit', spiel.kontaktfaehigkeit if spiel else None),
-                ('Regelverhalten', spiel.regelverhalten if spiel else None),
-                ('Versteht Anweisungen', spiel.versteht_anweisungen if spiel else None),
-                ('Ausdruck altersangem.', spiel.ausdruck_altersangemessen if spiel else None),
-                ('Vollständige Sätze', spiel.vollstaendige_saetze if spiel else None),
-                ('Richtige Verbformen', spiel.richtige_verbformen if spiel else None),
-                ('Richtige Artikel', spiel.richtige_artikel if spiel else None),
-                ('Konzept von Schrift', spiel.konzept_von_schrift if spiel else None),
-                ('Schreibt eigenen Namen', spiel.schreibt_eigenen_namen if spiel else None),
-                ('Körperkoordination', spiel.koerperkoordination if spiel else None),
-                ('Fingerkoordination', spiel.fingerkoordination if spiel else None),
-                ('Farben und Formen', spiel.farben_und_formen if spiel else None),
-                ('Figur-Grund-Wahrn.', spiel.figur_grund_wahrnehmung if spiel else None),
-                ('Mengeninvarianz', spiel.mengeninvarianz if spiel else None),
-                ('Kognition', spiel.kognition if spiel else None),
-                ('Raum-Lage-Beziehung', spiel.raum_lage_beziehung if spiel else None),
-                ('Auditive Wahrnehmung', spiel.auditive_wahrnehmung if spiel else None),
-                ('Silben segmentieren', spiel.silben_segmentieren if spiel else None),
-                ('Reime erkennen', spiel.reime_erkennen if spiel else None),
-            ]
+            spiel_items = [(k.kurzname, criteria.anzeigetext(k, wert) if k.typ != 'skala' else wert)
+                           for k, wert in criteria.eintraege(schueler.id, 'schulspiel')]
             y = draw_two_col_items(c, y, spiel_items)
             if spiel:
                 c.setFont('Helvetica-Bold', 9)
@@ -1299,7 +1227,7 @@ def export_klassenmappe():
                 c.drawString(margin + 0.2*cm, y, 'Gesamttendenz:')
                 gt = spiel.gesamttendenz
                 draw_badge(c, margin + 3.5*cm, y - 0.08*cm, SCORE_TEXT[gt], SCORE_RGB[gt], w=1.4*cm)
-                gw_txt = f'Gesamtwert: {spiel.gesamtwert}/75'
+                gw_txt = f'Gesamtwert: {spiel.gesamtwert}/{spiel.hoechstwert}'
                 c.setFont('Helvetica', 9)
                 c.drawString(margin + 5.5*cm, y, gw_txt)
                 y -= 0.8*cm
@@ -1323,14 +1251,10 @@ def export_klassenmappe():
             return y - 0.52*cm
 
         if arzt:
-            datum_str = arzt.datum.strftime('%d.%m.%Y') if arzt.datum else '-'
-            # 2-column layout for basic data
-            col_w2 = inner_w / 2 - 0.2*cm
-            pairs = [
-                ('Datum', datum_str), ('Ergebnis', arzt.ergebnis or '-'),
-                ('Hörfähigkeit', arzt.hoerfaehigkeit or '-'), ('Sehfähigkeit', arzt.sehfaehigkeit or '-'),
-                ('Händigkeit', arzt.haendigkeit or '-'), ('Erstsprache', arzt.erstsprache or '-'),
-            ]
+            # Befund: alle Kriterien des Schularzt-Bogens außer den Förderhinweisen.
+            pairs = [(k.kurzname, criteria.anzeigetext(k, wert) or '-')
+                     for k, wert in criteria.eintraege(schueler.id, 'schularzt')
+                     if not k.foerderhinweis]
             for idx, (lbl, val) in enumerate(pairs):
                 col = idx % 2
                 x = margin + col * (inner_w / 2 + 0.2*cm)
@@ -1353,17 +1277,7 @@ def export_klassenmappe():
             y -= 0.7*cm
 
             # Förderempfehlungen
-            foerder = []
-            if arzt.foerder_grobmotorik: foerder.append('Grobmotorik')
-            if arzt.foerder_fein_visuomotorik: foerder.append('Feinmotorik')
-            if arzt.foerder_visuelle_wahrnehmung: foerder.append('Vis. Wahrn.')
-            if arzt.foerder_auditive_wahrnehmung: foerder.append('Audit. Wahrn.')
-            if arzt.foerder_deutschkenntnisse: foerder.append('Deutsch')
-            if arzt.foerder_zahlen_mengen: foerder.append('Zahlen/Mengen')
-            if arzt.foerder_konzentration: foerder.append('Konzentration')
-            if arzt.foerder_psychosozial: foerder.append('Psychosozial')
-            if arzt.foerder_sprache:
-                foerder.extend([s.strip() for s in arzt.foerder_sprache.split(',') if s.strip()])
+            foerder = criteria.foerderhinweise(schueler.id)
             if foerder:
                 c.setFont('Helvetica-Bold', 9)
                 c.drawString(margin + 0.2*cm, y, 'Förderempfehlungen:')
@@ -1545,7 +1459,10 @@ def foerderkurse_einzel():
 
     return render_template('foerderkurse_einzel.html',
                            form=form, s=s, idx=idx, total=total,
-                           kurse=FOERDERKURSE)
+                           kurse=FOERDERKURSE,
+                           diag_gruppen=criteria.eintraege_gruppiert(s.id, 'diagnostik'),
+                           spiel_gruppen=criteria.eintraege_gruppiert(s.id, 'schulspiel'),
+                           foerderhinweise=criteria.foerderhinweise(s.id))
 
 
 @route('/foerderkurse/bulk', methods=['GET', 'POST'])
@@ -1879,6 +1796,7 @@ def create_app(environment=None, config_overrides=None):
     flask_app.register_blueprint(students_bp)
     flask_app.register_blueprint(appointments_bp)
     flask_app.register_blueprint(open_day_bp)
+    flask_app.register_blueprint(criteria_bp)
     if features.parent_portal_enabled(flask_app):
         flask_app.register_blueprint(parent_portal_bp)
     features.install_template_context(flask_app)

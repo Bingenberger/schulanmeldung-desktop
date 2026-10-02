@@ -235,15 +235,21 @@ class SchulspielDiagnostik(db.Model):
     reime_erkennen = db.Column(db.Integer)
     
     gesamtwert = db.Column(db.Integer, default=0)
+    #: Erreichbarer Höchstwert beim Speichern; er hängt am Kriterienkatalog.
+    #: Ältere Einträge haben keinen und stammen aus dem Bogen mit 25 Punkten.
+    gesamtwert_max = db.Column(db.Integer, nullable=True)
     pdf_dateiname = db.Column(db.String(255))
     bemerkung = db.Column(db.Text)
-    
+
+    @property
+    def hoechstwert(self):
+        return self.gesamtwert_max or 75
+
     @property
     def gesamttendenz(self):
         if self.gesamtwert is None:
             return None
-        # Max score is 25 * 3 = 75
-        avg = self.gesamtwert / 25
+        avg = self.gesamtwert / (self.hoechstwert / 3)
         if avg >= 2.5:
             return 3  # ++
         elif avg >= 1.5:

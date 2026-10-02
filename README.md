@@ -12,6 +12,13 @@
 >   laden ohne Zugangslinks zur Terminvereinbarung ein.
 > - **Schulprofil in der Anwendung:** Name, Anschrift, Schulleitung, Logo und
 >   Unterschrift pflegt jede Schule unter *Verwaltung → Schulprofil*.
+> - **Module:** unter *Verwaltung → Module* schaltet jede Schule ab, was sie
+>   nicht nutzt (z. B. Schulspiel, AO-SF, Förderkurse).
+> - **Frei anlegbare Kriterien:** die Beobachtungspunkte von Pädagogischer
+>   Diagnostik, Schulspiel und Schularzt legt jede Schule unter
+>   *Verwaltung → Kriterien* selbst an (Skala, Ankreuzfeld, Auswahl,
+>   Mehrfachauswahl, Freitext, Datum). Vorbelegt ist der bisherige Katalog;
+>   Werte aus den alten festen Spalten werden dabei übernommen.
 >
 > Fehlerbehebungen aus der Serverfassung lassen sich über den Remote `upstream`
 > mit `git cherry-pick` übernehmen.

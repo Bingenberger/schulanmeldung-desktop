@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2><i class="bi bi-list-check"></i>
+  {{ 'Kriterium bearbeiten' if kriterium.id else 'Neues Kriterium' }}
+  <small class="text-muted fs-5">· {{ boegen[bogen][0] }}</small>
+</h2>
+
+{% for problem in probleme %}
+<div class="alert alert-danger py-2">{{ problem }}</div>
+{% endfor %}
+
+<form method="post" class="card card-body shadow-sm">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label fw-bold" for="bezeichnung">Bezeichnung *</label>
+      <input class="form-control" id="bezeichnung" name="bezeichnung" maxlength="200" required
+             value="{{ request.form.get('bezeichnung', kriterium.bezeichnung or '') }}">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label fw-bold" for="kurz">Kurzform</label>
+      <input class="form-control" id="kurz" name="kurz" maxlength="60"
+             value="{{ request.form.get('kurz', kriterium.kurz or '') }}">
+      <div class="form-text">für Abzeichen und Druck, optional</div>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label fw-bold" for="gruppe">Gruppe</label>
+      <input class="form-control" id="gruppe" name="gruppe" maxlength="120" list="gruppen"
+             value="{{ request.form.get('gruppe', kriterium.gruppe or '') }}">
+      <datalist id="gruppen">{% for g in gruppen %}<option value="{{ g }}">{% endfor %}</datalist>
+      <div class="form-text">Zwischenüberschrift im Bogen</div>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label fw-bold" for="typ">Feldtyp</label>
+      {% set gewaehlt = request.form.get('typ', kriterium.typ) %}
+      <select class="form-select" id="typ" name="typ" {% if typ_gesperrt %}disabled{% endif %}>
+        {% for key, label in typen.items() %}
+        <option value="{{ key }}" {% if key == gewaehlt %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      {% if typ_gesperrt %}
+      <input type="hidden" name="typ" value="{{ kriterium.typ }}">
+      <div class="form-text">Es sind schon Werte erfasst; der Feldtyp bleibt deshalb fest.</div>
+      {% endif %}
+    </div>
+    <div class="col-md-6" id="optionen-feld">
+      <label class="form-label fw-bold" for="optionen">Optionen</label>
+      <textarea class="form-control" id="optionen" name="optionen" rows="4"
+                placeholder="eine Option je Zeile">{{ request.form.get('optionen', kriterium.optionen or '') }}</textarea>
+      <div class="form-text">nur für Auswahl und Mehrfachauswahl</div>
+    </div>
+    <div class="col-12">
+      {% set f = request.form if request.method == 'POST' else none %}
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="pflicht" name="pflicht" value="1"
+               {% if (f and f.get('pflicht')) or (not f and kriterium.pflicht) %}checked{% endif %}>
+        <label class="form-check-label" for="pflicht">Pflichtangabe</label>
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="in_wertung" name="in_wertung" value="1"
+               {% if (f and f.get('in_wertung')) or (not f and kriterium.in_wertung) %}checked{% endif %}>
+        <label class="form-check-label" for="in_wertung">
+          In der Wertung (nur Skala: zählt zu Durchschnitt und Gesamtwert)</label>
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="foerderhinweis" name="foerderhinweis" value="1"
+               {% if (f and f.get('foerderhinweis')) or (not f and kriterium.foerderhinweis) %}checked{% endif %}>
+        <label class="form-check-label" for="foerderhinweis">
+          Förderhinweis (angekreuzt bzw. gewählt erscheint es als Förderbedarf)</label>
+      </div>
+    </div>
+  </div>
+  <div class="mt-4">
+    <button class="btn btn-primary"><i class="bi bi-check-lg"></i> Speichern</button>
+    <a class="btn btn-outline-secondary" href="{{ url_for('criteria.catalog', bogen=bogen) }}">Abbrechen</a>
+  </div>
+</form>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const typ = document.getElementById('typ');
+    const feld = document.getElementById('optionen-feld');
+    function zeigen() { feld.style.display = ['auswahl', 'mehrfach'].includes(typ.value) ? '' : 'none'; }
+    typ.addEventListener('change', zeigen);
+    zeigen();
+  });
+</script>
+{% endblock %}

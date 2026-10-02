@@ -13,6 +13,7 @@ from sl_office.services.student_deletion import delete_student
 from sl_office.students.listing import get_filtered_students
 from sl_office.students.excel import InvalidWorkbook, export_students, import_students
 from sl_office.students import city_import
+from sl_office.criteria import service as criteria
 from sl_office.appointments.service import (
     active_booking_for_student, assignable_slots, planning_event, slot_label,
 )
@@ -251,6 +252,9 @@ def detail(student_id):
         has_aosf_suspicion=bool(aosf or (diagnostik and diagnostik.aosf_verdacht) or (schularzt and schularzt.aosf_verdacht)),
         rueckstellung=rueckstellung,
         has_rueckstellung_empfohlen=bool(rueckstellung or (diagnostik and diagnostik.rueckstellung_empfohlen)),
+        kriterien_diagnostik=criteria.eintraege(student_id, "diagnostik"),
+        kriterien_schularzt=criteria.eintraege(student_id, "schularzt"),
+        foerderhinweise=criteria.foerderhinweise(student_id),
         **_appointment_context(student_id),
     )
 

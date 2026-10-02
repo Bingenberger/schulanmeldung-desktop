@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import render_score %}
+{% from "_kriterien.html" import anzeige as kriterien_anzeige %}
 
 {% block content %}
 
@@ -364,46 +365,7 @@
                 </div>
                 <div class="card-body">
                     {% if diagnostik %}
-                    <div class="row g-4">
-                        <div class="col-md-4">
-                            <h6 class="border-bottom pb-2">Sprache</h6>
-                            <ul class="list-unstyled">
-                                <li>Wortschatz: <strong>{{ render_score(diagnostik.wortschatz) }}</strong></li>
-                                <li>Grammatik: <strong>{{ render_score(diagnostik.grammatik) }}</strong></li>
-                                <li>Aussprache: <strong>{{ render_score(diagnostik.aussprache) }}</strong></li>
-                                <li>Gespräch: <strong>{{ render_score(diagnostik.gespraechsverhalten) }}</strong></li>
-                            </ul>
-                        </div>
-                        <div class="col-md-4">
-                            <h6 class="border-bottom pb-2">Phonologische Bewusstheit</h6>
-                            <ul class="list-unstyled">
-                                <li>Sätze nachspr.: <strong>{{ render_score(diagnostik.saetze_nachsprechen) }}</strong>
-                                </li>
-                                <li>Reimen: <strong>{{ render_score(diagnostik.reimen) }}</strong></li>
-                                <li>Pluralbildung: <strong>{{ render_score(diagnostik.pluralbildung) }}</strong></li>
-                                <li>Wörter segm.: <strong>{{ render_score(diagnostik.woerter_segmentieren) }}</strong>
-                                </li>
-                            </ul>
-                        </div>
-                        <div class="col-md-4">
-                            <h6 class="border-bottom pb-2">Mathematik & Sonstiges</h6>
-                            <ul class="list-unstyled">
-                                <li>Mengen erfassen: <strong>{{ render_score(diagnostik.mengenerfassung) }}</strong>
-                                </li>
-                                <li>Menge herstellen: <strong>{{ render_score(diagnostik.menge_herstellen) }}</strong>
-                                </li>
-                                <li>Zahlen erkennen: <strong>{{ render_score(diagnostik.zahlen_erkennen) }}</strong>
-                                </li>
-                                <li>Zählen (rück): <strong>{{ render_score(diagnostik.rueckwaerts_zaehlen) }}</strong>
-                                </li>
-                                <li>Zahlreihe erz.: <strong>{{ render_score(diagnostik.zahlreihe_erzeugen) }}</strong>
-                                </li>
-                                <li>Logische Reihe: <strong>{{ render_score(diagnostik.logische_reihe) }}</strong></li>
-                                <li>Bild malen: <strong>{{ render_score(diagnostik.bild_malen) }}</strong></li>
-                                <li>Komplexe Figur: <strong>{{ render_score(diagnostik.komplexe_figur) }}</strong></li>
-                            </ul>
-                        </div>
-                    </div>
+                    {{ kriterien_anzeige(kriterien_diagnostik, render_score) }}
                     <hr>
                     <div class="row">
                         <div class="col-md-6">
@@ -487,51 +449,19 @@
                 </div>
                 <div class="card-body">
                     {% if schularzt %}
-                    <div class="row">
+                    {{ kriterien_anzeige(kriterien_schularzt|rejectattr('0.foerderhinweis')|list, render_score) }}
+                    <div class="row mt-3 pt-2 border-top">
                         <div class="col-md-6">
-                            <p class="mb-1"><strong>Untersucht am:</strong> {{ schularzt.datum.strftime('%d.%m.%Y') if
-                                schularzt.datum else '-' }}</p>
-                            <p class="mb-1"><strong>Ergebnis:</strong> {{ schularzt.ergebnis }}</p>
-                            <div class="mt-2">
-                                <span class="badge bg-light text-dark border">Hören: {{ schularzt.hoerfaehigkeit
-                                    }}</span>
-                                <span class="badge bg-light text-dark border">Sehen: {{ schularzt.sehfaehigkeit
-                                    }}</span>
-                            </div>
-                            <div class="mt-3 pt-2 border-top">
-                                <strong>Gesamteinschätzung:</strong> {{ render_score(schularzt.gesamteinschaetzung) }}
-                            </div>
+                            <strong>Gesamteinschätzung:</strong> {{ render_score(schularzt.gesamteinschaetzung) }}
                         </div>
                         <div class="col-md-6">
                             <h6 class="small fw-bold text-uppercase text-muted">Förderbedarf</h6>
                             <div class="d-flex flex-wrap gap-2">
-                                {% if schularzt.foerder_grobmotorik %}<span class="badge bg-danger">Grobmotorik</span>{%
-                                endif %}
-                                {% if schularzt.foerder_fein_visuomotorik %}<span
-                                    class="badge bg-danger">Feinmotorik</span>{% endif %}
-                                {% if schularzt.foerder_visuelle_wahrnehmung %}<span
-                                    class="badge bg-danger">Visuell</span>{% endif %}
-                                {% if schularzt.foerder_auditive_wahrnehmung %}<span
-                                    class="badge bg-danger">Auditiv</span>{% endif %}
-                                {% if schularzt.foerder_deutschkenntnisse %}<span
-                                    class="badge bg-danger">Deutsch</span>{% endif %}
-                                {% if schularzt.foerder_zahlen_mengen %}<span class="badge bg-danger">Zahlen</span>{%
-                                endif %}
-                                {% if schularzt.foerder_konzentration %}<span
-                                    class="badge bg-danger">Konzentration</span>{% endif %}
-                                {% if schularzt.foerder_psychosozial %}<span
-                                    class="badge bg-danger">Psychosozial</span>{% endif %}
-
-                                {% if schularzt.foerder_sprache %}
-                                {% for item in schularzt.foerder_sprache.split(',') %}
-                                <span class="badge bg-danger">Sprache: {{ item }}</span>
-                                {% endfor %}
-                                {% endif %}
-
-                                {% if not schularzt.foerder_grobmotorik and not schularzt.foerder_fein_visuomotorik and
-                                not schularzt.foerder_deutschkenntnisse and not schularzt.foerder_sprache %}
+                                {% for hinweis in foerderhinweise %}
+                                <span class="badge bg-danger">{{ hinweis }}</span>
+                                {% else %}
                                 <span class="text-muted small"><i>Kein spezifischer Förderbedarf vermerkt.</i></span>
-                                {% endif %}
+                                {% endfor %}
                             </div>
                         </div>
                     </div>

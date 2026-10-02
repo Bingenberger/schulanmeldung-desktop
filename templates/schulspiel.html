@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_kriterien.html" import felder as kriterien_felder %}
 
 {% block content %}
 <style>
@@ -63,52 +64,7 @@
 
                 <p class="text-muted">Bitte bewerten Sie die folgenden Punkte auf der Skala.</p>
 
-                {% macro render_item_group(title, item_fields) %}
-                <h5 class="text-success mt-4 mb-3 border-bottom pb-2">{{ title }}</h5>
-                <div class="row">
-                    {% for field in item_fields %}
-                    <div class="col-md-6 mb-3 border-bottom pb-2 rating-row" id="row-{{ field.id }}">
-                        <div class="d-flex justify-content-between align-items-center p-2 rounded">
-                            <label class="form-label fw-bold mb-0" style="width: 50%;">{{ field.label.text
-                                }}</label>
-                            <div class="btn-group" role="group">
-                                {% for subfield in field %}
-                                <input type="radio" class="btn-check rating-input" name="{{ field.name }}"
-                                    id="{{ subfield.id }}" value="{{ subfield.data }}" {% if subfield.checked
-                                    %}checked{% endif %} autocomplete="off" data-row="row-{{ field.id }}" required>
-                                <label class="btn btn-outline-dark" for="{{ subfield.id }}">
-                                    {{ subfield.label.text }}
-                                </label>
-                                {% endfor %}
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% endmacro %}
-
-                {% set grp1 = [form.aufgabenverstaendnis, form.konzentration, form.anstrengungsbereitschaft,
-                form.merkfaehigkeit, form.ausdauer, form.selbstbewusstsein, form.kontaktfaehigkeit,
-                form.regelverhalten]
-                %}
-                {{ render_item_group('Allgemeines / Verhalten', grp1) }}
-
-                {% set grp2 = [form.versteht_anweisungen, form.ausdruck_altersangemessen,
-                form.vollstaendige_saetze,
-                form.richtige_verbformen, form.richtige_artikel] %}
-                {{ render_item_group('Sprache & Anweisungen', grp2) }}
-
-                {% set grp3 = [form.konzept_von_schrift, form.schreibt_eigenen_namen,
-                form.koerperkoordination,
-                form.fingerkoordination] %}
-                {{ render_item_group('Schrift & Motorik', grp3) }}
-
-                {% set grp4 = [form.farben_und_formen, form.figur_grund_wahrnehmung, form.mengeninvarianz,
-                form.kognition, form.raum_lage_beziehung, form.auditive_wahrnehmung,
-                form.silben_segmentieren,
-                form.reime_erkennen] %}
-                {{ render_item_group('Kognition & Wahrnehmung', grp4) }}
-
+                {{ kriterien_felder(gruppen, werte, 'success', spalten=2) }}
                 <hr class="my-4">
 
                 <!-- Upload & Bemerkungen -->
@@ -193,15 +149,21 @@
         });
 
         function calculateLiveScore() {
-            const inputs = document.querySelectorAll('input.rating-input:checked');
+            // Wie beim Speichern: Summe über alle Kriterien in der Wertung,
+            // geteilt durch ihre Anzahl; Unbeantwortetes zählt als 0.
+            const gewertet = new Set();
+            document.querySelectorAll('input.rating-input[data-wertung]').forEach(input => {
+                gewertet.add(input.name);
+            });
             let sum = 0;
-            inputs.forEach(input => {
+            document.querySelectorAll('input.rating-input[data-wertung]:checked').forEach(input => {
                 sum += parseInt(input.value) || 0;
             });
 
             const badge = document.getElementById('live-score-badge');
+            if (!gewertet.size) { badge.innerText = '-'; return; }
 
-            const avg = sum / 25;
+            const avg = sum / gewertet.size;
             let text = '-';
             let classStr = 'badge fs-5 me-2 ';
 

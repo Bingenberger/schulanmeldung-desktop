@@ -5,6 +5,7 @@ from pathlib import Path
 from sqlalchemy import delete, select
 
 from models import Schueler, db
+from sl_office.criteria.models import KriteriumWert
 from sl_office.parent_portal.models import (
     ActivationGrant, AppointmentBooking, ParentAccess, ParentLoginToken, ParentRegistration,
 )
@@ -42,7 +43,7 @@ def _delete_files(filenames, upload_folder):
 
 
 def _delete_portal_records(student_id):
-    """Elternportal-Daten des Kindes entfernen.
+    """Elternportal-Daten und erfasste Kriterien des Kindes entfernen.
 
     Diese Tabellen hängen nicht als ORM-Beziehung am Schüler, sondern nur über
     ``ON DELETE CASCADE`` in der Datenbank. Darauf allein ist kein Verlass:
@@ -57,7 +58,8 @@ def _delete_portal_records(student_id):
     if access_ids:
         db.session.execute(delete(ParentLoginToken).where(
             ParentLoginToken.parent_access_id.in_(access_ids)))
-    for model in (ActivationGrant, ParentRegistration, AppointmentBooking, ParentAccess):
+    for model in (ActivationGrant, ParentRegistration, AppointmentBooking, ParentAccess,
+                  KriteriumWert):
         db.session.execute(delete(model).where(model.schueler_id == student_id))
 
 
