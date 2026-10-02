@@ -65,11 +65,13 @@
                             class="badge {{ 'bg-success' if schueler.arzt_status == 'Abgeschlossen' else 'bg-secondary' }} me-1">Arzt:
                             {{ schueler.arzt_status }}</span>
 
+                        {% if modules.aosf %}
                         {% if has_aosf_suspicion %}
                         <span
                             class="badge {% if aosf and aosf.status == 'Abgeschlossen' %}bg-success{% elif aosf and aosf.status == 'Fall' %}bg-danger{% else %}bg-warning text-dark{% endif %} me-1">
                             AO-SF: {{ aosf.status if aosf else 'Verdacht' }}
                         </span>
+                        {% endif %}
                         {% endif %}
                     </div>
                 </div>
@@ -88,6 +90,7 @@
         </div>
     </div>
 
+    {% if modules.termine %}
     <!-- Anmeldegespräch -->
     <div class="card shadow-sm mb-4">
         <div class="card-header bg-light d-flex justify-content-between align-items-center">
@@ -155,6 +158,7 @@
             {% endif %}
         </div>
     </div>
+    {% endif %}
 
     <!-- Tabs Navigation -->
     <ul class="nav nav-tabs mb-4" id="studentTabs" role="tablist">
@@ -164,18 +168,22 @@
                 <i class="bi bi-person-lines-fill me-2"></i> Übersicht & Soziales
             </button>
         </li>
+        {% if modules.diagnostik or modules.schulspiel or modules.schularzt %}
         <li class="nav-item" role="presentation">
             <button class="nav-link fw-bold" id="diagnostics-tab" data-bs-toggle="tab" data-bs-target="#diagnostics"
                 type="button" role="tab" aria-controls="diagnostics" aria-selected="false">
                 <i class="bi bi-activity me-2"></i> Diagnostik
             </button>
         </li>
+        {% endif %}
+        {% if modules.aosf or modules.rueckstellung %}
         <li class="nav-item" role="presentation">
             <button class="nav-link fw-bold" id="process-tab" data-bs-toggle="tab" data-bs-target="#process"
                 type="button" role="tab" aria-controls="process" aria-selected="false">
                 <i class="bi bi-folder-symlink me-2"></i> Verfahren
             </button>
         </li>
+        {% endif %}
     </ul>
 
     <!-- Tabs Content -->
@@ -184,6 +192,7 @@
         <!-- === TAB 1: ÜBERSICHT & SOZIALES === -->
         <div class="tab-pane fade show active" id="overview" role="tabpanel" aria-labelledby="overview-tab">
             <div class="row">
+                {% if modules.klassenbildung %}
                 <!-- Spalte 1: Freunde -->
                 <div class="col-md-6 mb-4">
                     <div class="card h-100 shadow-sm">
@@ -240,7 +249,9 @@
                         </div>
                     </div>
                 </div>
+                {% endif %}
 
+                {% if modules.foerderkurse %}
                 <!-- Förderkurse -->
                 {% set fk = [
                   (schueler.foerderkurs_lrs,     'LRS',     '#b5451b'),
@@ -267,7 +278,9 @@
                   </div>
                 </div>
                 {% endif %}
+                {% endif %}
 
+                {% if modules.kita_bericht %}
                 <!-- Spalte 2: Kita -->
                 <div class="col-md-6 mb-4">
                     <div class="card h-100 shadow-sm border-warning" style="border-left-width: 4px;">
@@ -325,12 +338,14 @@
                         </div>
                     </div>
                 </div>
+                {% endif %}
             </div>
         </div>
 
         <!-- === TAB 2: DIAGNOSTIK === -->
         <div class="tab-pane fade" id="diagnostics" role="tabpanel" aria-labelledby="diagnostics-tab">
 
+            {% if modules.diagnostik %}
             <!-- 1. Schuldiagnostik -->
             <div class="card shadow-sm mb-4">
                 <div class="card-header bg-light d-flex justify-content-between align-items-center">
@@ -410,7 +425,9 @@
                     {% endif %}
                 </div>
             </div>
+            {% endif %}
 
+            {% if modules.schulspiel %}
             <!-- 1.5 Schulspiel -->
             <div class="card shadow-sm mb-4">
                 <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
@@ -449,7 +466,9 @@
                     {% endif %}
                 </div>
             </div>
+            {% endif %}
 
+            {% if modules.schularzt %}
             <!-- 2. Schularzt -->
             <div class="card shadow-sm mb-4">
                 <div class="card-header bg-light d-flex justify-content-between align-items-center">
@@ -521,6 +540,7 @@
                     {% endif %}
                 </div>
             </div>
+            {% endif %}
 
         </div>
 
@@ -528,6 +548,7 @@
         <div class="tab-pane fade" id="process" role="tabpanel" aria-labelledby="process-tab">
 
             <div class="row">
+                {% if modules.aosf %}
                 <!-- AO-SF -->
                 <div class="col-md-6 mb-4">
                     <div class="card h-100 shadow-sm border-warning" style="border-top-width: 4px;">
@@ -589,7 +610,9 @@
                         </div>
                     </div>
                 </div>
+                {% endif %}
 
+                {% if modules.rueckstellung %}
                 <!-- Rückstellung -->
                 <div class="col-md-6 mb-4">
                     <div class="card h-100 shadow-sm border-info" style="border-top-width: 4px;">
@@ -656,6 +679,7 @@
                         </div>
                     </div>
                 </div>
+                {% endif %}
             </div>
         </div>
 

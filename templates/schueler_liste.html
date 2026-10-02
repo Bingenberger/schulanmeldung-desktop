@@ -34,44 +34,54 @@
                 </div>
             </div>
 
+            {% if modules.aosf %}
             <div class="col-auto">
                 <div class="form-check form-switch pt-4">
                     <input class="form-check-input" type="checkbox" id="aosf" name="aosf" {% if current_filters.aosf
                         %}checked{% endif %} onchange="this.form.submit()">
                     <label class="form-check-label small" for="aosf">Nur AO-SF Verdacht</label>
                 </div>
+            {% endif %}
             </div>
 
+            {% if modules.rueckstellung %}
             <div class="col-auto">
                 <div class="form-check form-switch pt-4">
                     <input class="form-check-input" type="checkbox" id="rueckstellung" name="rueckstellung" {% if
                         current_filters.rueckstellung %}checked{% endif %} onchange="this.form.submit()">
                     <label class="form-check-label small" for="rueckstellung">Nur Rückstellung</label>
                 </div>
+            {% endif %}
             </div>
 
+            {% if modules.schularzt %}
             <div class="col-auto">
                 <div class="form-check form-switch pt-4">
                     <input class="form-check-input" type="checkbox" id="missing_arzt" name="missing_arzt" {% if
                         current_filters.missing_arzt %}checked{% endif %} onchange="this.form.submit()">
                     <label class="form-check-label small text-danger" for="missing_arzt">Fehlt: Arzt</label>
                 </div>
+            {% endif %}
             </div>
 
+            {% if modules.diagnostik %}
             <div class="col-auto">
                 <div class="form-check form-switch pt-4">
                     <input class="form-check-input" type="checkbox" id="missing_diag" name="missing_diag" {% if
                         current_filters.missing_diag %}checked{% endif %} onchange="this.form.submit()">
                     <label class="form-check-label small text-warning" for="missing_diag">Fehlt: Diag.</label>
                 </div>
+            {% endif %}
             </div>
 
+            {% if modules.schulspiel %}
             <div class="col-auto">
                 <div class="form-check form-switch pt-4">
                     <input class="form-check-input" type="checkbox" id="schulspiel" name="schulspiel" value="on" {% if
                         current_filters.schulspiel %}checked{% endif %} onchange="this.form.submit()">
                     <label class="form-check-label small" for="schulspiel">Nur Schulspiel</label>
                 </div>
+            {% endif %}
             </div>
 
             <div class="col-auto ms-auto d-flex align-items-center">
@@ -89,8 +99,8 @@
     <thead>
         <tr>
             <th>Name, Vorname</th>
-            <th>Päd. Diagnostik</th>
-            <th>Schularzt</th>
+            {% if modules.diagnostik %}<th>Päd. Diagnostik</th>{% endif %}
+            {% if modules.schularzt %}<th>Schularzt</th>{% endif %}
             <th>Aktionen</th>
         </tr>
     </thead>
@@ -103,13 +113,14 @@
                 {% if s.kann_kind %}
                 <span class="badge bg-info text-dark ms-2" title="Kann-Kind">K</span>
                 {% endif %}
-                {% if s.has_aosf_verdacht %}
+                {% if modules.aosf and s.has_aosf_verdacht %}
                 <span class="badge bg-warning text-dark ms-2" title="AO-SF Verdacht">AO-SF</span>
                 {% endif %}
-                {% if s.has_rueckstellung_empfohlen %}
+                {% if modules.rueckstellung and s.has_rueckstellung_empfohlen %}
                 <span class="badge bg-secondary text-white ms-2" title="Rückstellung">R</span>
                 {% endif %}
             </td>
+            {% if modules.diagnostik %}
             <td>
                 <div class="mb-1">
                     <span
@@ -122,7 +133,7 @@
                     Kogn.: {{ render_score(s.diagnostik.gesamteindruck_kognitiv) }}
                     Verh.: {{ render_score(s.diagnostik.gesamteindruck_verhalten) }}
                 </small>
-                {% if s.diagnostik.schulspiel %}
+                {% if modules.schulspiel and s.diagnostik.schulspiel %}
                 <div class="mt-1">
                     <a href="{{ url_for('schulspiel', id=s.id) }}"
                         class="btn btn-sm {% if s.schulspiel_status == 'Abgeschlossen' %}btn-success{% else %}btn-outline-success{% endif %}">
@@ -135,6 +146,8 @@
                 {% endif %}
                 {% endif %}
             </td>
+            {% endif %}
+            {% if modules.schularzt %}
             <td>
                 <div class="mb-1">
                     <span
@@ -146,32 +159,35 @@
                 <small>Gesamt: {{ render_score(s.schularzt_untersuchung.gesamteinschaetzung) }}</small>
                 {% endif %}
             </td>
+            {% endif %}
             <td>
                 <div class="mb-1">
                     <a href="{{ url_for('students.detail', student_id=s.id) }}" class="btn btn-sm btn-outline-primary w-100">
                         Details
                     </a>
                 </div>
-                {% if s.has_aosf_verdacht %}
+                {% if modules.aosf and s.has_aosf_verdacht %}
                 <div>
                     <a href="{{ url_for('aosf_prozess', id=s.id) }}" class="btn btn-sm btn-warning w-100 fw-bold">
                         AO-SF Prozess
                     </a>
                 </div>
                 {% endif %}
-                {% if s.has_rueckstellung_empfohlen %}
+                {% if modules.rueckstellung and s.has_rueckstellung_empfohlen %}
                 <div class="mt-1">
                     <a href="{{ url_for('rueckstellung_prozess', id=s.id) }}" class="btn btn-sm btn-info w-100 fw-bold">
                         Rückstellung
                     </a>
                 </div>
                 {% endif %}
+                {% if modules.klassenbildung %}
                 <div class="mt-1">
                     <a href="{{ url_for('freunde_bearbeiten', id=s.id) }}"
                         class="btn btn-sm {% if s.freund1_id or s.freund2_id or s.keine_freunde %}btn-outline-success{% else %}btn-outline-danger{% endif %} w-100">
                         <i class="bi bi-people"></i> Freunde
                     </a>
                 </div>
+                {% endif %}
             </td>
         </tr>
         {% endfor %}

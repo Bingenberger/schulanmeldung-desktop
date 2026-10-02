@@ -12,6 +12,7 @@ from werkzeug.security import generate_password_hash
 from forms import MIN_PASSWORD_LENGTH, PasswordResetForm, SettingsForm, UserAddForm
 from models import Einschulungsjahr, GlobalSettings, User, db
 from sl_office.authorization import role_required
+from sl_office import features
 from sl_office.features import parent_portal_enabled, portal_required
 from sl_office import school_profile
 from sl_office.services.student_classification import recalculate_kann_kind
@@ -224,6 +225,21 @@ def school_profile_preview():
                               school_year=f"{year}/{year + 1}" if year else None),
         mimetype="application/pdf", download_name="Vorschau_Briefkopf.pdf",
     )
+
+
+@admin_bp.route("/module", methods=["GET", "POST"], endpoint="modules")
+@role_required(["Administrator", "Schulleitung"])
+def modules_page():
+    """Teile der Anwendung, die diese Schule nutzt, ein- und ausschalten."""
+    if request.method == "POST":
+        enabled = set(request.form.getlist("modules")) & set(features.MODULE_KEYS)
+        features.save_module_states(enabled)
+        record("modules_saved", "schulprofil", None, actor_type="staff", actor_id=current_user.id)
+        db.session.commit()
+        flash("Die Auswahl der Module wurde gespeichert.")
+        return redirect(url_for("admin.modules"))
+    return render_template("admin_modules.html", module_list=features.MODULES,
+                           states=features.module_states())
 
 
 # --- Einschulungsjahre ------------------------------------------------------

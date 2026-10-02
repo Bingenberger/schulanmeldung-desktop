@@ -99,8 +99,14 @@
               <li><a class="dropdown-item" href="{{ url_for('admin.parent_letter_text') }}">
                 <i class="bi bi-pencil-square me-2"></i>Elternbrief bearbeiten</a></li>
               {% endif %}
+              {% if modules.termine %}
               <li><a class="dropdown-item" href="{{ url_for('appointments.index') }}">
                 <i class="bi bi-calendar-week me-2"></i>Termine planen</a></li>
+              {% endif %}
+              {% if modules.tag_der_offenen_tuer %}
+              <li><a class="dropdown-item" href="{{ url_for('open_day.index') }}">
+                <i class="bi bi-door-open me-2"></i>Tag der offenen Tür</a></li>
+              {% endif %}
               {% if parent_portal_enabled %}
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item" href="{{ url_for('admin.registrations') }}">
@@ -112,46 +118,68 @@
           </li>
           {% endif %}
 
+          {% if modules.diagnostik or modules.schulspiel or modules.schularzt or modules.kita_bericht %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
               <i class="bi bi-activity"></i> Diagnostik
             </a>
             <ul class="dropdown-menu">
+              {% if modules.diagnostik %}
               <li><a class="dropdown-item" href="{{ url_for('students.select', target='diagnostik') }}">
                 <i class="bi bi-journal-plus me-2"></i>Pädagogische Diagnostik</a></li>
+              {% endif %}
+              {% if modules.schulspiel %}
               <li><a class="dropdown-item" href="{{ url_for('students.select', target='schulspiel') }}">
                 <i class="bi bi-dice-5 me-2"></i>Schulspiel</a></li>
+              {% endif %}
+              {% if modules.schularzt %}
               <li><a class="dropdown-item" href="{{ url_for('students.select', target='schularzt') }}">
                 <i class="bi bi-file-medical me-2"></i>Bericht Schularzt</a></li>
+              {% endif %}
+              {% if modules.kita_bericht %}
               <li><a class="dropdown-item" href="{{ url_for('students.select', target='kita_bericht') }}">
                 <i class="bi bi-house-heart me-2"></i>Bericht Kita</a></li>
+              {% endif %}
             </ul>
           </li>
+          {% endif %}
 
+          {% if modules.klassenbildung or modules.betreuung or modules.foerderkurse %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
               <i class="bi bi-grid-3x3-gap-fill"></i> Klassenbildung
             </a>
             <ul class="dropdown-menu">
+              {% if modules.klassenbildung %}
               <li><a class="dropdown-item" href="{{ url_for('klassenzusammensetzung') }}">
                 <i class="bi bi-grid-3x3-gap me-2"></i>Klassen zusammenstellen</a></li>
               <li><a class="dropdown-item" href="{{ url_for('students.select', target='freunde') }}">
                 <i class="bi bi-people me-2"></i>Freundeswünsche</a></li>
               <li><hr class="dropdown-divider"></li>
+              {% endif %}
+              {% if modules.betreuung %}
               <li><a class="dropdown-item" href="{{ url_for('betreuung_bulk') }}">
                 <i class="bi bi-clock-history me-2"></i>Betreuungsformen</a></li>
+              {% endif %}
+              {% if modules.foerderkurse %}
               <li><a class="dropdown-item" href="{{ url_for('foerderkurse_bulk') }}">
                 <i class="bi bi-mortarboard me-2"></i>Förderkurse</a></li>
+              {% endif %}
               <li><hr class="dropdown-divider"></li>
               <li><h6 class="dropdown-header">Ausgeben</h6></li>
+              {% if modules.klassenbildung %}
               <li><a class="dropdown-item" href="{{ url_for('export_klassenlisten') }}">
                 <i class="bi bi-file-earmark-excel me-2"></i>Klassenlisten als Excel</a></li>
               <li><a class="dropdown-item" href="{{ url_for('export_klassenmappe') }}" target="_blank">
                 <i class="bi bi-folder2-open me-2"></i>Klassenmappe als PDF</a></li>
+              {% endif %}
+              {% if modules.foerderkurse %}
               <li><a class="dropdown-item" href="{{ url_for('export_foerderkurse') }}" target="_blank">
                 <i class="bi bi-file-earmark-pdf me-2"></i>Förderkurse als PDF</a></li>
+              {% endif %}
             </ul>
           </li>
+          {% endif %}
 
         </ul>
 
@@ -175,6 +203,8 @@
                 <i class="bi bi-hdd-stack me-2"></i>Datensicherung</a></li>
               <li><a class="dropdown-item" href="{{ url_for('admin.school_profile') }}">
                 <i class="bi bi-building me-2"></i>Schulprofil</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('admin.modules') }}">
+                <i class="bi bi-toggles me-2"></i>Module</a></li>
               {% if current_user.role == 'Administrator' %}
               <li><a class="dropdown-item" href="{{ url_for('admin.users') }}">
                 <i class="bi bi-people-fill me-2"></i>Benutzerverwaltung</a></li>

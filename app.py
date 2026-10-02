@@ -1882,6 +1882,7 @@ def create_app(environment=None, config_overrides=None):
     if features.parent_portal_enabled(flask_app):
         flask_app.register_blueprint(parent_portal_bp)
     features.install_template_context(flask_app)
+    features.install_module_guard(flask_app)
     register_appointment_cli(flask_app)
     register_maintenance_cli(flask_app)
 
