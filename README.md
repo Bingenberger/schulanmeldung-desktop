@@ -1,4 +1,21 @@
-# SL-Office
+# SL-Office (Desktop-Fassung)
+
+> Dieses Repository ist die frei konfigurierbare Fassung von
+> [`schulanmeldung`](https://github.com/Bingenberger/schulanmeldung), gedacht als
+> eigenständige Windows-Anwendung für beliebige Grundschulen. Die Serverfassung
+> der Gemeinschaftsgrundschule Niederkassel wird dort unverändert weitergeführt.
+>
+> Unterschiede bisher:
+>
+> - **Kein Elternportal:** ohne `SL_OFFICE_PARENT_PORTAL=1` sind Elternseiten,
+>   Elternzugänge und eingegangene Anmeldungen abgeschaltet; die Elternbriefe
+>   laden ohne Zugangslinks zur Terminvereinbarung ein.
+> - **Schulprofil in der Anwendung:** Name, Anschrift, Schulleitung, Logo und
+>   Unterschrift pflegt jede Schule unter *Verwaltung → Schulprofil*.
+>
+> Fehlerbehebungen aus der Serverfassung lassen sich über den Remote `upstream`
+> mit `git cherry-pick` übernehmen.
+
 
 Fachanwendung für die Schuleinschreibung an der Gemeinschaftsgrundschule
 Niederkassel. SL-Office begleitet ein Kind von der Anmeldung bis zur

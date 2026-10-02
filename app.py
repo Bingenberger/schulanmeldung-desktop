@@ -33,6 +33,7 @@ from sl_office import features
 # Import new domain models so SQLAlchemy and Alembic include their metadata.
 import sl_office.parent_portal.models  # noqa: F401, E402
 import sl_office.open_day.models  # noqa: F401, E402
+import sl_office.school_profile  # noqa: F401, E402
 from sl_office.authorization import role_required
 from sl_office.services.student_classification import recalculate_kann_kind
 from sl_office.services.student_deletion import delete_student

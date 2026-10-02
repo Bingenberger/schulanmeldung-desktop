@@ -3,7 +3,7 @@
 import datetime
 from io import BytesIO
 
-from flask import Blueprint, current_app, flash, redirect, render_template, request, send_file, url_for
+from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, send_file, url_for
 from flask_login import current_user
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -13,6 +13,7 @@ from forms import MIN_PASSWORD_LENGTH, PasswordResetForm, SettingsForm, UserAddF
 from models import Einschulungsjahr, GlobalSettings, User, db
 from sl_office.authorization import role_required
 from sl_office.features import parent_portal_enabled, portal_required
+from sl_office import school_profile
 from sl_office.services.student_classification import recalculate_kann_kind
 from sl_office.services.student_deletion import delete_all_students
 from sl_office.parent_portal.models import ParentAccess, ParentRegistration
@@ -158,6 +159,71 @@ def settings():
               "Jahrgangs wurden auf ihren Kann-Kind-Status geprüft.")
         return redirect(url_for("admin.settings"))
     return render_template("admin_settings.html", form=form)
+
+
+# --- Schulprofil --------------------------------------------------------------
+
+@admin_bp.route("/schulprofil", methods=["GET", "POST"], endpoint="school_profile")
+@role_required(["Administrator", "Schulleitung"])
+def school_profile_page():
+    """Name, Anschrift, Logo und Unterschrift der Schule für Briefkopf und Schreiben."""
+    if request.method == "POST":
+        action = request.form.get("action", "save")
+        try:
+            if action == "save":
+                school_profile.save_texts(request.form)
+                for key in school_profile.IMAGE_KEYS:
+                    upload = request.files.get(key)
+                    if upload and upload.filename:
+                        school_profile.save_image(key, upload.read())
+            elif action.startswith("remove:"):
+                school_profile.remove_image(action.split(":", 1)[1])
+            else:
+                abort(400)
+        except school_profile.ImageError as exc:
+            db.session.rollback()
+            flash(str(exc), "error")
+            return redirect(url_for("admin.school_profile"))
+        except KeyError:
+            db.session.rollback()
+            abort(400)
+        record("school_profile_saved", "schulprofil", None,
+               actor_type="staff", actor_id=current_user.id)
+        db.session.commit()
+        flash("Das Schulprofil wurde gespeichert.")
+        return redirect(url_for("admin.school_profile"))
+
+    values = school_profile.settings()
+    images = {key: bool(values.get(key)) for key in school_profile.IMAGE_KEYS}
+    stored = {key: school_profile.image(key) is not None for key in school_profile.IMAGE_KEYS}
+    return render_template(
+        "admin_school_profile.html", values=values, text_fields=school_profile.TEXT_FIELDS,
+        image_fields=school_profile.IMAGE_FIELDS, images=images, stored=stored,
+    )
+
+
+@admin_bp.get("/schulprofil/bild/<key>", endpoint="school_profile_image")
+@role_required(["Administrator", "Schulleitung"])
+def school_profile_image(key):
+    if key not in school_profile.IMAGE_KEYS:
+        abort(404)
+    found = school_profile.image(key)
+    if found is None:
+        abort(404)
+    payload, mimetype = found
+    return send_file(BytesIO(payload), mimetype=mimetype)
+
+
+@admin_bp.get("/schulprofil/vorschau", endpoint="school_profile_preview")
+@role_required(["Administrator", "Schulleitung"])
+def school_profile_preview():
+    """Der Elternbrief mit Beispielkind -- zeigt Briefkopf und Unterschrift."""
+    year = school_year.active_year()
+    return send_file(
+        letters.build_preview(letterhead.branding(), letters.stored_text(),
+                              school_year=f"{year}/{year + 1}" if year else None),
+        mimetype="application/pdf", download_name="Vorschau_Briefkopf.pdf",
+    )
 
 
 # --- Einschulungsjahre ------------------------------------------------------
@@ -453,7 +519,7 @@ def parent_letters():
         try:
             buffer, issued = letters.build_letters(
                 chosen,
-                letterhead.branding(current_app.config),
+                letterhead.branding(),
                 (lambda token: url_for("parent_portal.activate", token=token, _external=True))
                 if parent_portal_enabled() else None,
                 created_by_user_id=current_user.id,
@@ -517,7 +583,7 @@ def parent_letter_text():
             year = school_year.active_year()
             return send_file(
                 letters.build_preview(
-                    letterhead.branding(current_app.config), text,
+                    letterhead.branding(), text,
                     deadline=request.form.get("deadline", "").strip() or None,
                     period=request.form.get("period", "").strip() or None,
                     school_year=f"{year}/{year + 1}" if year else None,

@@ -365,7 +365,7 @@ def plan_document(event_id, registration_id):
     if event is None or eintrag is None or eintrag.event_id != event.id:
         flash("Diese Anmeldung gehört nicht zu dieser Veranstaltung.")
         return redirect(url_for("open_day.index"))
-    payload = plan_pdf.build_plan(event, eintrag, branding(current_app.config))
+    payload = plan_pdf.build_plan(event, eintrag, branding())
     return send_file(BytesIO(payload), mimetype="application/pdf",
                      download_name=plan_pdf.dateiname(event))
 

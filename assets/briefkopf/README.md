@@ -1,18 +1,18 @@
 # Briefkopf der Elternschreiben
 
-Diese Dateien bilden den Briefkopf aus `Einladung_Schulanmeldung.odt` nach. Sie
-werden von `sl_office/parent_portal/letterhead.py` gelesen; die Pfade lassen sich
-über `SL_OFFICE_SCHOOL_LOGO` bzw. `SL_OFFICE_SCHOOL_SIGNATURE` umstellen.
+Diese Schriften setzen den Briefkopf. Sie werden von
+`sl_office/parent_portal/letterhead.py` gelesen.
+
+Logo und Unterschrift liegen nicht im Projekt: jede Schule lädt ihre eigenen
+unter **Verwaltung → Schulprofil** hoch, dort liegen sie in der Datenbank.
+Ersatzweise lassen sich Pfade über `SL_OFFICE_SCHOOL_LOGO` bzw.
+`SL_OFFICE_SCHOOL_SIGNATURE` angeben.
 
 | Datei | Verwendung |
 | --- | --- |
-| `logo.png` | Schullogo oben rechts (400 × 280 px, transparent) |
-| `unterschrift.png` | Unterschrift über der Namenszeile (404 × 132 px, transparent) |
 | `FrenteH1-Regular.ttf` | Hausschrift für Wortmarke und Titelleiste |
 | `Calligraffiti.ttf` | Schreibschrift des Mottos |
 | `Carlito-Regular/Bold/Italic.ttf` | Fließtext aller Schreiben und Formulare |
-
-Beide Bilder stammen aus der Word-/Writer-Vorlage der Schule.
 
 ## Schriften
 

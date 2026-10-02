@@ -14,6 +14,7 @@ der Satzspiegel voll ist.
 from __future__ import annotations
 
 import logging
+from io import BytesIO
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -21,6 +22,7 @@ from pathlib import Path
 from reportlab.lib.colors import HexColor, white
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
@@ -230,14 +232,16 @@ class Flow:
     # -- Briefkopf ---------------------------------------------------------
 
     def _image(self, key, x, y, width, height):
-        path = self.school.get(key)
-        if not path:
+        source = self.school.get(key)
+        if not source:
             return False
+        # Aus dem Schulprofil kommen Bytes, aus der Konfiguration ein Pfad.
+        image = ImageReader(BytesIO(source)) if isinstance(source, bytes) else str(source)
         try:
-            self.pdf.drawImage(str(path), x, y, width=width, height=height,
+            self.pdf.drawImage(image, x, y, width=width, height=height,
                                mask="auto", preserveAspectRatio=True, anchor="c")
         except Exception:
-            logger.warning("Briefkopfbild %s nicht lesbar: %s", key, path)
+            logger.warning("Briefkopfbild %s nicht lesbar", key)
             return False
         return True
 
@@ -422,12 +426,18 @@ class Flow:
         self.paragraph(name, gap_after=0.0)
 
 
-def branding(config):
-    """Briefkopfdaten aus der Anwendungskonfiguration.
+def branding(config=None):
+    """Briefkopfdaten aus dem Schulprofil.
+
+    Ohne ``config`` gilt :func:`sl_office.school_profile.settings`: was die
+    Schule in der Anwendung gepflegt hat, sonst die Konfiguration.
 
     Nicht gesetzte Felder fallen weg, statt Platzhalter zu drucken; fehlen
     Straße und Ort, tritt die einzeilige ``SCHOOL_ADDRESS`` an ihre Stelle.
     """
+    if config is None:
+        from sl_office import school_profile
+        config = school_profile.settings()
     contact = [config.get(key) for key in
                ("SCHOOL_STREET", "SCHOOL_CITY_LINE", "SCHOOL_PHONE", "SCHOOL_EMAIL")]
     contact = [line.strip() for line in contact if line and line.strip()]

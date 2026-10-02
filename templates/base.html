@@ -173,6 +173,8 @@
                 <i class="bi bi-calendar3 me-2"></i>Einschulungsjahre</a></li>
               <li><a class="dropdown-item" href="{{ url_for('admin.backups') }}">
                 <i class="bi bi-hdd-stack me-2"></i>Datensicherung</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('admin.school_profile') }}">
+                <i class="bi bi-building me-2"></i>Schulprofil</a></li>
               {% if current_user.role == 'Administrator' %}
               <li><a class="dropdown-item" href="{{ url_for('admin.users') }}">
                 <i class="bi bi-people-fill me-2"></i>Benutzerverwaltung</a></li>

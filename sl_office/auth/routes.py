@@ -15,6 +15,7 @@ from forms import ChangePasswordForm, LoginForm, TwoFactorForm, TwoFactorSetupFo
 from models import User, db
 from sl_office.audit import record
 from sl_office.auth import two_factor
+from sl_office import school_profile
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -27,7 +28,7 @@ FRESH_CODES_KEY = "fresh_recovery_codes"
 
 
 def _issuer():
-    return current_app.config.get("SCHOOL_NAME") or "SL-Office"
+    return school_profile.get("SCHOOL_NAME") or "SL-Office"
 
 
 def _lock_message(seconds):

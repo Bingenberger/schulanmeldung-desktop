@@ -15,6 +15,7 @@ from models import Schueler, db
 from sl_office.appointments import calendar
 from sl_office.appointments.service import naive_utc, slot_label
 from sl_office.parent_portal.mail_service import build_message, send_message, staff_recipient
+from sl_office import school_profile
 from sl_office.parent_portal.models import (
     AppointmentBooking, AppointmentEvent, AppointmentSlot, ParentAccess, utcnow,
 )
@@ -23,7 +24,7 @@ ICS_FILENAME = "Anmeldetermin.ics"
 
 
 def _school_name(app):
-    return app.config.get("SCHOOL_NAME", "")
+    return school_profile.get("SCHOOL_NAME")
 
 
 def _portal_link(app):

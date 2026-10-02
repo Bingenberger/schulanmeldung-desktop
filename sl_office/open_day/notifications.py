@@ -12,6 +12,7 @@ from sl_office.open_day.service import (
 from sl_office.parent_portal.letterhead import branding
 from sl_office.parent_portal.letters import german_date
 from sl_office.parent_portal.mail_service import attach_pdf, build_message, send_message
+from sl_office import school_profile
 
 
 def _anrede(eintrag):
@@ -78,7 +79,7 @@ def send_plan(app, eintrag, event=None, plan=None):
     event = event or eintrag.event
     if not (eintrag.email or "").strip():
         return False
-    schule = app.config.get("SCHOOL_NAME", "")
+    schule = school_profile.get("SCHOOL_NAME")
     betreff = (f"{event.titel} am {german_date(event.datum)}"
                if eintrag.teilnahme else f"Ihre Absage zum {event.titel}")
     nachricht = build_message(app, eintrag.email, betreff,
@@ -88,7 +89,7 @@ def send_plan(app, eintrag, event=None, plan=None):
         # Ablauf steht ja auch im Text.
         try:
             attach_pdf(nachricht, plan_pdf.dateiname(event),
-                       plan_pdf.build_plan(event, eintrag, branding(app.config), plan))
+                       plan_pdf.build_plan(event, eintrag, branding(), plan))
         except Exception:
             app.logger.exception("Ablaufplan-PDF nicht erzeugt",
                                  extra={"registration_id": eintrag.id})

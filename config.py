@@ -68,28 +68,29 @@ class BaseConfig:
     #: den Link zum Elternbereich sonst nicht bauen.
     PUBLIC_BASE_URL = os.getenv("SL_OFFICE_PUBLIC_BASE_URL", "").rstrip("/")
 
-    # Briefkopf der Elternschreiben. Die Vorgaben entsprechen der Schulvorlage
-    # "Einladung_Schulanmeldung.odt"; jede Zeile ist per Umgebungsvariable
-    # überschreibbar, leere Angaben werden im Brief einfach weggelassen.
-    SCHOOL_NAME = os.getenv("SL_OFFICE_SCHOOL_NAME", "Gemeinschaftsgrundschule Niederkassel")
-    SCHOOL_MOTTO = os.getenv("SL_OFFICE_SCHOOL_MOTTO", "zusammen · leben · lernen")
-    SCHOOL_STREET = os.getenv("SL_OFFICE_SCHOOL_STREET", "Annostraße 3")
-    SCHOOL_CITY_LINE = os.getenv("SL_OFFICE_SCHOOL_CITY_LINE", "53859 Niederkassel")
-    SCHOOL_PHONE = os.getenv("SL_OFFICE_SCHOOL_PHONE", "(02208) 3761")
-    SCHOOL_EMAIL = os.getenv("SL_OFFICE_SCHOOL_EMAIL", "info@ggs-niederkassel.de")
-    SCHOOL_WEB = os.getenv("SL_OFFICE_SCHOOL_WEB", "www.ggs-niederkassel.de")
+    # Briefkopf der Elternschreiben. Die Schule pflegt die Angaben unter
+    # „Verwaltung → Schulprofil“ (siehe sl_office.school_profile); was dort
+    # nicht gespeichert ist, kommt aus diesen Umgebungsvariablen. Leere
+    # Angaben werden im Brief einfach weggelassen.
+    SCHOOL_NAME = os.getenv("SL_OFFICE_SCHOOL_NAME", "")
+    SCHOOL_MOTTO = os.getenv("SL_OFFICE_SCHOOL_MOTTO", "")
+    SCHOOL_STREET = os.getenv("SL_OFFICE_SCHOOL_STREET", "")
+    SCHOOL_CITY_LINE = os.getenv("SL_OFFICE_SCHOOL_CITY_LINE", "")
+    SCHOOL_PHONE = os.getenv("SL_OFFICE_SCHOOL_PHONE", "")
+    SCHOOL_EMAIL = os.getenv("SL_OFFICE_SCHOOL_EMAIL", "")
+    SCHOOL_WEB = os.getenv("SL_OFFICE_SCHOOL_WEB", "")
     #: Ortsangabe der Datumszeile und des Anmeldescheins ("Stadt ...").
-    SCHOOL_TOWN = os.getenv("SL_OFFICE_SCHOOL_TOWN", "Niederkassel")
+    SCHOOL_TOWN = os.getenv("SL_OFFICE_SCHOOL_TOWN", "")
     #: Einzugsbereich, wie er im Brieftext genannt wird.
-    SCHOOL_DISTRICT = os.getenv("SL_OFFICE_SCHOOL_DISTRICT", "Niederkassel-Ort")
-    SCHOOL_HEALTH_OFFICE = os.getenv("SL_OFFICE_SCHOOL_HEALTH_OFFICE", "Gesundheitsamtes Siegburg")
-    SCHOOL_CONTACT_MAIL = os.getenv("SL_OFFICE_SCHOOL_CONTACT_MAIL", "emrich-foerster@ggs-ndk.de")
-    SCHOOL_HEAD = os.getenv("SL_OFFICE_SCHOOL_HEAD", "F. Emrich-Förster, Schulleiter")
+    SCHOOL_DISTRICT = os.getenv("SL_OFFICE_SCHOOL_DISTRICT", "")
+    SCHOOL_HEALTH_OFFICE = os.getenv("SL_OFFICE_SCHOOL_HEALTH_OFFICE", "")
+    SCHOOL_CONTACT_MAIL = os.getenv("SL_OFFICE_SCHOOL_CONTACT_MAIL", "")
+    SCHOOL_HEAD = os.getenv("SL_OFFICE_SCHOOL_HEAD", "")
     #: Einzeilige Anschrift; wird genutzt, wenn Straße und Ort nicht gesetzt sind.
     SCHOOL_ADDRESS = os.getenv("SL_OFFICE_SCHOOL_ADDRESS", "")
-    SCHOOL_LOGO = os.getenv("SL_OFFICE_SCHOOL_LOGO", str(BASE_DIR / "assets/briefkopf/logo.png"))
-    SCHOOL_SIGNATURE = os.getenv(
-        "SL_OFFICE_SCHOOL_SIGNATURE", str(BASE_DIR / "assets/briefkopf/unterschrift.png"))
+    #: Pfade zu Logo und Unterschrift; im Schulprofil hochgeladene Bilder gehen vor.
+    SCHOOL_LOGO = os.getenv("SL_OFFICE_SCHOOL_LOGO", "")
+    SCHOOL_SIGNATURE = os.getenv("SL_OFFICE_SCHOOL_SIGNATURE", "")
     MAIL_SUPPRESS_SEND = False
 
 

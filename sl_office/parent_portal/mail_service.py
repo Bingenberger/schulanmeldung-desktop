@@ -6,6 +6,8 @@ Die Nachrichten selbst werden anderswo gebaut -- Terminmails etwa in
 import smtplib
 from email.message import EmailMessage
 
+from sl_office import school_profile
+
 
 def send_message(app, message):
     """Eine fertige Nachricht zustellen.
@@ -43,7 +45,7 @@ def attach_pdf(message, filename, payload):
 
 def staff_recipient(app):
     """Adresse der Schule für Benachrichtigungen; ohne Angabe geht nichts raus."""
-    return app.config.get("NOTIFY_MAIL") or app.config.get("SCHOOL_CONTACT_MAIL") or ""
+    return app.config.get("NOTIFY_MAIL") or school_profile.get("SCHOOL_CONTACT_MAIL") or ""
 
 
 def send_parent_login_link(app, recipient, link, child_name, start_url=""):

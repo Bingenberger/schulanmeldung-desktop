@@ -21,6 +21,7 @@ from sl_office.appointments.service import (
     set_capacity, slot_label,
 )
 from sl_office.parent_portal.letterhead import branding
+from sl_office import school_profile
 from sl_office.parent_portal.models import (
     AppointmentBooking, AppointmentEvent, AppointmentSlot, ParentAccess,
 )
@@ -389,7 +390,7 @@ def admin_protocols(event_id):
         flash("Für diesen Jahrgang sind noch keine Kinder erfasst.")
         return redirect(url_for("appointments.detail", event_id=event.id))
     payload = admin_protocol_pdf.build_many(
-        eintraege, branding(current_app.config),
+        eintraege, branding(),
         title=f"Verwaltungsanmeldung ({len(eintraege)})")
     return send_file(BytesIO(payload), mimetype="application/pdf", as_attachment=True,
                      download_name=f"Verwaltungsanmeldung_{len(eintraege)}.pdf")
@@ -400,7 +401,7 @@ def admin_protocols(event_id):
 def admin_protocol(student_id):
     """Der Laufzettel eines einzelnen Kindes, zur Ansicht im Browser."""
     student = db.get_or_404(Schueler, student_id)
-    payload = admin_protocol_pdf.build(student, branding(current_app.config),
+    payload = admin_protocol_pdf.build(student, branding(),
                                        active_booking_for_student(student.id))
     name = f"{student.nachname}_{student.vorname}".replace(" ", "-")
     return send_file(BytesIO(payload), mimetype="application/pdf", as_attachment=False,
@@ -431,7 +432,7 @@ def bookings_calendar(event_id):
                AppointmentBooking.status == "confirmed")
         .order_by(AppointmentSlot.starts_at)
     ).all()
-    school = current_app.config.get("SCHOOL_NAME", "")
+    school = school_profile.get("SCHOOL_NAME")
     payload = calendar.build_calendar(
         [calendar.staff_entry(booking, slot, event, student, school_name=school)
          for booking, slot, student in rows],

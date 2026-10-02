@@ -24,6 +24,7 @@ from sl_office.parent_portal import notifications as registration_mail
 from sl_office.parent_portal.models import AppointmentBooking, AppointmentEvent, AppointmentSlot, ParentAccess, ParentRegistration, utcnow
 from sl_office.parent_portal import registration_form
 from sl_office.audit import record
+from sl_office import school_profile
 
 parent_portal_bp = Blueprint("parent_portal", __name__, url_prefix="/eltern")
 SESSION_KEY = "parent_access_id"
@@ -206,7 +207,7 @@ def dashboard(access):
                            open_day_event=open_day_event, open_day_entry=open_day_entry,
                            schritte=schritte, zustaende=progress.ZUSTAENDE,
                            fortschritt=progress.fortschritt(schritte),
-                           contact=current_app.config.get("SCHOOL_CONTACT_MAIL", ""))
+                           contact=school_profile.get("SCHOOL_CONTACT_MAIL"))
 
 
 @parent_portal_bp.get("/termin.ics")
@@ -225,7 +226,7 @@ def appointment_calendar(access):
     student = db.session.get(Schueler, access.schueler_id)
     payload = calendar.build_calendar([calendar.parent_entry(
         booking, slot, event, student,
-        school_name=current_app.config.get("SCHOOL_NAME", ""),
+        school_name=school_profile.get("SCHOOL_NAME"),
         instructions=event.parent_instructions or "",
     )], name="Schulanmeldung")
     return send_file(BytesIO(payload), mimetype="text/calendar",
@@ -406,7 +407,7 @@ def open_day(access):
         vorschlag_name=(eintrag.name if eintrag else access.display_name) or "",
         vorschlag_email=(eintrag.email if eintrag else access.email_normalized) or "",
         plan=ablaufplan(eintrag, stationsplan(event)) if eintrag else [],
-        contact=current_app.config.get("SCHOOL_CONTACT_MAIL", ""))
+        contact=school_profile.get("SCHOOL_CONTACT_MAIL"))
 
 
 @parent_portal_bp.get("/tag-der-offenen-tuer/ablaufplan.pdf")
@@ -420,7 +421,7 @@ def open_day_plan(access):
     if event is None or eintrag is None or not ablaufplan(eintrag):
         flash("Es liegt noch kein Ablaufplan für Sie vor.")
         return redirect(url_for("parent_portal.dashboard"))
-    payload = plan_pdf.build_plan(event, eintrag, letterhead.branding(current_app.config))
+    payload = plan_pdf.build_plan(event, eintrag, letterhead.branding())
     return send_file(BytesIO(payload), mimetype="application/pdf",
                      as_attachment=True, download_name=plan_pdf.dateiname(event))
 

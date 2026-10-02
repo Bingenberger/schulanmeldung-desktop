@@ -16,7 +16,8 @@ from sl_office.parent_portal.models import (  # noqa: E402
 
 class ParentPortalTests(unittest.TestCase):
     def setUp(self):
-        self.app = create_app("testing")
+        # Ohne Kontaktadresse bekäme die Schule keine Benachrichtigung.
+        self.app = create_app("testing", {"SCHOOL_CONTACT_MAIL": "sekretariat@example.de"})
         self.client = self.app.test_client()
         with self.app.app_context():
             student = Schueler(vorname="Portal", nachname="Kind")

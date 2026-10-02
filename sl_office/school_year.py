@@ -188,6 +188,8 @@ READONLY_EXEMPT_ENDPOINTS = frozenset({
     "admin.school_years", "admin.switch_year", "admin.unlock_year",
     "auth.logout", "auth.login", "auth.login_two_factor", "auth.setup_two_factor",
     "auth.security", "auth.change_password",
+    # Das Schulprofil gilt für alle Jahrgänge, nicht für den geöffneten.
+    "admin.school_profile", "admin.school_profile_image",
 })
 
 
