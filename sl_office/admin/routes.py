@@ -12,6 +12,7 @@ from werkzeug.security import generate_password_hash
 from forms import MIN_PASSWORD_LENGTH, PasswordResetForm, SettingsForm, UserAddForm
 from models import Einschulungsjahr, GlobalSettings, User, db
 from sl_office.authorization import role_required
+from sl_office.features import parent_portal_enabled, portal_required
 from sl_office.services.student_classification import recalculate_kann_kind
 from sl_office.services.student_deletion import delete_all_students
 from sl_office.parent_portal.models import ParentAccess, ParentRegistration
@@ -310,6 +311,7 @@ def delete_all_students_route():
 
 @admin_bp.get("/anmeldungen")
 @role_required(["Administrator", "Schulleitung", "Sekretariat"])
+@portal_required
 def registrations():
     status = request.args.get("status")
     query = db.session.query(ParentRegistration, Schueler).join(Schueler, Schueler.id == ParentRegistration.schueler_id)
@@ -321,6 +323,7 @@ def registrations():
 
 @admin_bp.route("/anmeldungen/<int:registration_id>", methods=["GET", "POST"])
 @role_required(["Administrator", "Schulleitung", "Sekretariat"])
+@portal_required
 def registration_detail(registration_id):
     registration = db.get_or_404(ParentRegistration, registration_id)
     student = db.get_or_404(Schueler, registration.schueler_id)
@@ -346,6 +349,7 @@ def registration_detail(registration_id):
 
 @admin_bp.get("/anmeldungen/<int:registration_id>/formular.pdf")
 @role_required(["Administrator", "Schulleitung", "Sekretariat"])
+@portal_required
 def registration_printout(registration_id):
     """Die Angaben der Eltern auf der amtlichen Vorlage, zum Ausdrucken.
 
@@ -373,6 +377,7 @@ def registration_printout(registration_id):
 
 @admin_bp.get("/anmeldungen/formulare.pdf")
 @role_required(["Administrator", "Schulleitung", "Sekretariat"])
+@portal_required
 def registration_printouts():
     """Alle übermittelten Anmeldungen in einem PDF, nach Namen sortiert.
 
@@ -409,6 +414,7 @@ def registration_printouts():
 
 @admin_bp.route("/elternzugänge", methods=["GET", "POST"])
 @role_required(["Administrator", "Schulleitung", "Sekretariat"])
+@portal_required
 def parent_accesses():
     generated_link = None
     if request.method == "POST":
@@ -448,7 +454,8 @@ def parent_letters():
             buffer, issued = letters.build_letters(
                 chosen,
                 letterhead.branding(current_app.config),
-                lambda token: url_for("parent_portal.activate", token=token, _external=True),
+                (lambda token: url_for("parent_portal.activate", token=token, _external=True))
+                if parent_portal_enabled() else None,
                 created_by_user_id=current_user.id,
                 deadline=request.form.get("deadline", "").strip() or None,
                 period=request.form.get("period", "").strip() or None,
@@ -490,7 +497,7 @@ def parent_letter_text():
     bearbeitet wird, steht in ``variante``; beide werden getrennt gespeichert.
     """
     key = request.values.get("variante", letters.TEXT_KEY)
-    if key not in letters.VARIANTS:
+    if key not in letters.variants():
         key = letters.TEXT_KEY
     text = letters.stored_text(key)
     problems = []
@@ -529,12 +536,13 @@ def parent_letter_text():
         "admin_parent_letter_text.html", text=text, problems=problems,
         fields=letters.variant(key)["fields"], marker=letters.ACCESS_MARKER,
         is_default=text == letters.variant(key)["default"],
-        variants=letters.VARIANTS, current_key=key,
+        variants=letters.variants(), current_key=key,
     )
 
 
 @admin_bp.post("/elternzugänge/<int:access_id>/<action>")
 @role_required(["Administrator", "Schulleitung", "Sekretariat"])
+@portal_required
 def parent_access_action(access_id, action):
     access = db.get_or_404(ParentAccess, access_id)
     if action not in {"lock", "revoke", "activate"}:

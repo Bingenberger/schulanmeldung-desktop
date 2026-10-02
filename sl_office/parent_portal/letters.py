@@ -28,6 +28,7 @@ from reportlab.pdfgen import canvas
 from sqlalchemy import select
 
 from models import db
+from sl_office.features import parent_portal_enabled
 from sl_office.parent_portal import letterhead
 from sl_office.parent_portal.access_service import create_activation_grant
 from sl_office.parent_portal.letterhead import Flow
@@ -130,6 +131,7 @@ FIELDS = {
     "zeitraum": "Anmeldezeitraum aus dem Druckformular",
     "frist": "Frist für die Terminbuchung aus dem Druckformular",
     "kontakt": "E-Mail-Adresse für Rückfragen",
+    "telefon": "Telefonnummer der Schule aus dem Briefkopf",
     "schulleitung": "Name der Schulleitung aus dem Briefkopf",
     "tdot": "Datum des Tags der offenen Tür, aus der Veranstaltungsverwaltung",
 }
@@ -247,9 +249,95 @@ VARIANTS = {
 }
 
 
+# --- Fassungen ohne Elternportal ---------------------------------------------
+#
+# Die Desktop-Fassung hat kein Elternportal. Der Brief lädt dann schlicht ein:
+# ohne Zugangskästen, mit der Bitte, einen Termin mit der Schule abzustimmen,
+# und ohne die Eigenheiten einer bestimmten Schule. Gespeichert wird unter
+# denselben Schlüsseln; jede Schule passt den Wortlaut im Editor an.
+
+OFFLINE_BODY = """Sehr geehrte Erziehungsberechtigte,
+
+Ihr Kind {kind} wird zum Schuljahr {schuljahr} schulpflichtig. Als nächstgelegene Schule laden wir Sie und Ihr Kind daher heute herzlich zur Anmeldung an unserer Schule ein.
+
+Als Eltern können Sie Ihr Kind an der Grundschule Ihrer Wahl anmelden. Jedes Kind hat jedoch einen rechtlichen Anspruch auf den Besuch der nächstgelegenen Grundschule. Melden Eltern ihr Kind an einer anderen als der nächstgelegenen Schule an, so kann es dort nur im Rahmen freier Kapazitäten aufgenommen werden.
+
+# Anmeldung an der nächstgelegenen Schule
+
+Bei der {schule} handelt es sich für Ihr Kind um die nächstgelegene Schule, auf deren Besuch ein Rechtsanspruch besteht.
+
+In diesem Jahr findet die Schulanmeldung vom {zeitraum} statt.
+
+[termin-absatz]
+
+**Bitte bringen Sie folgende Unterlagen mit zum Anmeldegespräch:**
+
+- den Anmeldeschein der Stadt {stadt}
+- das ausgefüllte Anmeldeformular unserer Schule, unterschrieben von beiden Erziehungsberechtigten
+- bei alleinigem Sorgerecht eine entsprechende Sorgerechtsbescheinigung
+- die Geburtsurkunde oder das Familienstammbuch
+- den Impfpass zum Nachweis eines ausreichenden Masernschutzes
+
+**Bitte kommen Sie mit Ihrem Kind zum Anmeldegespräch.**
+
+Einen Termin zur schulärztlichen Untersuchung Ihres Kindes erhalten Sie durch ein gesondertes Schreiben des {gesundheitsamt}.
+
+# Anmeldung an einer anderen Schule
+
+Falls Sie Ihr Kind an einer anderen als der nächstgelegenen Schule anmelden wollen, bitten wir Sie, dies baldmöglichst zu tun und den beigefügten Anmeldeschein dort abzugeben. Nur so können wir die Überwachung der Schulpflicht sicherstellen.
+
+# Tag der offenen Tür am {tdot}
+
+Bevor Sie sich entscheiden, zeigen wir Ihnen unsere Schule gerne und laden Sie und Ihr Kind dazu herzlich ein."""
+
+OFFLINE_SELF_PARAGRAPH = """Bitte vereinbaren Sie für das Anmeldegespräch einen Termin mit unserem Sekretariat.
+
+Sie erreichen uns telefonisch unter {telefon}.
+
+Per E-Mail erreichen Sie uns unter {kontakt}.
+
+**Bitte melden Sie sich bis spätestens zum {frist}. Andernfalls werden wir Ihnen einen Termin zuweisen.**"""
+
+OFFLINE_ASSIGNED_PARAGRAPH = """Für Sie und Ihr Kind haben wir bereits einen Termin für das Anmeldegespräch vorgesehen:
+
+**{termin}**
+
+Sollte Ihnen dieser Termin nicht möglich sein, melden Sie sich bitte bei uns, damit wir gemeinsam eine andere Zeit finden.
+
+Sie erreichen uns telefonisch unter {telefon}.
+
+Per E-Mail erreichen Sie uns unter {kontakt}."""
+
+OFFLINE_TEXT = {"titel": DEFAULT_TITLE,
+                "text": OFFLINE_BODY.replace(SLOT_MARKER, OFFLINE_SELF_PARAGRAPH),
+                "gruss": DEFAULT_CLOSING}
+OFFLINE_ASSIGNED_TEXT = {"titel": ASSIGNED_TITLE,
+                         "text": OFFLINE_BODY.replace(SLOT_MARKER, OFFLINE_ASSIGNED_PARAGRAPH),
+                         "gruss": DEFAULT_CLOSING}
+
+OFFLINE_VARIANTS = {
+    TEXT_KEY: {
+        "label": "Die Eltern vereinbaren einen Termin",
+        "default": OFFLINE_TEXT,
+        "fields": FIELDS,
+    },
+    ASSIGNED_TEXT_KEY: {
+        "label": "Die Schule gibt den Termin vor",
+        "default": OFFLINE_ASSIGNED_TEXT,
+        "fields": ASSIGNED_FIELDS,
+    },
+}
+
+
+def variants():
+    """Die Fassungen dieser Anwendung: mit oder ohne Elternportal."""
+    return VARIANTS if parent_portal_enabled() else OFFLINE_VARIANTS
+
+
 def variant(key):
     """Beschreibung einer Fassung; unbekannte Schlüssel fallen auf die erste zurück."""
-    return VARIANTS.get(key) or VARIANTS[TEXT_KEY]
+    available = variants()
+    return available.get(key) or available[TEXT_KEY]
 
 
 def stored_text(key=TEXT_KEY):
@@ -293,7 +381,7 @@ def check_text(titel, text, gruss, key=TEXT_KEY):
         problems.append("Unbekannte Platzhalter: " + ", ".join("{%s}" % name for name in unknown))
     if not (text or "").strip():
         problems.append("Der Brieftext ist leer.")
-    elif ACCESS_MARKER not in text:
+    elif parent_portal_enabled() and ACCESS_MARKER not in text:
         problems.append(f"Die Marke {ACCESS_MARKER} fehlt – ohne sie enthält der Brief keine "
                         "Zugangsdaten und die Eltern können keinen Termin buchen.")
     if not (titel or "").strip():
@@ -420,6 +508,10 @@ def _draw_access_block(flow, student, tokens, reusable, link_builder):
     flow.paragraph(ACCESS_NOTE, size=8.5, leading=11, color=letterhead.MUTED)
 
 
+def _no_access_block(flow, student):
+    """Platzhalter für [zugaenge], wenn es kein Elternportal gibt."""
+
+
 def _next_meaningful(lines, start):
     for line in lines[start:]:
         if line.strip():
@@ -501,6 +593,7 @@ def _draw_letter(pdf, student, school, letter, text, access_block):
         "zeitraum": letter.get("zeitraum", ""),
         "frist": letter.get("frist", ""),
         "kontakt": school.get("contact_mail", ""),
+        "telefon": school.get("phone", ""),
         "schulleitung": school.get("head", ""),
         "termin": letter.get("termin", ""),
         "tdot": letter.get("tdot", ""),
@@ -578,6 +671,9 @@ def build_letters(students, school, link_builder, created_by_user_id=None, deadl
     Termin bekommen ihn im Brief genannt, alle anderen die Aufforderung, selbst
     einen zu wählen. Ein Stapeldruck kann darum beides enthalten.
 
+    ``link_builder`` is ``None`` without parent portal: no access is issued and
+    the letter carries no access boxes.
+
     ``reissue`` replaces still-open access links instead of referring to the
     earlier letter; see :func:`issue_letter_tokens`. ``texts`` overrides the
     stored wording je Fassung und ist das, was die Vorschau des Editors mitgibt.
@@ -591,14 +687,19 @@ def build_letters(students, school, link_builder, created_by_user_id=None, deadl
     pdf.setAuthor(school.get("name", ""))
     issued = 0
     for student in students:
-        tokens, reusable = issue_letter_tokens(student.id, created_by_user_id, reissue=reissue)
-        issued += len(tokens)
+        if link_builder is None:
+            # Ohne Elternportal gibt es keine Zugänge: nichts ausstellen,
+            # an der Marke [zugaenge] bleibt der Brief einfach leer.
+            access_block = _no_access_block
+        else:
+            tokens, reusable = issue_letter_tokens(student.id, created_by_user_id, reissue=reissue)
+            issued += len(tokens)
+            access_block = (lambda flow, child, granted=tokens, covered=reusable:
+                            _draw_access_block(flow, child, granted, covered, link_builder))
         termin = appointment_label(student.id)
         key = ASSIGNED_TEXT_KEY if termin else TEXT_KEY
         text = texts.get(key) or stored_text(key)
-        _draw_letter(pdf, student, school, dict(letter, termin=termin), text,
-                     lambda flow, child, granted=tokens, covered=reusable:
-                     _draw_access_block(flow, child, granted, covered, link_builder))
+        _draw_letter(pdf, student, school, dict(letter, termin=termin), text, access_block)
     pdf.save()
     buffer.seek(0)
     return buffer, issued
@@ -606,8 +707,8 @@ def build_letters(students, school, link_builder, created_by_user_id=None, deadl
 
 #: Beispielkind der Vorschau -- frei erfunden, gespeichert wird dabei nichts.
 SAMPLE_STUDENT = SimpleNamespace(
-    id=0, vorname="Mia", nachname="Musterkind", strasse="Musterweg 7", plz="53859",
-    ort="Niederkassel", erzb_1_name="Anna Musterkind", erzb_2_name="Ben Musterkind",
+    id=0, vorname="Mia", nachname="Musterkind", strasse="Musterweg 7", plz="12345",
+    ort="Musterstadt", erzb_1_name="Anna Musterkind", erzb_2_name="Ben Musterkind",
 )
 SAMPLE_URL = "https://beispiel.example/eltern/aktivieren/NUR-ZUR-ANSICHT"
 
@@ -628,10 +729,12 @@ def build_preview(school, text, deadline=None, period=None, school_year=None, le
     buffer = BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=A4)
     pdf.setTitle("Vorschau Elternbrief")
-    _draw_letter(pdf, SAMPLE_STUDENT, school, letter, text,
-                 lambda flow, child: _draw_access_block(
-                     flow, child, dict.fromkeys(PURPOSES, "beispiel"), {},
-                     lambda token: SAMPLE_URL))
+    if parent_portal_enabled():
+        access_block = (lambda flow, child: _draw_access_block(
+            flow, child, dict.fromkeys(PURPOSES, "beispiel"), {}, lambda token: SAMPLE_URL))
+    else:
+        access_block = _no_access_block
+    _draw_letter(pdf, SAMPLE_STUDENT, school, letter, text, access_block)
     pdf.save()
     buffer.seek(0)
     return buffer

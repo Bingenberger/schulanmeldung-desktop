@@ -48,6 +48,10 @@ class BaseConfig:
     #: Anzahl vorgeschalteter Reverse Proxys. 0 = direkt erreichbar, dann
     #: werden X-Forwarded-*-Kopfzeilen ignoriert. Hinter nginx: 1.
     TRUSTED_PROXIES = int(os.getenv("SL_OFFICE_TRUSTED_PROXIES", "0"))
+    #: Elternportal mit Aktivierungslinks, Formular und Terminbuchung. Es
+    #: braucht einen aus dem Internet erreichbaren Server und ist in der
+    #: Desktop-Fassung darum ausgeschaltet; siehe :mod:`sl_office.features`.
+    PARENT_PORTAL_ENABLED = _env_bool("SL_OFFICE_PARENT_PORTAL", False)
     MAIL_SERVER = os.getenv("SL_OFFICE_MAIL_SERVER", "localhost")
     MAIL_PORT = int(os.getenv("SL_OFFICE_MAIL_PORT", "25"))
     MAIL_USE_TLS = _env_bool("SL_OFFICE_MAIL_USE_TLS", False)
@@ -104,6 +108,9 @@ class TestingConfig(BaseConfig):
     WTF_CSRF_ENABLED = False
     AUTO_CREATE_DB = True
     MAIL_SUPPRESS_SEND = True
+    # Die übernommenen Tests prüfen das Portal mit; die Desktop-Fassung ohne
+    # Portal hat eigene Tests, die den Schalter ausdrücklich setzen.
+    PARENT_PORTAL_ENABLED = True
 
 
 class ProductionConfig(BaseConfig):

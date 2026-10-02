@@ -329,7 +329,9 @@ class LetterTextTests(unittest.TestCase):
         self.assertEqual(letters.fill("Gruß aus {irgendwo}", self.FIELDS), "Gruß aus {irgendwo}")
 
     def test_the_check_reports_typos_and_a_missing_marker(self):
-        problems = letters.check_text("Titel {tippfehler}", "Nur Text", "Grüße")
+        # Die Zugangsmarke ist nur Pflicht, wenn das Elternportal läuft.
+        with create_app("testing").app_context():
+            problems = letters.check_text("Titel {tippfehler}", "Nur Text", "Grüße")
         self.assertEqual(len(problems), 2)
         self.assertIn("{tippfehler}", problems[0])
         self.assertIn(letters.ACCESS_MARKER, problems[1])

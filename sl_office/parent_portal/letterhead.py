@@ -439,6 +439,7 @@ def branding(config):
         "contact": contact,
         "address": (config.get("SCHOOL_ADDRESS") or "").strip(),
         "web": (config.get("SCHOOL_WEB") or "").strip(),
+        "phone": (config.get("SCHOOL_PHONE") or "").strip(),
         "town": (config.get("SCHOOL_TOWN") or "").strip(),
         "district": (config.get("SCHOOL_DISTRICT") or "").strip(),
         "health_office": (config.get("SCHOOL_HEALTH_OFFICE") or "").strip(),

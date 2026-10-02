@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
+{% if parent_portal_enabled %}
 <div class="alert alert-info d-flex gap-3 align-items-center">
     <i class="bi bi-people-fill fs-3"></i>
     <div>
@@ -9,6 +10,7 @@
         <a class="alert-link" href="{{ url_for('parent_portal.start') }}">hier geht es zum Elternportal</a>.
     </div>
 </div>
+{% endif %}
 <h2>{{ title or 'Einloggen' }}</h2>
 <form method="POST">
     {{ form.hidden_tag() }}

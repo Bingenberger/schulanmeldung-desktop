@@ -101,11 +101,13 @@
               {% endif %}
               <li><a class="dropdown-item" href="{{ url_for('appointments.index') }}">
                 <i class="bi bi-calendar-week me-2"></i>Termine planen</a></li>
+              {% if parent_portal_enabled %}
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item" href="{{ url_for('admin.registrations') }}">
                 <i class="bi bi-file-earmark-person me-2"></i>Eingegangene Anmeldungen</a></li>
               <li><a class="dropdown-item" href="{{ url_for('admin.parent_accesses') }}">
                 <i class="bi bi-envelope-lock me-2"></i>Elternzugänge verwalten</a></li>
+              {% endif %}
             </ul>
           </li>
           {% endif %}

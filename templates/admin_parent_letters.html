@@ -8,12 +8,15 @@
       <i class="bi bi-pencil-square"></i> Brieftext bearbeiten
     </a>
     {% endif %}
+{% if parent_portal_enabled %}
     <a class="btn btn-outline-secondary" href="{{ url_for('admin.parent_accesses') }}">
       <i class="bi bi-envelope-lock"></i> Elternzugänge
     </a>
+{% endif %}
   </div>
 </div>
 
+{% if parent_portal_enabled %}
 <div class="alert alert-info">
   Jedes Kind bekommt die vollständige <strong>Einladung zur Schulanmeldung</strong> im Briefkopf der
   Schule — mit <strong>zwei persönlichen Zugängen</strong>, je einer pro Erziehungsberechtigten,
@@ -26,6 +29,14 @@
   frühere Schreiben. Wurde dieses nie verschickt, setzen Sie <strong>Zugänge neu ausstellen</strong>.
   Ein bereits eingelöster Zugang wird nie neu ausgestellt.</span>
 </div>
+{% else %}
+<div class="alert alert-info">
+  Jedes Kind bekommt die vollständige <strong>Einladung zur Schulanmeldung</strong> im Briefkopf der
+  Schule. Kinder mit bereits vergebenem Termin bekommen ihn im Brief genannt, alle anderen die Bitte,
+  einen Termin mit der Schule zu vereinbaren. Schuljahr und Anschrift kommen aus den erfassten Daten,
+  Zeitraum und Frist aus den Feldern unten.
+</div>
+{% endif %}
 
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -38,10 +49,11 @@
                placeholder="z. B. 27. bis 30. Oktober">
       </div>
       <div>
-        <label class="form-label small mb-1" for="deadline">Frist für die Terminbuchung (optional)</label>
+        <label class="form-label small mb-1" for="deadline">Frist für die {{ 'Terminbuchung' if parent_portal_enabled else 'Terminvereinbarung' }} (optional)</label>
         <input id="deadline" name="deadline" class="form-control form-control-sm" style="width:14rem"
                placeholder="z. B. 6. Oktober 2026">
       </div>
+{% if parent_portal_enabled %}
       <div>
         <div class="form-check">
           <input class="form-check-input" type="checkbox" id="reissue" name="reissue" value="1">
@@ -54,9 +66,12 @@
           </label>
         </div>
       </div>
+{% endif %}
       <div class="btn-group btn-group-sm">
         <button class="btn btn-outline-secondary" type="button" data-select="all">Alle</button>
+{% if parent_portal_enabled %}
         <button class="btn btn-outline-secondary" type="button" data-select="pending">Nur ohne Zugang</button>
+{% endif %}
         <button class="btn btn-outline-secondary" type="button" data-select="none">Keine</button>
       </div>
       <div class="ms-auto">
@@ -74,7 +89,9 @@
           <th>Anschrift</th>
           <th>Erziehungsberechtigte</th>
           <th>Brief</th>
+{% if parent_portal_enabled %}
           <th>Zugang</th>
+{% endif %}
         </tr>
       </thead>
       <tbody>
@@ -103,9 +120,10 @@
             <span class="badge bg-info text-dark">Termin vorgegeben</span><br>
             <span class="text-muted">{{ appointments[student.id] }}</span>
             {% else %}
-            <span class="text-muted">Eltern wählen selbst</span>
+            <span class="text-muted">{{ 'Eltern wählen selbst' if parent_portal_enabled else 'ohne Termin' }}</span>
             {% endif %}
           </td>
+{% if parent_portal_enabled %}
           <td>
             {% set done = redeemed.get(student.id) or [] %}
             {% if 'first_access' in done and 'second_access' in done %}
@@ -118,6 +136,7 @@
             <span class="badge bg-light text-dark border">Zugang vorhanden</span>
             {% endif %}
           </td>
+{% endif %}
         </tr>
         {% else %}
         <tr><td colspan="5" class="text-muted">Noch keine Kinder erfasst.</td></tr>

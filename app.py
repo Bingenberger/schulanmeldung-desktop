@@ -29,6 +29,7 @@ from sl_office.appointments.cli import register_cli as register_appointment_cli
 from sl_office.maintenance import register_cli as register_maintenance_cli
 from sl_office.open_day import open_day_bp
 from sl_office.parent_portal import parent_portal_bp
+from sl_office import features
 # Import new domain models so SQLAlchemy and Alembic include their metadata.
 import sl_office.parent_portal.models  # noqa: F401, E402
 import sl_office.open_day.models  # noqa: F401, E402
@@ -1877,7 +1878,9 @@ def create_app(environment=None, config_overrides=None):
     flask_app.register_blueprint(students_bp)
     flask_app.register_blueprint(appointments_bp)
     flask_app.register_blueprint(open_day_bp)
-    flask_app.register_blueprint(parent_portal_bp)
+    if features.parent_portal_enabled(flask_app):
+        flask_app.register_blueprint(parent_portal_bp)
+    features.install_template_context(flask_app)
     register_appointment_cli(flask_app)
     register_maintenance_cli(flask_app)
 

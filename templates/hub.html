@@ -118,10 +118,12 @@
 {% if may_manage %}
 <h4 class="text-muted border-bottom pb-2 mb-3"><i class="bi bi-envelope-paper"></i> Anmeldung</h4>
 <div class="row g-3 mb-5">
-  {{ tile(url_for('admin.parent_letters'), 'bi-envelope-paper-fill', 'Elternbriefe', 'Zugangsschreiben mit Link und QR-Code drucken.', 'danger') }}
+  {{ tile(url_for('admin.parent_letters'), 'bi-envelope-paper-fill', 'Elternbriefe', 'Zugangsschreiben mit Link und QR-Code drucken.' if parent_portal_enabled else 'Einladungen zur Schulanmeldung drucken.', 'danger') }}
   {{ tile(url_for('appointments.index'), 'bi-calendar-week', 'Termine', 'Gesprächsfenster planen und vergeben.', 'primary') }}
+  {% if parent_portal_enabled %}
   {{ tile(url_for('admin.registrations'), 'bi-file-earmark-person', 'Anmeldungen', 'Eingegangene Formulare der Eltern prüfen.', 'info') }}
   {{ tile(url_for('admin.parent_accesses'), 'bi-envelope-lock', 'Elternzugänge', 'Zugänge einsehen, sperren oder freigeben.', 'secondary') }}
+  {% endif %}
   {{ tile(url_for('open_day.index'), 'bi-door-open-fill', 'Tag der offenen Tür', 'Rückmeldungen auswerten und Gruppen einteilen.', 'warning') }}
 </div>
 {% endif %}

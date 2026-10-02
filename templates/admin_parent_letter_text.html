@@ -95,7 +95,9 @@
               <tr><td class="font-monospace">- Text</td><td>Aufzählungspunkt</td></tr>
               <tr><td class="font-monospace">-- Text</td><td>Unterpunkt</td></tr>
               <tr><td class="font-monospace">**Text**</td><td>fett</td></tr>
+              {% if parent_portal_enabled %}
               <tr><td class="font-monospace">{{ marker }}</td><td>die beiden Zugangskästen mit QR-Code</td></tr>
+              {% endif %}
             </tbody>
           </table>
           <p class="mb-2"><strong>Platzhalter</strong> — eine Zeile entfällt vollständig, wenn ihr
