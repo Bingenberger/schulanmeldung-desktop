@@ -1,62 +1,139 @@
 # SL-Office (Desktop-Fassung)
 
-> Dieses Repository ist die frei konfigurierbare Fassung von
-> [`schulanmeldung`](https://github.com/Bingenberger/schulanmeldung), gedacht als
-> eigenständige Windows-Anwendung für beliebige Grundschulen. Die Serverfassung
-> der Gemeinschaftsgrundschule Niederkassel wird dort unverändert weitergeführt.
->
-> Unterschiede bisher:
->
-> - **Kein Elternportal, kein Tag der offenen Tür:** beides ist ausgebaut. Die
->   Elternbriefe laden ohne Zugangslinks zur Terminvereinbarung ein, Termine
->   vergibt die Schule.
-> - **Schulprofil in der Anwendung:** Name, Anschrift, Schulleitung, Logo und
->   Unterschrift pflegt jede Schule unter *Verwaltung → Schulprofil*.
-> - **Module:** unter *Verwaltung → Module* schaltet jede Schule ab, was sie
->   nicht nutzt (z. B. Schulspiel, AO-SF, Förderkurse).
-> - **Frei anlegbare Kriterien:** die Beobachtungspunkte von Pädagogischer
->   Diagnostik, Schulspiel und Schularzt legt jede Schule unter
->   *Verwaltung → Kriterien* selbst an (Skala, Ankreuzfeld, Auswahl,
->   Mehrfachauswahl, Freitext, Datum). Vorbelegt ist der bisherige Katalog;
->   Werte aus den alten festen Spalten werden dabei übernommen.
-> - **Vorlagen:** unter *Verwaltung → Vorlagen* pflegt jede Schule die
->   Checkliste des Laufzettels Anmeldung. Protokollbögen druckt die Anwendung
->   nicht – das handhabt jede Schule anders. Die Liste der Stadt darf auch eine
->   CSV-Datei sein, die Spaltenzuordnung wird für das nächste Jahr gemerkt.
->
-> Fehlerbehebungen aus der Serverfassung lassen sich über den Remote `upstream`
-> mit `git cherry-pick` übernehmen.
+SL-Office begleitet die Schuleinschreibung an einer Grundschule – von der
+Anmeldung bis zur Klassenbildung: Stammdaten, Pädagogische Diagnostik,
+Schulspiel, schulärztliche Untersuchung, AO-SF und Rückstellung, Förderkurse
+und Betreuung, Terminvergabe für das Anmeldegespräch und Elternbriefe.
 
-## Windows-Fassung
+Diese Fassung läuft als eigenständige Windows-Anwendung auf einem Rechner der
+Schule und lässt sich von jeder Schule selbst einrichten: Schulprofil, Module,
+Kriterien und Vorlagen werden in der Anwendung gepflegt, nicht im Quelltext.
 
-**Installieren:** `SL-Office-Setup-<Version>.exe` ausführen (keine
-Administratorrechte nötig). SL-Office startet einen Webserver nur für diesen
-Rechner und öffnet sich im Browser; ein kleines Fenster zeigt, dass es läuft,
-und beendet es wieder. Beim ersten Start legt man das Administrationskonto an,
-danach geht es über *Verwaltung* weiter: Schulprofil, Module, Kriterien,
-Vorlagen, Benutzer. Angemeldet wird mit Benutzername und Passwort; einen
-zweiten Faktor braucht die lokale Installation nicht
-(`SL_OFFICE_TWO_FACTOR=1` schaltet ihn wieder ein).
+> Entstanden ist sie aus [`schulanmeldung`](https://github.com/Bingenberger/schulanmeldung),
+> der Serverfassung der Gemeinschaftsgrundschule Niederkassel, die dort
+> unverändert weitergeführt wird. Gegenüber der Serverfassung fehlen
+> Elternportal, Tag der offenen Tür, Mailversand und das Bedrucken von
+> Protokollbögen; die Anmeldung kommt ohne zweiten Faktor aus.
 
-**Daten:** alles liegt in `%APPDATA%\SL-Office` – Datenbank
-(`sl-office.db`), hochgeladene Dateien, das Protokoll und unter
-`Datensicherungen` eine automatische Sicherung je Tag (die letzten 14 bleiben).
+## Installieren und starten
+
+1. `SL-Office-Setup-<Version>.exe` ausführen – Administratorrechte sind nicht
+   nötig. Das Setup steht unter *Releases* bzw. als Artefakt des Workflows
+   „Windows-Build“.
+2. SL-Office starten. Es öffnet sich im Browser; ein kleines Fenster zeigt, dass
+   es läuft, und beendet es wieder. Der eingebaute Webserver ist nur von diesem
+   Rechner aus erreichbar (`127.0.0.1`, Port 5050–5059).
+3. Beim ersten Start das Administrationskonto anlegen.
+4. Unter *Verwaltung* die Schule einrichten:
+   - **Schulprofil** – Name, Anschrift, Kontakt, Schulleitung, Logo, Unterschrift
+     (erscheinen im Briefkopf aller Schreiben)
+   - **Module** – abschalten, was die Schule nicht nutzt
+   - **Kriterien** – Beobachtungspunkte für Diagnostik, Schulspiel und Schularzt
+   - **Vorlagen** – Checkliste des Laufzettels Anmeldung
+   - **Benutzer** – Konten für Kolleginnen und Kollegen
+
+Angemeldet wird mit Benutzername und Passwort. Wer trotzdem einen zweiten
+Faktor möchte, setzt die Umgebungsvariable `SL_OFFICE_TWO_FACTOR=1`.
+
+## Funktionsumfang
+
+- Schülerliste mit Filtern, Schülerakte, Anlegen und Bearbeiten
+- Import aus Excel-Listen und aus der Liste der Stadt (XLSX oder CSV, mit
+  gemerkter Spaltenzuordnung)
+- Pädagogische Diagnostik, Schulspiel und Schularzt mit frei anlegbaren
+  Kriterien (Skala, Ankreuzfeld, Auswahl, Mehrfachauswahl, Freitext, Datum);
+  Kita-Bericht, Freundeswünsche
+- AO-SF-Verfahren und Rückstellung mit hochgeladenen Dokumenten; Berichte
+  lassen sich direkt in der Schülerakte ansehen
+- Terminplanung für das Anmeldegespräch: Gesprächstage, Zeitfenster, Vergabe an
+  die Kinder, Liste der Kinder ohne Termin, Kalenderexport
+- Elternbrief in zwei Fassungen: mit vergebenem Termin oder mit der Bitte, einen
+  Termin zu vereinbaren – je Kind wird beim Druck die passende gesetzt
+- Laufzettel Anmeldung im Briefkopf der Schule, einzeln oder für alle Kinder
+  nach Termin sortiert
+- Klassenbildung mit Zuweisung und Klassenmappe als PDF; Förderkurse und
+  Betreuung, auch im Stapel; Karteikarten, Förderkursliste, Klassenlisten als
+  Excel
+- Einschulungsjahre: alle Daten sind auf einen Jahrgang eingegrenzt, ältere
+  Jahrgänge lassen sich lesend ansehen
+- Rollen `Administrator`, `Schulleitung`, `Foerderlehrkraft`, `Sekretariat`
+
+Protokollbögen für Anmeldespiel oder Gespräch druckt SL-Office bewusst nicht –
+das handhabt jede Schule anders.
+
+## Daten und Datensicherung
+
+Alles liegt in `%APPDATA%\SL-Office`:
+
+| Pfad | Inhalt |
+| --- | --- |
+| `sl-office.db` | Datenbank (SQLite) |
+| `uploads\` | hochgeladene Dokumente |
+| `Datensicherungen\` | automatische Sicherung je Tag, die letzten 14 bleiben |
+| `sl-office.log` | Protokoll |
+
 Ein anderer Ort, etwa ein Netzlaufwerk, lässt sich mit der Umgebungsvariablen
-`SL_OFFICE_DATA_DIR` festlegen. Deinstallieren oder Aktualisieren lässt die
-Daten unberührt.
+`SL_OFFICE_DATA_DIR` festlegen. Aktualisieren oder Deinstallieren lässt die
+Daten unberührt; nach einem Update bringt SL-Office die Datenbank beim Start
+selbst auf den neuen Stand.
+
+**Sichern:** zusätzlich zu den täglichen Sicherungen jederzeit von Hand unter
+*Verwaltung → Datensicherung*; dort lässt sich die Datenbank auch
+herunterladen und extern ablegen. Die Daten betreffen Kinder – Sicherungen
+gehören auf einen geschützten Datenträger.
 
 **Zurückspielen:** unter *Verwaltung → Datensicherung* hat jede Sicherung den
-Knopf „Zurückspielen“ (Datenbank und Dokumente); eine über „Datenbank
-herunterladen“ gesicherte Datei lässt sich dort hochladen. Vorher wird der
-aktuelle Stand als `vor-wiederherstellung-…` gesichert, eine ältere Sicherung
-wird auf den Stand der Programmversion gebracht, danach melden sich alle neu
-an. Nur die Administration darf zurückspielen.
+Knopf „Zurückspielen“ (Datenbank und Dokumente); eine heruntergeladene
+Datenbankdatei lässt sich dort hochladen. Vorher wird der aktuelle Stand als
+`vor-wiederherstellung-…` gesichert, eine ältere Sicherung wird auf den Stand
+der Programmversion gebracht, danach melden sich alle neu an. Nur die
+Administration darf zurückspielen.
 
-**Bauen:** der Workflow `.github/workflows/windows-build.yml` testet, baut mit
-PyInstaller (`packaging/sl-office.spec`), startet die gebaute Fassung einmal
-probehalber und erzeugt das Setup mit Inno Setup (`packaging/sl-office.iss`).
-Das Setup hängt als Artefakt am Workflow-Lauf; ein Tag `v1.2.3` legt ein
-Release an. Von Hand unter Windows:
+## Entwicklung
+
+```bash
+python3 -m venv venv
+./venv/bin/pip install -r requirements.txt -r requirements-desktop.txt
+./venv/bin/python desktop.py               # wie die Windows-Fassung, mit Steuerfenster
+```
+
+`desktop.py` legt die Daten unter Linux in `~/.local/share/sl-office` ab (oder
+in `SL_OFFICE_DATA_DIR`), wendet die Migrationen an und führt beim ersten Start
+durch die Einrichtung.
+
+Tests:
+
+```bash
+./venv/bin/python -m unittest discover -s tests -t . -q
+```
+
+Das Schema wird ausschließlich über Alembic-Migrationen geändert:
+
+```bash
+./venv/bin/flask --app app db migrate -m "Beschreibung"   # neue Migration
+./venv/bin/flask --app app db upgrade                     # anwenden
+```
+
+Hinweise zu älteren Datenbanken aus der Zeit vor den Migrationen stehen in
+[docs/DATENBANKMIGRATIONEN.md](docs/DATENBANKMIGRATIONEN.md).
+
+## Windows-Setup bauen
+
+Der Workflow `.github/workflows/windows-build.yml` läuft bei jedem Push: Tests
+unter Linux, dann unter Windows Bau mit PyInstaller (`packaging/sl-office.spec`),
+ein Probestart der gebauten `SL-Office.exe` und das Setup mit Inno Setup
+(`packaging/sl-office.iss`). Das Setup hängt als Artefakt am Workflow-Lauf.
+
+**Neue Version veröffentlichen:** auf `main` einen Tag setzen und pushen, etwa
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Der Workflow legt dann ein Release mit `SL-Office-Setup-1.0.0.exe` an.
+
+Von Hand unter Windows:
 
 ```bat
 pip install -r requirements.txt -r requirements-desktop.txt
@@ -64,167 +141,56 @@ pyinstaller packaging\sl-office.spec --noconfirm
 iscc /DAppVersion=1.0.0 packaging\sl-office.iss
 ```
 
-Zum Ausprobieren ohne Paket genügt `python desktop.py`.
-
-
-Fachanwendung für die Schuleinschreibung an der Gemeinschaftsgrundschule
-Niederkassel. SL-Office begleitet ein Kind von der Anmeldung bis zur
-Klassenbildung: Stammdaten, Diagnostik, Schulanmeldespiel, schulärztliche
-Untersuchung, AO-SF und Rückstellung, Förderkurse und Betreuung, dazu die
-Elternkommunikation mit Anmeldeformular und Terminbuchung.
-
-Die Anwendung ist eine Flask-Anwendung mit serverseitigen Jinja-Templates,
-SQLAlchemy-Modellen und SQLite als Datenbank. Sie läuft als systemd-Dienst
-hinter nginx; Änderungen kommen per `git push` auf den Server.
-
-## Funktionsumfang
-
-Anmeldung mit Benutzername und Passwort (auf dem Server zusätzlich mit
-Zwei-Faktor-Bestätigung).
-
-- Schülerliste mit Filtern, Einzelansicht, Anlegen und Bearbeiten
-- Import aus Excel-Listen und aus den Listen der Stadt (XLSX oder CSV)
-- Pädagogische Diagnostik, Schulspiel, Schularzt mit frei anlegbaren
-  Kriterien; Kita-Bericht, Freundeswünsche
-- AO-SF-Verfahren und Rückstellung, jeweils mit Dokumenten
-- Klassenbildung mit Zuweisung und Klassenmappe als PDF
-- Förderkurse einzeln und im Stapel, Betreuung im Stapel
-- PDF-Karteikarten, Klassenmappe, Förderkursliste; Klassenlisten als Excel
-- Einschulungsjahre: alle Daten sind auf ein Schuljahr eingegrenzt, ältere
-  Jahrgänge lassen sich lesend ansehen
-- Terminplanung für das Anmeldegespräch: Gesprächstage, Zeitfenster,
-  Vergabe an die Kinder, Liste der Kinder ohne Termin, Kalenderexport
-- Elternbrief in zwei Fassungen: mit vergebenem Termin oder mit der Bitte,
-  einen Termin zu vereinbaren — je Kind wird beim Druck die passende gesetzt
-- Laufzettel Anmeldung, im Briefkopf der Schule gesetzt, mit Name und Termin —
-  einzeln oder für alle Kinder nach Termin sortiert
-- Administration: Benutzer, Einstellungen, Schulprofil, Module, Kriterien,
-  Vorlagen, Datensicherung mit Zurückspielen
+Das Setup ist nicht signiert; Windows SmartScreen warnt deshalb beim ersten
+Start („Weitere Informationen“ → „Trotzdem ausführen“).
 
 ## Aufbau
 
 | Pfad | Inhalt |
 | --- | --- |
+| `desktop.py` | Starter der Windows-Fassung: lokaler Server, Migrationen, Sicherung, Steuerfenster |
 | `app.py` | Anwendungsfabrik `create_app`, historische Routen (Diagnostik, Klassen, Exporte) |
+| `config.py` | Konfigurationsprofile `desktop`, `development`, `testing`, `production` |
 | `models.py` | Schüler, Diagnostik, AO-SF, Rückstellung, Benutzer, Einschulungsjahr |
-| `forms.py` | WTForms-Formulare der internen Oberfläche |
-| `config.py` | Konfigurationsprofile `development`, `testing`, `production`, `desktop` |
-| `desktop.py` | Starter der Windows-Fassung |
+| `forms.py` | WTForms-Formulare |
 | `security.py` | CSRF-Schutz und Sicherheitskopfzeilen |
 | `document_service.py` | Auflösung hochgeladener Dateien über ihren Fachdatensatz |
-| `sl_office/auth/` | Anmeldung, Zwei-Faktor-Verfahren, Wiederherstellungscodes |
+| `sl_office/auth/` | Anmeldung, Ersteinrichtung, optionaler zweiter Faktor |
 | `sl_office/students/` | Import, Auswahl, Anlegen und Bearbeiten von Schülern |
-| `sl_office/admin/` | Administration einschließlich Datensicherung |
-| `sl_office/appointments/` | Terminserien, Zeitfenster, Vergabe, Laufzettel |
+| `sl_office/admin/` | Verwaltung einschließlich Datensicherung und Zurückspielen |
+| `sl_office/appointments/` | Gesprächstage, Zeitfenster, Vergabe, Laufzettel |
 | `sl_office/briefe/` | Elternbriefe und Briefkopf |
 | `sl_office/criteria/` | frei anlegbare Kriterien der Bögen |
 | `sl_office/features.py` | abschaltbare Module |
 | `sl_office/school_profile.py`, `sl_office/vorlagen.py` | Schulprofil und Laufzettel-Vorlage |
-| `sl_office/school_year.py` | zentrale Eingrenzung aller Abfragen auf ein Einschulungsjahr |
-| `sl_office/authorization.py` | `role_required` für die vier Rollen |
-| `sl_office/audit.py` | Protokollierung sicherheitsrelevanter Vorgänge |
+| `sl_office/school_year.py` | Eingrenzung aller Abfragen auf ein Einschulungsjahr |
+| `sl_office/authorization.py`, `sl_office/audit.py` | Rollenprüfung, Protokollierung |
 | `templates/`, `static/`, `assets/` | Oberfläche, mitgelieferte Bibliotheken, Schriften |
 | `packaging/` | PyInstaller-Bauplan und Inno-Setup-Skript |
 | `migrations/` | Alembic-Migrationen |
 | `tests/` | Tests (unittest) |
-| `deploy/` | nginx-Vorlage, Git-Hook, sudoers-Regel |
-| `docs/` | Architektur- und Sicherheitskonzept, Betrieb, Migrationen (Serverfassung) |
+| `deploy/`, `docs/` | Betrieb als Server und dessen Dokumentation (aus der Serverfassung übernommen) |
 
-Rollen: `Administrator`, `Schulleitung`, `Foerderlehrkraft`, `Sekretariat`.
+## Betrieb als Server
 
-## Einrichtung zur Entwicklung
+Der Code kann weiterhin auch als Webanwendung hinter nginx laufen
+(`SL_OFFICE_ENV=production`, Vorlage in `.env.example`, Skripte in `deploy/`).
+Anleitung und Sicherheitskonzept in `docs/` stammen aus der Serverfassung;
+Abschnitte zu Elternportal, Mailversand und Erinnerungen gelten hier nicht.
+Für den Einsatz an einer einzelnen Schule ist die Windows-Fassung der
+vorgesehene Weg.
 
-```bash
-python3 -m venv venv
-./venv/bin/pip install -r requirements.txt
-./venv/bin/flask --app app db upgrade      # Schema anlegen
-./venv/bin/python create_admin.py          # Erstzugang admin / admin123
-./venv/bin/python app.py                   # http://127.0.0.1:5001
-```
+## Datenschutz
 
-Ohne `.env` läuft die Anwendung im Entwicklungsprofil: SQLite unter
-`instance/database.db`, ein selbst erzeugter Schlüssel in
-`instance/.development-secret-key`, Uploads im Projektordner `uploads/`.
-Das Standardkennwort des Erstzugangs ist sofort zu ändern.
+SL-Office verarbeitet personenbezogene Daten von Kindern. Die Desktop-Fassung
+ist nur vom eigenen Rechner aus erreichbar; Benutzerkonten mit Rollen,
+serverseitige Rechteprüfung und Protokollierung bleiben erhalten. Rechner,
+Windows-Benutzerkonto und Sicherungen sind entsprechend zu schützen.
 
-## Konfiguration
-
-`.env.example` nach `.env` kopieren und ausfüllen; die Datei gehört nicht ins
-Repository und sollte `chmod 600` haben. Erst `SL_OFFICE_ENV=production`
-schaltet in den Produktionsbetrieb, der `SL_OFFICE_SECRET_KEY` und
-`SL_OFFICE_DATABASE_URL` zwingend verlangt.
-
-Wichtige Werte:
-
-| Variable | Bedeutung |
-| --- | --- |
-| `SL_OFFICE_ENV` | `development`, `testing` oder `production` |
-| `SL_OFFICE_SECRET_KEY` | mindestens 32 zufällige Zeichen (`openssl rand -hex 32`) |
-| `SL_OFFICE_DATABASE_URL` | Datenbank, im Betrieb der absolute SQLite-Pfad |
-| `SL_OFFICE_UPLOAD_FOLDER` | Ablage der Dokumente außerhalb des Webverzeichnisses |
-| `SL_OFFICE_TRUSTED_PROXIES` | `1` hinter nginx, sonst `0`; ohne den Wert entstehen Aktivierungslinks als `http://` mit internem Hostnamen |
-| `SL_OFFICE_MAIL_*` | Mailversand der Elternzugänge und Terminmails |
-| `SL_OFFICE_NOTIFY_MAIL` | erfährt von neuen Terminbuchungen; leer = `SL_OFFICE_SCHOOL_CONTACT_MAIL` |
-| `SL_OFFICE_REMINDER_HOURS` | Vorlauf der Terminerinnerung, Vorgabe 24 |
-| `SL_OFFICE_PUBLIC_BASE_URL` | öffentliche Adresse; der Erinnerungsdienst baut damit den Portallink |
-| `SL_OFFICE_SCHOOL_*` | Briefkopf der Elternschreiben; Vorgaben stehen in `config.py` |
-
-## Datenbank
-
-Das Schema wird ausschließlich über Alembic-Migrationen geändert; im Betrieb
-gibt es kein `db.create_all()`.
-
-```bash
-./venv/bin/flask --app app db upgrade                 # anwenden
-./venv/bin/flask --app app db migrate -m "Beschreibung"   # neue Migration
-```
-
-Eine bestehende Datenbank aus der Zeit vor den Migrationen darf nicht ohne
-Weiteres mit `db upgrade` behandelt werden. Der geprüfte Ablauf steht in
-[docs/DATENBANKMIGRATIONEN.md](docs/DATENBANKMIGRATIONEN.md).
-
-Sicherungen erstellt `backup_db.py` über die Backup-API von SQLite, also auch
-im laufenden Betrieb konsistent. Die letzten 30 Stände bleiben unter
-`backups/` liegen; das Deployment sichert vor jeder Migration automatisch.
-
-```bash
-./venv/bin/python backup_db.py "vor_umbau"
-```
-
-## Tests
-
-```bash
-./venv/bin/python -m unittest discover -s tests -t . -q
-```
-
-Dieselbe Zeile läuft im Deployment; schlagen die Tests fehl, wird nicht
-neu gestartet.
-
-## Betrieb
-
-```
-Browser ──HTTPS──▶ nginx ──HTTP──▶ gunicorn (127.0.0.1:5000) ──▶ SL-Office
-                                                                    │
-Arbeitsrechner ──git push──▶ ~/sl-office.git ──post-receive──▶ Arbeitsverzeichnis
-```
-
-Der Dienst wird einmalig mit `./install_service.sh` eingerichtet
-(`sl-office.service` nach `/etc/systemd/system/`), das Git-Deployment mit
-`deploy/setup-git-deploy.sh`. Danach genügt ein `git push`: der Hook spielt die
-Dateien ein, installiert Abhängigkeiten, sichert die Datenbank, wendet
-Migrationen an, führt die Tests aus und startet den Dienst neu.
-
-Vollständige Anleitung einschließlich nginx-Block, Zurückrollen und
-Fehlersuche: [docs/BETRIEB_UND_DEPLOYMENT.md](docs/BETRIEB_UND_DEPLOYMENT.md).
-
-## Sicherheit und Datenschutz
-
-Die Anwendung verarbeitet personenbezogene Daten von Kindern. Grundsätze und
-Maßnahmen — getrennte Blueprints für innen und außen, serverseitige
-Rechteprüfung jeder Aktion, berechtigungsgeprüfter Dokumentabruf, Elternangaben
-nur als geprüfte Einreichung, Protokollierung, Betrieb ausschließlich hinter
-HTTPS — beschreibt
-[docs/ARCHITEKTUR_UND_SICHERHEITSKONZEPT.md](docs/ARCHITEKTUR_UND_SICHERHEITSKONZEPT.md).
-
-Nicht ins Repository gehören und sind in `.gitignore` ausgenommen: `.env`,
+Nicht ins Repository gehören (und sind in `.gitignore` ausgenommen): `.env`,
 `instance/`, `uploads/`, `backups/` sowie alle Datenbankdateien.
+
+## Offen vor einer Weitergabe an andere Schulen
+
+- Lizenz der Hausschrift `FrenteH1` klären
+- Setup signieren, damit SmartScreen nicht warnt
