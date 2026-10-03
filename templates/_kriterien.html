@@ -1,0 +1,103 @@
+{# Eingabefelder der frei anlegbaren Kriterien eines Bogens.
+
+   ``gruppen``  -- [(Gruppe, [Kriterium])], siehe criteria.service.gruppiert
+   ``werte``    -- {Kriterium-ID: Wert}
+   ``farbe``    -- Bootstrap-Farbe der Gruppenüberschriften
+
+   Skalenfelder tragen ``rating-input`` und ``data-wertung``; die Bögen
+   färben damit die Zeile ein und rechnen Durchschnitt bzw. Summe live mit. #}
+{% macro felder(gruppen, werte, farbe='primary', spalten=1) %}
+{% for gruppe, liste in gruppen %}
+  {% if gruppe %}<h5 class="text-{{ farbe }} mt-4 mb-3 border-bottom pb-2">{{ gruppe }}</h5>{% endif %}
+  <div class="row">
+  {% for k in liste %}
+    {% set name = 'k' ~ k.id %}
+    {% set wert = werte.get(k.id) %}
+    {% if k.typ == 'skala' %}
+    <div class="{{ 'col-md-6' if spalten == 2 else 'col-12' }} mb-3 border-bottom pb-2 rating-row" id="row-{{ name }}">
+      <div class="d-flex justify-content-between align-items-center p-2 rounded">
+        <label class="form-label fw-bold mb-0" style="width: 50%;">{{ k.bezeichnung }}{% if k.pflicht %} *{% endif %}</label>
+        <div class="btn-group" role="group">
+          {% for zahl, zeichen in [(3, '++'), (2, '+'), (1, 'o'), (0, '-')] %}
+          <input type="radio" class="btn-check rating-input" name="{{ name }}" id="{{ name }}-{{ zahl }}"
+                 value="{{ zahl }}" {% if wert == zahl %}checked{% endif %} autocomplete="off"
+                 data-row="row-{{ name }}" {% if k.in_wertung %}data-wertung="1"{% endif %}
+                 {% if k.pflicht %}required{% endif %}>
+          <label class="btn btn-outline-dark" for="{{ name }}-{{ zahl }}">{{ zeichen }}</label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% elif k.typ == 'janein' %}
+    <div class="col-md-6 mb-2">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="{{ name }}" id="{{ name }}" value="1"
+               {% if k.foerderhinweis %}data-foerder="{{ name }}"{% endif %} {% if wert %}checked{% endif %}>
+        <label class="form-check-label" for="{{ name }}">{{ k.bezeichnung }}</label>
+      </div>
+    </div>
+    {% elif k.typ == 'mehrfach' %}
+    <div class="col-12 mb-3">
+      <label class="form-label fw-bold d-block">{{ k.bezeichnung }}</label>
+      {% for option in k.optionsliste %}
+      <div class="form-check form-check-inline">
+        <input class="form-check-input" type="checkbox" name="{{ name }}" id="{{ name }}-{{ loop.index }}"
+               value="{{ option }}" {% if k.foerderhinweis %}data-foerder="{{ name }}"{% endif %}
+               {% if wert and option in wert %}checked{% endif %}>
+        <label class="form-check-label" for="{{ name }}-{{ loop.index }}">{{ option }}</label>
+      </div>
+      {% endfor %}
+    </div>
+    {% elif k.typ == 'auswahl' %}
+    <div class="col-md-6 mb-3">
+      <label class="form-label fw-bold" for="{{ name }}">{{ k.bezeichnung }}{% if k.pflicht %} *{% endif %}</label>
+      <select class="form-select" name="{{ name }}" id="{{ name }}" data-altfeld="{{ k.altfeld or '' }}"
+              {% if k.pflicht %}required{% endif %}>
+        <option value="">– bitte wählen –</option>
+        {% for option in k.optionsliste %}
+        <option value="{{ option }}" {% if wert == option %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% elif k.typ == 'datum' %}
+    <div class="col-md-6 mb-3">
+      <label class="form-label fw-bold" for="{{ name }}">{{ k.bezeichnung }}{% if k.pflicht %} *{% endif %}</label>
+      <input class="form-control" type="date" name="{{ name }}" id="{{ name }}"
+             value="{{ wert.isoformat() if wert else '' }}" {% if k.pflicht %}required{% endif %}>
+    </div>
+    {% else %}
+    <div class="col-md-6 mb-3">
+      <label class="form-label fw-bold" for="{{ name }}">{{ k.bezeichnung }}{% if k.pflicht %} *{% endif %}</label>
+      <input class="form-control" type="text" name="{{ name }}" id="{{ name }}" maxlength="2000"
+             value="{{ wert or '' }}" {% if k.pflicht %}required{% endif %}>
+    </div>
+    {% endif %}
+  {% endfor %}
+  </div>
+{% else %}
+  <div class="alert alert-light border">
+    Für diesen Bogen sind keine Kriterien angelegt. Sie lassen sich unter
+    <em>Verwaltung → Kriterien</em> einrichten.
+  </div>
+{% endfor %}
+{% endmacro %}
+
+{# Erfasste Werte als kompakte Liste für die Schülerakte. #}
+{% macro anzeige(liste, render_score) %}
+<div class="row g-2">
+  {% for k, wert in liste %}
+  {% if wert is not none and wert != [] %}
+  <div class="col-md-6 d-flex justify-content-between border-bottom py-1">
+    <span class="small">{{ k.bezeichnung }}{% if not k.aktiv %} <span class="text-muted">(abgeschaltet)</span>{% endif %}</span>
+    <span class="small fw-bold">
+      {% if k.typ == 'skala' %}{{ render_score(wert) }}
+      {% elif k.typ == 'janein' %}{{ 'ja' if wert else 'nein' }}
+      {% elif k.typ == 'mehrfach' %}{{ wert|join(', ') }}
+      {% elif k.typ == 'datum' %}{{ wert.strftime('%d.%m.%Y') }}
+      {% else %}{{ wert }}{% endif %}
+    </span>
+  </div>
+  {% endif %}
+  {% endfor %}
+</div>
+{% endmacro %}

@@ -12,12 +12,12 @@ from models import Schueler, User, db  # noqa: E402
 from sl_office.appointments import calendar  # noqa: E402
 from sl_office.appointments.routes import _planner_state  # noqa: E402
 from sl_office.appointments.service import (  # noqa: E402
-    AssignedByStaff, BookingError, SlotHasBookings, SlotUnavailable, StudentAlreadyBooked,
-    active_booking_for_student, assign_slot, assignable_slots, book_slot, cancel_booking,
+    BookingError, SlotHasBookings, SlotUnavailable, StudentAlreadyBooked,
+    active_booking_for_student, assign_slot, assignable_slots,
     cancel_booking_as_staff, create_slot, delete_slot, generate_slots, move_slot, set_capacity,
 )
-from sl_office.parent_portal.models import (  # noqa: E402
-    AppointmentBooking, AppointmentEvent, AppointmentSlot, ParentAccess,
+from sl_office.appointments.models import (  # noqa: E402
+    AppointmentBooking, AppointmentEvent, AppointmentSlot,
 )
 
 
@@ -26,7 +26,7 @@ def _naive(value):
 
 
 class _AppointmentFixture:
-    """Veranstaltung, zwei Termine, zwei Kinder und zwei Elternzugänge."""
+    """Veranstaltung, zwei Termine, zwei Kinder."""
 
     def setUp(self):
         self.app = create_app("testing")
@@ -38,9 +38,6 @@ class _AppointmentFixture:
             )
             event = AppointmentEvent(
                 title="Anmeldung", school_year=2027, status="published",
-                # Booking is already open, so parent bookings are testable.
-                booking_opens_at=_naive(datetime.datetime.now(datetime.UTC)) - datetime.timedelta(days=1),
-                booking_closes_at=start + datetime.timedelta(days=5),
                 # Gesprächstage: die Woche um den ersten Termin herum.
                 slot_days_from=start.date() - datetime.timedelta(days=1),
                 slot_days_until=start.date() + datetime.timedelta(days=5),
@@ -56,13 +53,13 @@ class _AppointmentFixture:
                 event_id=event.id, starts_at=start + datetime.timedelta(hours=2),
                 ends_at=start + datetime.timedelta(hours=2, minutes=40), capacity=1,
             )
-            self.access = ParentAccess(schueler_id=self.student.id, email_normalized="parent@example.de", display_name="Eltern", status="active")
-            other_access = ParentAccess(schueler_id=self.other_student.id, email_normalized="other@example.de", display_name="Andere", status="active")
-            db.session.add_all([self.slot, self.second_slot, self.access, other_access])
+            db.session.add_all([self.slot, self.second_slot])
             db.session.commit()
             self.event_id = event.id
             self.start = start
-            self.ids = self.student.id, self.other_student.id, self.slot.id, self.second_slot.id, self.access.id, other_access.id
+            # Die beiden letzten Plätze hielten früher die Elternzugänge.
+            self.ids = (self.student.id, self.other_student.id, self.slot.id,
+                        self.second_slot.id, None, None)
 
     def tearDown(self):
         with self.app.app_context():
@@ -76,33 +73,27 @@ class AppointmentServiceTests(_AppointmentFixture, unittest.TestCase):
     def test_capacity_prevents_second_booking(self):
         student, other, slot, _, access, other_access = self.ids
         with self.app.app_context():
-            book_slot(slot, student, access)
+            assign_slot(slot, student)
             db.session.commit()
             with self.assertRaises(SlotUnavailable):
-                book_slot(slot, other, other_access)
+                assign_slot(slot, other)
 
     def test_capacity_allows_parallel_interviews(self):
         student, other, slot, _, access, other_access = self.ids
         with self.app.app_context():
             set_capacity(slot, 4)
-            book_slot(slot, student, access)
-            book_slot(slot, other, other_access)
+            assign_slot(slot, student)
+            assign_slot(slot, other)
             db.session.commit()
             self.assertEqual(db.session.query(AppointmentBooking).count(), 2)
 
     def test_student_cannot_book_two_slots_in_event(self):
         student, _, slot, second_slot, access, _ = self.ids
         with self.app.app_context():
-            book_slot(slot, student, access)
+            assign_slot(slot, student)
             db.session.commit()
             with self.assertRaises(StudentAlreadyBooked):
-                book_slot(second_slot, student, access)
-
-    def test_parent_access_must_match_student(self):
-        _, other, slot, _, access, _ = self.ids
-        with self.app.app_context():
-            with self.assertRaises(BookingError):
-                book_slot(slot, other, access)
+                assign_slot(second_slot, student)
 
     # --- planning rules ---
 
@@ -206,7 +197,7 @@ class AppointmentServiceTests(_AppointmentFixture, unittest.TestCase):
     def test_booked_slot_cannot_be_moved(self):
         student, _, slot, _, access, _ = self.ids
         with self.app.app_context():
-            book_slot(slot, student, access)
+            assign_slot(slot, student)
             db.session.commit()
             target = self.start + datetime.timedelta(days=1)
             with self.assertRaises(SlotHasBookings):
@@ -215,7 +206,7 @@ class AppointmentServiceTests(_AppointmentFixture, unittest.TestCase):
     def test_booked_slot_cannot_be_deleted(self):
         student, _, slot, _, access, _ = self.ids
         with self.app.app_context():
-            book_slot(slot, student, access)
+            assign_slot(slot, student)
             db.session.commit()
             with self.assertRaises(SlotHasBookings):
                 delete_slot(slot)
@@ -224,8 +215,8 @@ class AppointmentServiceTests(_AppointmentFixture, unittest.TestCase):
         student, other, slot, _, access, other_access = self.ids
         with self.app.app_context():
             set_capacity(slot, 2)
-            book_slot(slot, student, access)
-            book_slot(slot, other, other_access)
+            assign_slot(slot, student)
+            assign_slot(slot, other)
             db.session.commit()
             with self.assertRaises(SlotHasBookings):
                 set_capacity(slot, 1)
@@ -233,7 +224,7 @@ class AppointmentServiceTests(_AppointmentFixture, unittest.TestCase):
     def test_slot_is_movable_again_after_staff_cancellation(self):
         student, _, slot, _, access, _ = self.ids
         with self.app.app_context():
-            booking = book_slot(slot, student, access)
+            booking = assign_slot(slot, student)
             db.session.commit()
             cancel_booking_as_staff(booking.id)
             db.session.commit()
@@ -243,13 +234,12 @@ class AppointmentServiceTests(_AppointmentFixture, unittest.TestCase):
 
     # --- staff assignment ---
 
-    def test_staff_can_assign_without_parent_access(self):
+    def test_staff_can_assign(self):
         student, _, slot, _, _, _ = self.ids
         with self.app.app_context():
             booking = assign_slot(slot, student)
             db.session.commit()
             self.assertEqual(booking.source, "staff")
-            self.assertIsNone(booking.parent_access_id)
 
     def test_staff_assignment_respects_capacity(self):
         student, other, slot, _, _, _ = self.ids
@@ -332,15 +322,6 @@ class CalendarExportTests(unittest.TestCase):
 
 
 class CalendarRouteTests(_AppointmentFixture, unittest.TestCase):
-    def _login_parent(self, access_id):
-        with self.app.app_context():
-            version = db.session.get(ParentAccess, access_id).security_version
-        client = self.app.test_client()
-        with client.session_transaction() as sess:
-            sess["parent_access_id"] = access_id
-            sess["parent_access_version"] = version
-        return client
-
     def _login_staff(self):
         with self.app.app_context():
             user = User(username="chef", password_hash=generate_password_hash("x"),
@@ -354,40 +335,11 @@ class CalendarRouteTests(_AppointmentFixture, unittest.TestCase):
             sess["_fresh"] = True
         return client
 
-    def test_parents_download_their_own_appointment(self):
-        student, _, slot, _, access, _ = self.ids
-        with self.app.app_context():
-            book_slot(slot, student, access)
-            db.session.commit()
-        response = self._login_parent(access).get("/eltern/termin.ics")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.mimetype, "text/calendar")
-        body = response.get_data(as_text=True)
-        self.assertIn("BEGIN:VEVENT", body)
-        self.assertIn("Termin Kind", body)
-
-    def test_without_a_booking_parents_are_sent_back(self):
-        access = self.ids[4]
-        response = self._login_parent(access).get("/eltern/termin.ics")
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/eltern/uebersicht", response.headers["Location"])
-
-    def test_the_export_never_contains_another_family(self):
-        # Die Buchung wird aus der Sitzung ermittelt, nicht aus der Adresse.
-        student, other, slot, second, access, other_access = self.ids
-        with self.app.app_context():
-            book_slot(slot, student, access)
-            book_slot(second, other, other_access)
-            db.session.commit()
-        body = self._login_parent(access).get("/eltern/termin.ics").get_data(as_text=True)
-        self.assertEqual(body.count("BEGIN:VEVENT"), 1)
-        self.assertNotIn("Anderes", body)
-
     def test_staff_export_covers_every_confirmed_booking(self):
         student, other, slot, second, access, other_access = self.ids
         with self.app.app_context():
-            book_slot(slot, student, access)
-            cancelled = book_slot(second, other, other_access)
+            assign_slot(slot, student)
+            cancelled = assign_slot(second, other)
             db.session.commit()
             cancelled_id = cancelled.id
         client = self._login_staff()
@@ -437,7 +389,7 @@ class SlotWithHistoryTests(_AppointmentFixture, unittest.TestCase):
             slot = db.session.get(AppointmentSlot, self.ids[2])
             self.assertEqual(slot.status, "cancelled")
 
-    def test_the_retired_slot_is_gone_from_the_planner_and_the_portal(self):
+    def test_the_retired_slot_is_gone_from_the_planner(self):
         self._retire()
         with self.app.app_context():
             event = db.session.get(AppointmentEvent, self.event_id)
@@ -484,92 +436,7 @@ class SlotWithHistoryTests(_AppointmentFixture, unittest.TestCase):
                 delete_slot(slot)
 
 
-class AssignedAppointmentTests(_AppointmentFixture, unittest.TestCase):
-    """Von der Schule vergebene Termine lösen die Eltern nicht selbst auf.
-
-    Ein stiller Rückzug hinterließe der Schule eine Lücke im Plan, von der sie
-    nichts erfährt. Selbst gebuchte Termine bleiben dagegen stornierbar.
-    """
-
-    def _parent_client(self, access_id):
-        with self.app.app_context():
-            version = db.session.get(ParentAccess, access_id).security_version
-        client = self.app.test_client()
-        with client.session_transaction() as sess:
-            sess["parent_access_id"] = access_id
-            sess["parent_access_version"] = version
-        return client
-
-    def test_the_service_refuses_to_cancel_an_assigned_appointment(self):
-        student, _, slot, _, access, _ = self.ids
-        with self.app.app_context():
-            booking = assign_slot(slot, student)
-            db.session.commit()
-            with self.assertRaises(AssignedByStaff):
-                cancel_booking(booking.id, access)
-            self.assertEqual(db.session.get(AppointmentBooking, booking.id).status, "confirmed")
-
-    def test_a_self_booked_appointment_stays_cancellable(self):
-        student, _, slot, _, access, _ = self.ids
-        with self.app.app_context():
-            booking = book_slot(slot, student, access)
-            db.session.commit()
-            cancel_booking(booking.id, access)
-            db.session.commit()
-            self.assertEqual(db.session.get(AppointmentBooking, booking.id).status, "cancelled")
-
-    def test_the_dashboard_hides_the_button_for_an_assigned_appointment(self):
-        student, _, slot, _, access, _ = self.ids
-        with self.app.app_context():
-            assign_slot(slot, student)
-            db.session.commit()
-        body = self._parent_client(access).get("/eltern/uebersicht").get_data(as_text=True)
-        self.assertNotIn("Termin stornieren", body)
-        self.assertIn("hat die Schule für Sie vorgesehen", body)
-
-    def test_the_dashboard_keeps_the_button_for_a_self_booked_appointment(self):
-        student, _, slot, _, access, _ = self.ids
-        with self.app.app_context():
-            book_slot(slot, student, access)
-            db.session.commit()
-        body = self._parent_client(access).get("/eltern/uebersicht").get_data(as_text=True)
-        self.assertIn("Termin stornieren", body)
-
-    def test_calling_the_address_directly_changes_nothing(self):
-        # Die Schaltfläche fehlt -- die Adresse ließe sich aber von Hand aufrufen.
-        student, _, slot, _, access, _ = self.ids
-        with self.app.app_context():
-            booking = assign_slot(slot, student)
-            db.session.commit()
-            booking_id = booking.id
-        response = self._parent_client(access).post(
-            f"/eltern/termine/{booking_id}/stornieren", follow_redirects=True)
-        self.assertIn("hat die Schule für Sie vorgesehen", response.get_data(as_text=True))
-        with self.app.app_context():
-            self.assertEqual(db.session.get(AppointmentBooking, booking_id).status, "confirmed")
-
-    def test_the_second_guardian_may_cancel_what_the_first_one_booked(self):
-        # Berechtigt ist, wer einen Zugang zu diesem Kind hat.
-        student, _, slot, _, access, _ = self.ids
-        with self.app.app_context():
-            zweiter = ParentAccess(schueler_id=student, status="active",
-                                   email_normalized="zweiter@example.de",
-                                   display_name="Zweiter Elternteil")
-            db.session.add(zweiter)
-            db.session.flush()
-            booking = book_slot(slot, student, access)
-            db.session.commit()
-            cancel_booking(booking.id, zweiter.id)
-            db.session.commit()
-            self.assertEqual(db.session.get(AppointmentBooking, booking.id).status, "cancelled")
-
-    def test_a_stranger_still_cannot_cancel(self):
-        student, other, slot, _, access, other_access = self.ids
-        with self.app.app_context():
-            booking = book_slot(slot, student, access)
-            db.session.commit()
-            with self.assertRaises(BookingError):
-                cancel_booking(booking.id, other_access)
+class StaffCancellationTests(_AppointmentFixture, unittest.TestCase):
 
     def test_the_school_can_still_cancel_what_it_assigned(self):
         student, _, slot, _, _, _ = self.ids
@@ -581,100 +448,7 @@ class AssignedAppointmentTests(_AppointmentFixture, unittest.TestCase):
             self.assertEqual(db.session.get(AppointmentBooking, booking.id).status, "cancelled")
 
 
-class BookingWindowTests(unittest.TestCase):
-    """Der Buchungszeitraum muss schon auf der Terminliste sichtbar sein.
-
-    Vorher standen die Zeitfenster mitsamt Schaltfläche da, und erst der Klick
-    brachte die Meldung, dass die Buchung noch nicht geöffnet sei.
-    """
-
-    def setUp(self):
-        self.app = create_app("testing")
-        with self.app.app_context():
-            student = Schueler(vorname="Termin", nachname="Kind")
-            now = _naive(datetime.datetime.now(datetime.UTC))
-            event = AppointmentEvent(title="Anmeldung", school_year=2027, status="published")
-            db.session.add_all([student, event])
-            db.session.flush()
-            start = (now + datetime.timedelta(days=30)).replace(minute=0, second=0, microsecond=0)
-            slot = AppointmentSlot(event_id=event.id, starts_at=start,
-                                   ends_at=start + datetime.timedelta(minutes=40))
-            access = ParentAccess(schueler_id=student.id, email_normalized="eltern@example.de",
-                                  display_name="Eltern", status="active")
-            db.session.add_all([slot, access])
-            db.session.commit()
-            self.event_id, self.slot_id, self.access_id = event.id, slot.id, access.id
-            self.now = now
-
-    def tearDown(self):
-        with self.app.app_context():
-            db.session.remove()
-            db.drop_all()
-
-    def _window(self, opens_in, closes_in):
-        with self.app.app_context():
-            event = db.session.get(AppointmentEvent, self.event_id)
-            event.booking_opens_at = self.now + opens_in
-            event.booking_closes_at = self.now + closes_in
-            db.session.commit()
-
-    def _client(self):
-        with self.app.app_context():
-            version = db.session.get(ParentAccess, self.access_id).security_version
-        client = self.app.test_client()
-        with client.session_transaction() as sess:
-            sess["parent_access_id"] = self.access_id
-            sess["parent_access_version"] = version
-        return client
-
-    def test_before_the_window_no_slot_is_offered(self):
-        self._window(datetime.timedelta(days=2), datetime.timedelta(days=40))
-        body = self._client().get("/eltern/termine").get_data(as_text=True)
-        self.assertIn("Die Terminbuchung öffnet am", body)
-        self.assertNotIn("Buchen</button>", body)
-
-    def test_after_the_window_no_slot_is_offered(self):
-        self._window(datetime.timedelta(days=-40), datetime.timedelta(days=-1))
-        body = self._client().get("/eltern/termine").get_data(as_text=True)
-        self.assertIn("abgeschlossen", body)
-        self.assertNotIn("Buchen</button>", body)
-
-    def test_inside_the_window_the_slot_can_be_booked(self):
-        self._window(datetime.timedelta(days=-1), datetime.timedelta(days=40))
-        client = self._client()
-        self.assertIn("Buchen</button>", client.get("/eltern/termine").get_data(as_text=True))
-        client.post(f"/eltern/termine/{self.slot_id}/buchen", follow_redirects=True)
-        with self.app.app_context():
-            self.assertEqual(db.session.query(AppointmentBooking).count(), 1)
-
-    def test_the_announced_opening_is_the_local_time_the_school_entered(self):
-        # Die Schule trägt Ortszeit ein, gespeichert wird UTC. Angekündigt
-        # werden muss wieder die Ortszeit.
-        with self.app.app_context():
-            event = db.session.get(AppointmentEvent, self.event_id)
-            event.booking_opens_at = datetime.datetime(2027, 9, 1, 6, 0)   # 08:00 Berlin
-            event.booking_closes_at = datetime.datetime(2027, 12, 1, 6, 0)
-            db.session.commit()
-        body = self._client().get("/eltern/termine").get_data(as_text=True)
-        self.assertIn("01.09.2027, 08:00 Uhr", body)
-
-
 class AdministrationWindowTests(_AppointmentFixture, unittest.TestCase):
-
-    def test_the_settings_form_shows_the_window_in_local_time(self):
-        client = self._login_staff()
-        client.post(f"/admin/appointments/{self.event_id}", data={
-            "action": "booking_window",
-            "booking_opens_at": "2026-09-01T08:00",
-            "booking_closes_at": "2026-09-30T18:00",
-        }, follow_redirects=True)
-        with self.app.app_context():
-            event = db.session.get(AppointmentEvent, self.event_id)
-            self.assertEqual(event.booking_opens_at, datetime.datetime(2026, 9, 1, 6, 0))
-        body = client.get(f"/admin/appointments/{self.event_id}").get_data(as_text=True)
-        # Zuvor stand hier der UTC-Wert und damit zwei Stunden zu früh.
-        self.assertIn('value="2026-09-01T08:00"', body)
-        self.assertIn('value="2026-09-30T18:00"', body)
 
     def test_the_interview_days_are_stored_and_shown_separately(self):
         client = self._login_staff()
@@ -689,8 +463,6 @@ class AdministrationWindowTests(_AppointmentFixture, unittest.TestCase):
         with self.app.app_context():
             event = db.session.get(AppointmentEvent, self.event_id)
             self.assertEqual((event.slot_days_from, event.slot_days_until), (first, last))
-            # Der Anmeldezeitraum bleibt davon unberührt.
-            self.assertIsNotNone(event.booking_opens_at)
         body = client.get(f"/admin/appointments/{self.event_id}").get_data(as_text=True)
         self.assertIn(f'value="{first.isoformat()}"', body)
 

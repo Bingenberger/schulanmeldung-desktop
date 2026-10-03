@@ -48,45 +48,34 @@ class BaseConfig:
     #: Anzahl vorgeschalteter Reverse Proxys. 0 = direkt erreichbar, dann
     #: werden X-Forwarded-*-Kopfzeilen ignoriert. Hinter nginx: 1.
     TRUSTED_PROXIES = int(os.getenv("SL_OFFICE_TRUSTED_PROXIES", "0"))
-    MAIL_SERVER = os.getenv("SL_OFFICE_MAIL_SERVER", "localhost")
-    MAIL_PORT = int(os.getenv("SL_OFFICE_MAIL_PORT", "25"))
-    MAIL_USE_TLS = _env_bool("SL_OFFICE_MAIL_USE_TLS", False)
-    MAIL_USERNAME = os.getenv("SL_OFFICE_MAIL_USERNAME")
-    MAIL_PASSWORD = os.getenv("SL_OFFICE_MAIL_PASSWORD")
-    MAIL_FROM = os.getenv("SL_OFFICE_MAIL_FROM", "noreply@example.invalid")
-    #: Empfänger der Terminbenachrichtigungen an die Schule. Leer = kein Versand.
-    #: Ohne eigene Angabe geht die Nachricht an die Kontaktadresse der Schule.
-    NOTIFY_MAIL = os.getenv("SL_OFFICE_NOTIFY_MAIL", "")
-    #: Vorlauf der Terminerinnerung an die Eltern, in Stunden.
-    APPOINTMENT_REMINDER_HOURS = int(os.getenv("SL_OFFICE_REMINDER_HOURS", "24"))
-    #: Öffentliche Adresse der Anwendung, z. B. "https://anmeldung.example.de".
-    #: Nur der Erinnerungsdienst braucht sie: er läuft ohne Anfrage und kann
-    #: den Link zum Elternbereich sonst nicht bauen.
-    PUBLIC_BASE_URL = os.getenv("SL_OFFICE_PUBLIC_BASE_URL", "").rstrip("/")
+    #: Zweiter Faktor (Authenticator-App) bei der Anmeldung. Auf dem Server
+    #: Pflicht; die Desktop-Fassung lauscht nur auf diesem Rechner und kommt
+    #: mit Benutzername und Passwort aus.
+    TWO_FACTOR_REQUIRED = _env_bool("SL_OFFICE_TWO_FACTOR", True)
 
-    # Briefkopf der Elternschreiben. Die Vorgaben entsprechen der Schulvorlage
-    # "Einladung_Schulanmeldung.odt"; jede Zeile ist per Umgebungsvariable
-    # überschreibbar, leere Angaben werden im Brief einfach weggelassen.
-    SCHOOL_NAME = os.getenv("SL_OFFICE_SCHOOL_NAME", "Gemeinschaftsgrundschule Niederkassel")
-    SCHOOL_MOTTO = os.getenv("SL_OFFICE_SCHOOL_MOTTO", "zusammen · leben · lernen")
-    SCHOOL_STREET = os.getenv("SL_OFFICE_SCHOOL_STREET", "Annostraße 3")
-    SCHOOL_CITY_LINE = os.getenv("SL_OFFICE_SCHOOL_CITY_LINE", "53859 Niederkassel")
-    SCHOOL_PHONE = os.getenv("SL_OFFICE_SCHOOL_PHONE", "(02208) 3761")
-    SCHOOL_EMAIL = os.getenv("SL_OFFICE_SCHOOL_EMAIL", "info@ggs-niederkassel.de")
-    SCHOOL_WEB = os.getenv("SL_OFFICE_SCHOOL_WEB", "www.ggs-niederkassel.de")
+    # Briefkopf der Elternschreiben. Die Schule pflegt die Angaben unter
+    # „Verwaltung → Schulprofil“ (siehe sl_office.school_profile); was dort
+    # nicht gespeichert ist, kommt aus diesen Umgebungsvariablen. Leere
+    # Angaben werden im Brief einfach weggelassen.
+    SCHOOL_NAME = os.getenv("SL_OFFICE_SCHOOL_NAME", "")
+    SCHOOL_MOTTO = os.getenv("SL_OFFICE_SCHOOL_MOTTO", "")
+    SCHOOL_STREET = os.getenv("SL_OFFICE_SCHOOL_STREET", "")
+    SCHOOL_CITY_LINE = os.getenv("SL_OFFICE_SCHOOL_CITY_LINE", "")
+    SCHOOL_PHONE = os.getenv("SL_OFFICE_SCHOOL_PHONE", "")
+    SCHOOL_EMAIL = os.getenv("SL_OFFICE_SCHOOL_EMAIL", "")
+    SCHOOL_WEB = os.getenv("SL_OFFICE_SCHOOL_WEB", "")
     #: Ortsangabe der Datumszeile und des Anmeldescheins ("Stadt ...").
-    SCHOOL_TOWN = os.getenv("SL_OFFICE_SCHOOL_TOWN", "Niederkassel")
+    SCHOOL_TOWN = os.getenv("SL_OFFICE_SCHOOL_TOWN", "")
     #: Einzugsbereich, wie er im Brieftext genannt wird.
-    SCHOOL_DISTRICT = os.getenv("SL_OFFICE_SCHOOL_DISTRICT", "Niederkassel-Ort")
-    SCHOOL_HEALTH_OFFICE = os.getenv("SL_OFFICE_SCHOOL_HEALTH_OFFICE", "Gesundheitsamtes Siegburg")
-    SCHOOL_CONTACT_MAIL = os.getenv("SL_OFFICE_SCHOOL_CONTACT_MAIL", "emrich-foerster@ggs-ndk.de")
-    SCHOOL_HEAD = os.getenv("SL_OFFICE_SCHOOL_HEAD", "F. Emrich-Förster, Schulleiter")
+    SCHOOL_DISTRICT = os.getenv("SL_OFFICE_SCHOOL_DISTRICT", "")
+    SCHOOL_HEALTH_OFFICE = os.getenv("SL_OFFICE_SCHOOL_HEALTH_OFFICE", "")
+    SCHOOL_CONTACT_MAIL = os.getenv("SL_OFFICE_SCHOOL_CONTACT_MAIL", "")
+    SCHOOL_HEAD = os.getenv("SL_OFFICE_SCHOOL_HEAD", "")
     #: Einzeilige Anschrift; wird genutzt, wenn Straße und Ort nicht gesetzt sind.
     SCHOOL_ADDRESS = os.getenv("SL_OFFICE_SCHOOL_ADDRESS", "")
-    SCHOOL_LOGO = os.getenv("SL_OFFICE_SCHOOL_LOGO", str(BASE_DIR / "assets/briefkopf/logo.png"))
-    SCHOOL_SIGNATURE = os.getenv(
-        "SL_OFFICE_SCHOOL_SIGNATURE", str(BASE_DIR / "assets/briefkopf/unterschrift.png"))
-    MAIL_SUPPRESS_SEND = False
+    #: Pfade zu Logo und Unterschrift; im Schulprofil hochgeladene Bilder gehen vor.
+    SCHOOL_LOGO = os.getenv("SL_OFFICE_SCHOOL_LOGO", "")
+    SCHOOL_SIGNATURE = os.getenv("SL_OFFICE_SCHOOL_SIGNATURE", "")
 
 
 class DevelopmentConfig(BaseConfig):
@@ -103,7 +92,6 @@ class TestingConfig(BaseConfig):
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     WTF_CSRF_ENABLED = False
     AUTO_CREATE_DB = True
-    MAIL_SUPPRESS_SEND = True
 
 
 class ProductionConfig(BaseConfig):
@@ -123,17 +111,76 @@ class ProductionConfig(BaseConfig):
         return {"SECRET_KEY": secret_key, "SQLALCHEMY_DATABASE_URI": database_url}
 
 
+def desktop_data_dir() -> Path:
+    """Wo die Desktop-Fassung ihre Daten ablegt.
+
+    Unter Windows ``%APPDATA%\\SL-Office`` -- das gehört der angemeldeten
+    Person und wird von der Schul-IT meist mitgesichert. ``SL_OFFICE_DATA_DIR``
+    legt einen anderen Ort fest, etwa ein Netzlaufwerk.
+    """
+    configured = os.getenv("SL_OFFICE_DATA_DIR")
+    if configured:
+        return Path(configured).expanduser()
+    if os.name == "nt" and os.getenv("APPDATA"):
+        return Path(os.environ["APPDATA"]) / "SL-Office"
+    return Path(os.getenv("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "sl-office"
+
+
+def _persistent_secret(path: Path) -> str:
+    """Schlüssel für Sitzungen und CSRF, einmal erzeugt und dann beibehalten."""
+    try:
+        return path.read_text(encoding="ascii").strip()
+    except FileNotFoundError:
+        secret = secrets.token_hex(32)
+        path.write_text(secret, encoding="ascii")
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+        return secret
+
+
+class DesktopConfig(BaseConfig):
+    """Eigenständige Anwendung auf einem Schulrechner (siehe desktop.py).
+
+    Der Server lauscht nur auf 127.0.0.1; Datenbank, hochgeladene Dateien,
+    Sicherungen und der Sitzungsschlüssel liegen im Datenordner.
+    """
+    ENV_NAME = "desktop"
+    AUTO_CREATE_DB = False
+    TWO_FACTOR_REQUIRED = _env_bool("SL_OFFICE_TWO_FACTOR", False)
+    #: Lokal gibt es keinen Grund für knappe Grenzen: eine Datenbank zum
+    #: Zurückspielen darf größer sein.
+    MAX_CONTENT_LENGTH = int(os.getenv("SL_OFFICE_MAX_UPLOAD_BYTES", 200 * 1024 * 1024))
+    FIRST_RUN_SETUP = True
+    SESSION_COOKIE_SECURE = False
+
+    @classmethod
+    def values(cls) -> dict:
+        data_dir = desktop_data_dir()
+        for folder in (data_dir, data_dir / "uploads", data_dir / "Datensicherungen"):
+            folder.mkdir(parents=True, exist_ok=True)
+        return {
+            "DATA_DIR": str(data_dir),
+            "SECRET_KEY": os.getenv("SL_OFFICE_SECRET_KEY") or _persistent_secret(data_dir / ".secret-key"),
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///" + str(data_dir / "sl-office.db").replace("\\", "/"),
+            "UPLOAD_FOLDER": str(data_dir / "uploads"),
+            "BACKUP_FOLDER": str(data_dir / "Datensicherungen"),
+        }
+
+
 def load_config(app, environment: str | None = None) -> None:
     environment = (environment or os.getenv("SL_OFFICE_ENV", "development")).lower()
-    configurations = {"development": DevelopmentConfig, "testing": TestingConfig, "production": ProductionConfig}
+    configurations = {"development": DevelopmentConfig, "testing": TestingConfig,
+                      "production": ProductionConfig, "desktop": DesktopConfig}
     try:
         config_class = configurations[environment]
     except KeyError as exc:
         raise RuntimeError(f"Unbekannte SL_OFFICE_ENV: {environment}") from exc
     app.config.from_object(config_class)
-    if config_class is ProductionConfig:
+    if config_class in (ProductionConfig, DesktopConfig):
         app.config.update(config_class.values())
     elif config_class is DevelopmentConfig:
         app.config["SECRET_KEY"] = _development_secret()
-    if environment != "production":
+    if environment not in ("production", "desktop"):
         app.config["SESSION_COOKIE_SECURE"] = _env_bool("SL_OFFICE_SECURE_COOKIES", app.config["SESSION_COOKIE_SECURE"])

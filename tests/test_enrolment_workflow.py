@@ -1,4 +1,4 @@
-"""Municipal list import and the parent invitation letters."""
+"""Municipal list import and the invitation letters."""
 
 import datetime
 import os
@@ -10,16 +10,11 @@ os.environ["SL_OFFICE_ENV"] = "testing"
 from io import BytesIO  # noqa: E402
 
 import pandas as pd  # noqa: E402
-from reportlab.graphics.barcode import qr  # noqa: E402
 from reportlab.pdfbase import pdfmetrics  # noqa: E402
 
 from app import create_app  # noqa: E402
 from models import Schueler, db  # noqa: E402
-from sl_office.parent_portal import letterhead, letters  # noqa: E402
-from sl_office.parent_portal.access_service import (  # noqa: E402
-    InvalidAccessToken, consume_activation_grant,
-)
-from sl_office.parent_portal.models import ActivationGrant  # noqa: E402
+from sl_office.briefe import letterhead, letters  # noqa: E402
 from sl_office.students import city_import  # noqa: E402
 
 CITY_COLUMNS = {
@@ -137,106 +132,20 @@ class ParentLetterTests(unittest.TestCase):
         child = db.session.get(Schueler, self.child_id)
         return letters.build_letters(
             [child], {"name": "GGS", "address": "Schulstraße 1"},
-            lambda token: f"https://schule.example/eltern/aktivieren/{token}",
             **options,
         )
-
-    def test_letter_issues_one_grant_per_guardian(self):
-        with self.app.app_context():
-            buffer, issued = self._build()
-            db.session.commit()
-            self.assertEqual(issued, 2)
-            self.assertTrue(buffer.getvalue().startswith(b"%PDF"))
-            purposes = {grant.purpose for grant in ActivationGrant.query.all()}
-            self.assertEqual(purposes, {"first_access", "second_access"})
-
-    def test_reprint_reuses_the_existing_grants(self):
-        with self.app.app_context():
-            self._build()
-            db.session.commit()
-            _, issued = self._build()
-            db.session.commit()
-            self.assertEqual(issued, 0)
-            self.assertEqual(ActivationGrant.query.count(), 2)
-
-    def test_redeemed_access_is_not_reissued(self):
-        with self.app.app_context():
-            tokens, _ = letters.issue_letter_tokens(self.child_id)
-            db.session.commit()
-            consume_activation_grant(tokens["first_access"], "mum@example.de", "Ayşe Yilmaz")
-            db.session.commit()
-            self.assertEqual(letters.redeemed_purposes(self.child_id), {"first_access"})
-            fresh, covered = letters.issue_letter_tokens(self.child_id)
-            db.session.commit()
-            # The unused second grant is reused; the redeemed first one is not reissued.
-            self.assertNotIn("first_access", fresh)
-            self.assertEqual(covered["first_access"], "redeemed")
-            self.assertEqual(covered["second_access"], "issued")
-
-    def test_children_with_an_access_drop_out_of_the_pending_list(self):
-        with self.app.app_context():
-            child = db.session.get(Schueler, self.child_id)
-            self.assertEqual(letters.students_without_access([child]), [child])
-            tokens, _ = letters.issue_letter_tokens(self.child_id)
-            db.session.commit()
-            consume_activation_grant(tokens["first_access"], "mum@example.de", "Ayşe Yilmaz")
-            db.session.commit()
-            self.assertEqual(letters.students_without_access([child]), [])
-
-    def test_qr_encodes_exactly_the_activation_url(self):
-        # No QR decoder is available here, so verify the payload handed to the
-        # widget and that different links really produce different geometry.
-        first = "https://schule.example/eltern/aktivieren/AAA"
-        second = "https://schule.example/eltern/aktivieren/BBB"
-        def matrix(url):
-            widget = qr.QrCodeWidget(url)
-            widget.qr.make()  # modules stay None until the code is generated
-            return widget.qr.modules
-
-        self.assertEqual(qr.QrCodeWidget(first).value, first)
-        self.assertEqual(matrix(first), matrix(first))
-        self.assertNotEqual(matrix(first), matrix(second))
-
-
-    def test_reissue_replaces_an_open_grant(self):
-        # Wurde der erste Brief nie verschickt, muss ein neuer wieder Links tragen.
-        with self.app.app_context():
-            first, _ = letters.issue_letter_tokens(self.child_id)
-            db.session.commit()
-            fresh, covered = letters.issue_letter_tokens(self.child_id, reissue=True)
-            db.session.commit()
-            self.assertEqual(set(fresh), set(letters.PURPOSES))
-            self.assertEqual(covered, {})
-            self.assertNotEqual(fresh["first_access"], first["first_access"])
-            with self.assertRaises(InvalidAccessToken):
-                consume_activation_grant(first["first_access"], "mum@example.de", "Ayşe Yilmaz")
-
-    def test_reissue_leaves_a_redeemed_grant_alone(self):
-        with self.app.app_context():
-            tokens, _ = letters.issue_letter_tokens(self.child_id)
-            db.session.commit()
-            consume_activation_grant(tokens["first_access"], "mum@example.de", "Ayşe Yilmaz")
-            db.session.commit()
-            fresh, covered = letters.issue_letter_tokens(self.child_id, reissue=True)
-            db.session.commit()
-            self.assertNotIn("first_access", fresh)
-            self.assertEqual(covered["first_access"], "redeemed")
-            self.assertIn("second_access", fresh)
 
     def test_letter_runs_over_several_pages(self):
         # Der Brief trägt den vollständigen Einladungstext der Schulvorlage.
         with self.app.app_context():
-            buffer, _ = self._build()
-            db.session.commit()
+            buffer = self._build()
             pages = len(re.findall(rb"/Type /Page[^s]", buffer.getvalue()))
             self.assertGreater(pages, 1)
 
     def test_missing_letterhead_fields_do_not_break_the_letter(self):
         # Ohne Logo, Motto und Termine muss der Brief trotzdem entstehen.
         with self.app.app_context():
-            buffer, issued = self._build(period=None, deadline=None, school_year=None)
-            db.session.commit()
-            self.assertEqual(issued, 2)
+            buffer = self._build(period=None, deadline=None, school_year=None)
             self.assertTrue(buffer.getvalue().startswith(b"%PDF"))
 
 
@@ -303,8 +212,7 @@ class LetterTextTests(unittest.TestCase):
 
     def _render(self, markup, fields=None):
         flow = _RecordingFlow()
-        letters.render_body(flow, markup, fields or self.FIELDS,
-                            lambda: flow.calls.append(("zugaenge", None)))
+        letters.render_body(flow, markup, fields or self.FIELDS)
         return flow.calls
 
     def test_the_markup_becomes_headings_bullets_and_paragraphs(self):
@@ -321,18 +229,18 @@ class LetterTextTests(unittest.TestCase):
         calls = self._render("Termin bis {frist}.\nIhr Kind {kind} wird schulpflichtig.")
         self.assertEqual(calls, [("paragraph", "Ihr Kind Mia wird schulpflichtig.")])
 
-    def test_the_access_marker_calls_the_block(self):
-        calls = self._render(f"Text davor\n{letters.ACCESS_MARKER}\nText danach")
-        self.assertEqual([kind for kind, _ in calls], ["paragraph", "zugaenge", "paragraph"])
+    def test_an_old_access_marker_is_skipped_quietly(self):
+        # Gespeicherte Brieftexte aus der Zeit mit Elternportal tragen sie noch.
+        calls = self._render("Text davor\n[zugaenge]\nText danach")
+        self.assertEqual([kind for kind, _ in calls], ["paragraph", "paragraph"])
 
     def test_an_unknown_placeholder_survives_rendering(self):
         self.assertEqual(letters.fill("Gruß aus {irgendwo}", self.FIELDS), "Gruß aus {irgendwo}")
 
-    def test_the_check_reports_typos_and_a_missing_marker(self):
+    def test_the_check_reports_typos(self):
         problems = letters.check_text("Titel {tippfehler}", "Nur Text", "Grüße")
-        self.assertEqual(len(problems), 2)
+        self.assertEqual(len(problems), 1)
         self.assertIn("{tippfehler}", problems[0])
-        self.assertIn(letters.ACCESS_MARKER, problems[1])
 
     def test_the_default_wording_passes_the_check(self):
         self.assertEqual(letters.check_text(**letters.DEFAULT_TEXT), [])
@@ -360,12 +268,10 @@ class StoredLetterTextTests(unittest.TestCase):
             db.session.commit()
             self.assertEqual(letters.stored_text(), letters.DEFAULT_TEXT)
 
-    def test_the_preview_issues_no_access_grants(self):
+    def test_the_preview_is_a_pdf(self):
         with self.app.app_context():
             buffer = letters.build_preview({"name": "GGS"}, letters.DEFAULT_TEXT)
-            db.session.commit()
             self.assertTrue(buffer.getvalue().startswith(b"%PDF"))
-            self.assertEqual(ActivationGrant.query.count(), 0)
 
 
 if __name__ == "__main__":

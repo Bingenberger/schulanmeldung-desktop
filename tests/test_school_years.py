@@ -117,9 +117,8 @@ class YearScopeTests(unittest.TestCase):
             with school_year.all_years_scope():
                 self.assertEqual(Schueler.query.count(), 2)
 
-    def test_parent_portal_is_not_scoped(self):
-        # Parents reach exactly one child by token; scoping would hide a child
-        # as soon as the school moves to the next year.
+    def test_requests_without_staff_login_are_not_scoped(self):
+        # Ohne angemeldete Person gibt es keinen gewählten Jahrgang.
         with self.app.test_request_context():
             self.assertIsNone(school_year.active_year())
             self.assertEqual(Schueler.query.count(), 2)

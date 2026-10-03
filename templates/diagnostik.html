@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_kriterien.html" import felder as kriterien_felder %}
 
 {% block content %}
 <style>
@@ -38,32 +39,7 @@
 
             <p class="text-muted">Bitte bewerten Sie die folgenden Punkte auf der Skala.</p>
 
-            {% set items = [
-            form.wortschatz, form.grammatik, form.aussprache, form.gespraechsverhalten,
-            form.saetze_nachsprechen, form.reimen, form.pluralbildung, form.woerter_segmentieren,
-            form.mengenerfassung, form.menge_herstellen, form.zahlen_erkennen, form.rueckwaerts_zaehlen,
-            form.zahlreihe_erzeugen, form.logische_reihe, form.bild_malen, form.komplexe_figur
-            ] %}
-
-            <div class="row">
-                {% for field in items %}
-                <div class="col-md-12 mb-3 border-bottom pb-2 rating-row" id="row-{{ field.id }}">
-                    <div class="d-flex justify-content-between align-items-center p-2 rounded">
-                        <label class="form-label fw-bold mb-0" style="width: 40%;">{{ field.label.text }}</label>
-                        <div class="btn-group" role="group">
-                            {% for subfield in field %}
-                            <input type="radio" class="btn-check rating-input" name="{{ field.name }}"
-                                id="{{ subfield.id }}" value="{{ subfield.data }}" {% if subfield.checked %}checked{%
-                                endif %} autocomplete="off" data-row="row-{{ field.id }}" required>
-                            <label class="btn btn-outline-dark" for="{{ subfield.id }}">
-                                {{ subfield.label.text }}
-                            </label>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
+            {{ kriterien_felder(gruppen, werte, 'info') }}
 
             <hr>
 
@@ -180,7 +156,7 @@
         document.querySelectorAll('input.rating-input, input.kognitiv-input').forEach(input => {
             input.addEventListener('change', function () {
                 updateRowColor(this);
-                if (this.classList.contains('rating-input') && !this.getAttribute('data-row').includes('verhalten')) {
+                if (this.hasAttribute('data-wertung')) {
                     calculateAverage();
                 }
             });
@@ -191,19 +167,10 @@
         function calculateAverage() {
             let sum = 0;
             let count = 0;
-            const itemNames = [
-                'wortschatz', 'grammatik', 'aussprache', 'gespraechsverhalten',
-                'saetze_nachsprechen', 'reimen', 'pluralbildung', 'woerter_segmentieren',
-                'mengenerfassung', 'menge_herstellen', 'zahlen_erkennen', 'rueckwaerts_zaehlen',
-                'zahlreihe_erzeugen', 'logische_reihe', 'bild_malen', 'komplexe_figur'
-            ];
-
-            itemNames.forEach(name => {
-                const selected = document.querySelector(`input[name="${name}"]:checked`);
-                if (selected) {
-                    sum += parseInt(selected.value);
-                    count++;
-                }
+            // Alle Skalen-Kriterien in der Wertung, unbeantwortete zählen nicht.
+            document.querySelectorAll('input.rating-input[data-wertung]:checked').forEach(selected => {
+                sum += parseInt(selected.value);
+                count++;
             });
 
             if (count > 0) {

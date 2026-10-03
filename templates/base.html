@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>Schul-Manager NRW</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.min.css') }}">
   <style>
     body {
       background-color: #f8f9fa;
@@ -27,29 +27,15 @@
 
   <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
     <div class="container">
-      <a class="navbar-brand" href="{{ url_for('parent_portal.start') if parent_area else url_for('index') }}">
-        <i class="bi bi-mortarboard-fill"></i> {{ 'Elternportal' if parent_area else 'Einschulung' }}
-        {% if not parent_area and current_user.is_authenticated and active_school_year %}
+      <a class="navbar-brand" href="{{ url_for('index') }}">
+        <i class="bi bi-mortarboard-fill"></i> Einschulung
+        {% if current_user.is_authenticated and active_school_year %}
         <span class="badge {{ 'bg-secondary' if not on_current_school_year else 'bg-primary' }} align-middle ms-1"
               style="font-size:.7rem">{{ active_school_year }}</span>
         {% endif %}
       </a>
 
-      {% if parent_area %}
-      {# Im Elternbereich gibt es keine Verwaltungsnavigation: "Anmelden" führte
-         sonst zur Passwortanmeldung der Schule, die Eltern nichts nützt. #}
-      {% if parent_access %}
-      <div class="d-flex align-items-center gap-3">
-        <a class="nav-link text-white" href="{{ url_for('parent_portal.dashboard') }}">
-          <i class="bi bi-house"></i> Übersicht</a>
-        <form method="post" action="{{ url_for('parent_portal.logout') }}" class="m-0">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="btn btn-link nav-link text-white p-0">
-            <i class="bi bi-box-arrow-right"></i> Abmelden</button>
-        </form>
-      </div>
-      {% endif %}
-      {% elif current_user.is_authenticated %}
+      {% if current_user.is_authenticated %}
       {% set may_manage = current_user.role in ['Administrator', 'Schulleitung', 'Sekretariat'] %}
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#hauptnavigation"
               aria-controls="hauptnavigation" aria-expanded="false" aria-label="Navigation umschalten">
@@ -99,57 +85,76 @@
               <li><a class="dropdown-item" href="{{ url_for('admin.parent_letter_text') }}">
                 <i class="bi bi-pencil-square me-2"></i>Elternbrief bearbeiten</a></li>
               {% endif %}
+              {% if modules.termine %}
               <li><a class="dropdown-item" href="{{ url_for('appointments.index') }}">
                 <i class="bi bi-calendar-week me-2"></i>Termine planen</a></li>
-              <li><hr class="dropdown-divider"></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.registrations') }}">
-                <i class="bi bi-file-earmark-person me-2"></i>Eingegangene Anmeldungen</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.parent_accesses') }}">
-                <i class="bi bi-envelope-lock me-2"></i>Elternzugänge verwalten</a></li>
+              {% endif %}
             </ul>
           </li>
           {% endif %}
 
+          {% if modules.diagnostik or modules.schulspiel or modules.schularzt or modules.kita_bericht %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
               <i class="bi bi-activity"></i> Diagnostik
             </a>
             <ul class="dropdown-menu">
+              {% if modules.diagnostik %}
               <li><a class="dropdown-item" href="{{ url_for('students.select', target='diagnostik') }}">
                 <i class="bi bi-journal-plus me-2"></i>Pädagogische Diagnostik</a></li>
+              {% endif %}
+              {% if modules.schulspiel %}
               <li><a class="dropdown-item" href="{{ url_for('students.select', target='schulspiel') }}">
                 <i class="bi bi-dice-5 me-2"></i>Schulspiel</a></li>
+              {% endif %}
+              {% if modules.schularzt %}
               <li><a class="dropdown-item" href="{{ url_for('students.select', target='schularzt') }}">
                 <i class="bi bi-file-medical me-2"></i>Bericht Schularzt</a></li>
+              {% endif %}
+              {% if modules.kita_bericht %}
               <li><a class="dropdown-item" href="{{ url_for('students.select', target='kita_bericht') }}">
                 <i class="bi bi-house-heart me-2"></i>Bericht Kita</a></li>
+              {% endif %}
             </ul>
           </li>
+          {% endif %}
 
+          {% if modules.klassenbildung or modules.betreuung or modules.foerderkurse %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
               <i class="bi bi-grid-3x3-gap-fill"></i> Klassenbildung
             </a>
             <ul class="dropdown-menu">
+              {% if modules.klassenbildung %}
               <li><a class="dropdown-item" href="{{ url_for('klassenzusammensetzung') }}">
                 <i class="bi bi-grid-3x3-gap me-2"></i>Klassen zusammenstellen</a></li>
               <li><a class="dropdown-item" href="{{ url_for('students.select', target='freunde') }}">
                 <i class="bi bi-people me-2"></i>Freundeswünsche</a></li>
               <li><hr class="dropdown-divider"></li>
+              {% endif %}
+              {% if modules.betreuung %}
               <li><a class="dropdown-item" href="{{ url_for('betreuung_bulk') }}">
                 <i class="bi bi-clock-history me-2"></i>Betreuungsformen</a></li>
+              {% endif %}
+              {% if modules.foerderkurse %}
               <li><a class="dropdown-item" href="{{ url_for('foerderkurse_bulk') }}">
                 <i class="bi bi-mortarboard me-2"></i>Förderkurse</a></li>
+              {% endif %}
               <li><hr class="dropdown-divider"></li>
               <li><h6 class="dropdown-header">Ausgeben</h6></li>
+              {% if modules.klassenbildung %}
               <li><a class="dropdown-item" href="{{ url_for('export_klassenlisten') }}">
                 <i class="bi bi-file-earmark-excel me-2"></i>Klassenlisten als Excel</a></li>
               <li><a class="dropdown-item" href="{{ url_for('export_klassenmappe') }}" target="_blank">
                 <i class="bi bi-folder2-open me-2"></i>Klassenmappe als PDF</a></li>
+              {% endif %}
+              {% if modules.foerderkurse %}
               <li><a class="dropdown-item" href="{{ url_for('export_foerderkurse') }}" target="_blank">
                 <i class="bi bi-file-earmark-pdf me-2"></i>Förderkurse als PDF</a></li>
+              {% endif %}
             </ul>
           </li>
+          {% endif %}
 
         </ul>
 
@@ -160,8 +165,10 @@
             </a>
             <ul class="dropdown-menu dropdown-menu-end">
               <li><h6 class="dropdown-header">Angemeldet als {{ current_user.role }}</h6></li>
+              {% if two_factor_required %}
               <li><a class="dropdown-item" href="{{ url_for('auth.security') }}">
                 <i class="bi bi-shield-check me-2"></i>Anmeldesicherheit</a></li>
+              {% endif %}
               <li><a class="dropdown-item" href="{{ url_for('auth.change_password') }}">
                 <i class="bi bi-key me-2"></i>Passwort ändern</a></li>
               {% if current_user.role in ['Administrator', 'Schulleitung'] %}
@@ -171,6 +178,14 @@
                 <i class="bi bi-calendar3 me-2"></i>Einschulungsjahre</a></li>
               <li><a class="dropdown-item" href="{{ url_for('admin.backups') }}">
                 <i class="bi bi-hdd-stack me-2"></i>Datensicherung</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('admin.school_profile') }}">
+                <i class="bi bi-building me-2"></i>Schulprofil</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('admin.modules') }}">
+                <i class="bi bi-toggles me-2"></i>Module</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('criteria.index') }}">
+                <i class="bi bi-list-check me-2"></i>Kriterien</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('admin.templates') }}">
+                <i class="bi bi-file-earmark-text me-2"></i>Vorlagen</a></li>
               {% if current_user.role == 'Administrator' %}
               <li><a class="dropdown-item" href="{{ url_for('admin.users') }}">
                 <i class="bi bi-people-fill me-2"></i>Benutzerverwaltung</a></li>
@@ -226,7 +241,7 @@
     {% block content %}{% endblock %}
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
 </body>
 
 </html>

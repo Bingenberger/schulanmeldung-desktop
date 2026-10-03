@@ -12,18 +12,17 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from models import db, Schueler
 from sl_office.authorization import role_required
 from sl_office.appointments import calendar
-from sl_office.appointments import admin_protocol_pdf, protocol_pdf
+from sl_office.appointments import laufzettel_pdf
 from sl_office.appointments.service import (
-    ALLOWED_DURATIONS, GRID_MINUTES, MAX_CAPACITY, OHNE_TERMIN_GRUENDE, BookingError,
+    ALLOWED_DURATIONS, GRID_MINUTES, MAX_CAPACITY, BookingError,
     assign_slot, assignable_slots, active_booking_for_student,
     students_without_appointment,
     cancel_booking_as_staff, create_slot, delete_slot, generate_slots, local_date, move_slot,
     set_capacity, slot_label,
 )
-from sl_office.parent_portal.letterhead import branding
-from sl_office.parent_portal.models import (
-    AppointmentBooking, AppointmentEvent, AppointmentSlot, ParentAccess,
-)
+from sl_office.briefe.letterhead import branding
+from sl_office import school_profile
+from sl_office.appointments.models import AppointmentBooking, AppointmentEvent, AppointmentSlot
 
 appointments_bp = Blueprint("appointments", __name__, url_prefix="/admin/appointments")
 MANAGE_ROLES = ["Administrator", "Schulleitung", "Sekretariat"]
@@ -163,16 +162,10 @@ def detail(event_id):
     # Das Eingabefeld ist ein <input type="datetime-local">, erwartet also
     # Ortszeit. Gespeichert wird UTC -- ohne diese Umrechnung zeigte die Maske
     # den Zeitraum um den Zeitzonenversatz verschoben an.
-    tz = ZoneInfo(event.timezone)
     window = {
-        name: (_to_local(getattr(event, name), tz).strftime("%Y-%m-%dT%H:%M")
-               if getattr(event, name) else "")
-        for name in ("booking_opens_at", "booking_closes_at")
-    }
-    window.update({
         name: (getattr(event, name).isoformat() if getattr(event, name) else "")
         for name in ("slot_days_from", "slot_days_until")
-    })
+    }
     return render_template("appointments/detail.html", event=event, window=window,
                            planner=_planner_state(event))
 
@@ -198,13 +191,7 @@ def _handle_settings_post(event, form):
     """Apply one of the settings forms on the planner page."""
     action = form.get("action")
     tz = ZoneInfo(event.timezone)
-    if action == "booking_window":
-        opens = _from_local(form["booking_opens_at"], tz)
-        closes = _from_local(form["booking_closes_at"], tz)
-        if closes <= opens:
-            raise BookingError("Das Ende des Anmeldezeitraums muss nach dem Beginn liegen.")
-        event.booking_opens_at, event.booking_closes_at = opens, closes
-    elif action == "slot_days":
+    if action == "slot_days":
         first = datetime.date.fromisoformat(form["slot_days_from"])
         last = datetime.date.fromisoformat(form["slot_days_until"])
         if last < first:
@@ -324,10 +311,9 @@ def _owned_slot(event, slot_id):
 def bookings(event_id):
     event = db.get_or_404(AppointmentEvent, event_id)
     rows = db.session.execute(
-        select(AppointmentBooking, AppointmentSlot, Schueler, ParentAccess)
+        select(AppointmentBooking, AppointmentSlot, Schueler)
         .join(AppointmentSlot, AppointmentSlot.id == AppointmentBooking.slot_id)
         .join(Schueler, Schueler.id == AppointmentBooking.schueler_id)
-        .outerjoin(ParentAccess, ParentAccess.id == AppointmentBooking.parent_access_id)
         .where(AppointmentBooking.event_id == event.id)
         .order_by(AppointmentSlot.starts_at)
     ).all()
@@ -338,84 +324,44 @@ def bookings(event_id):
 @appointments_bp.get("/<int:event_id>/ohne-termin")
 @role_required(MANAGE_ROLES)
 def without_appointment(event_id):
-    """Kinder, für die weder selbst gebucht noch ein Termin vergeben wurde.
-
-    Nach dem Grund gefiltert, weil jeder Grund etwas anderes verlangt: an eine
-    Familie mit Zugang geht eine Erinnerung, bei einer ohne Zugang hilft nur
-    ein Anruf oder ein vergebener Termin.
-    """
+    """Kinder, für die noch kein Termin vergeben ist, mit freien Fenstern zum Zuweisen."""
     event = db.get_or_404(AppointmentEvent, event_id)
-    alle = students_without_appointment()
-    filter_ = request.args.get("filter")
-    zeilen = [zeile for zeile in alle if zeile["grund"] == filter_] \
-        if filter_ in OHNE_TERMIN_GRUENDE else alle
-    anzahl = {grund: sum(1 for zeile in alle if zeile["grund"] == grund)
-              for grund in OHNE_TERMIN_GRUENDE}
+    zeilen = students_without_appointment()
     freie = [{"id": slot.id, "label": slot_label(slot, event), "frei": slot.capacity - belegt}
              for slot, belegt in assignable_slots(event.id)]
-    adressen = sorted({access.email_normalized for zeile in zeilen for access in zeile["eltern"]})
     return render_template(
-        "appointments/without_appointment.html", event=event, zeilen=zeilen, gesamt=len(alle),
-        anzahl=anzahl, gruende=OHNE_TERMIN_GRUENDE, filter_=filter_, freie=freie,
-        adressen=adressen, hier=request.full_path.rstrip("?"))
+        "appointments/without_appointment.html", event=event, zeilen=zeilen, freie=freie,
+        hier=request.full_path.rstrip("?"))
 
 
-@appointments_bp.get("/<int:event_id>/protokolle.pdf")
+@appointments_bp.get("/<int:event_id>/laufzettel.pdf")
 @role_required(MANAGE_ROLES)
-def protocols(event_id):
-    """Die Protokolle des Anmeldespiels für alle Kinder, nach Termin sortiert.
+def laufzettel_all(event_id):
+    """Die Laufzettel aller Kinder, nach Anmeldetermin sortiert.
 
-    Kinder ohne Termin stehen am Ende: Auch sie brauchen einen Bogen, wenn sie
-    kurzfristig erscheinen, einsortieren lassen sie sich aber nicht.
+    Kinder ohne Termin stehen am Ende: Auch sie brauchen einen Laufzettel, wenn
+    sie kurzfristig erscheinen, einsortieren lassen sie sich aber nicht.
     """
     event = db.get_or_404(AppointmentEvent, event_id)
-    eintraege = protocol_pdf.fuer_veranstaltung(event)
+    eintraege = laufzettel_pdf.fuer_veranstaltung(event)
     if not eintraege:
         flash("Für diesen Jahrgang sind noch keine Kinder erfasst.")
         return redirect(url_for("appointments.detail", event_id=event.id))
-    payload = protocol_pdf.build_many(
-        eintraege, title=f"Protokolle Anmeldespiel ({len(eintraege)})")
+    payload = laufzettel_pdf.build_many(
+        eintraege, branding(), title=f"Laufzettel Anmeldung ({len(eintraege)})")
     return send_file(BytesIO(payload), mimetype="application/pdf", as_attachment=True,
-                     download_name=f"Protokolle_Anmeldespiel_{len(eintraege)}.pdf")
+                     download_name=f"Laufzettel_Anmeldung_{len(eintraege)}.pdf")
 
 
-@appointments_bp.get("/<int:event_id>/verwaltungsprotokolle.pdf")
+@appointments_bp.get("/schueler/<int:student_id>/laufzettel.pdf")
 @role_required(MANAGE_ROLES)
-def admin_protocols(event_id):
-    """Die Laufzettel der Verwaltungsanmeldung, in derselben Reihenfolge."""
-    event = db.get_or_404(AppointmentEvent, event_id)
-    eintraege = protocol_pdf.fuer_veranstaltung(event)
-    if not eintraege:
-        flash("Für diesen Jahrgang sind noch keine Kinder erfasst.")
-        return redirect(url_for("appointments.detail", event_id=event.id))
-    payload = admin_protocol_pdf.build_many(
-        eintraege, branding(current_app.config),
-        title=f"Verwaltungsanmeldung ({len(eintraege)})")
-    return send_file(BytesIO(payload), mimetype="application/pdf", as_attachment=True,
-                     download_name=f"Verwaltungsanmeldung_{len(eintraege)}.pdf")
-
-
-@appointments_bp.get("/schueler/<int:student_id>/verwaltungsprotokoll.pdf")
-@role_required(MANAGE_ROLES)
-def admin_protocol(student_id):
+def laufzettel(student_id):
     """Der Laufzettel eines einzelnen Kindes, zur Ansicht im Browser."""
     student = db.get_or_404(Schueler, student_id)
-    payload = admin_protocol_pdf.build(student, branding(current_app.config),
-                                       active_booking_for_student(student.id))
+    payload = laufzettel_pdf.build(student, branding(), active_booking_for_student(student.id))
     name = f"{student.nachname}_{student.vorname}".replace(" ", "-")
     return send_file(BytesIO(payload), mimetype="application/pdf", as_attachment=False,
-                     download_name=f"Verwaltungsanmeldung_{name}.pdf")
-
-
-@appointments_bp.get("/schueler/<int:student_id>/protokoll.pdf")
-@role_required(MANAGE_ROLES)
-def protocol(student_id):
-    """Der Protokollbogen eines einzelnen Kindes, zur Ansicht im Browser."""
-    student = db.get_or_404(Schueler, student_id)
-    payload = protocol_pdf.build(student, active_booking_for_student(student.id))
-    name = f"{student.nachname}_{student.vorname}".replace(" ", "-")
-    return send_file(BytesIO(payload), mimetype="application/pdf", as_attachment=False,
-                     download_name=f"Protokoll_{name}.pdf")
+                     download_name=f"Laufzettel_Anmeldung_{name}.pdf")
 
 
 @appointments_bp.get("/<int:event_id>/buchungen.ics")
@@ -431,7 +377,7 @@ def bookings_calendar(event_id):
                AppointmentBooking.status == "confirmed")
         .order_by(AppointmentSlot.starts_at)
     ).all()
-    school = current_app.config.get("SCHOOL_NAME", "")
+    school = school_profile.get("SCHOOL_NAME")
     payload = calendar.build_calendar(
         [calendar.staff_entry(booking, slot, event, student, school_name=school)
          for booking, slot, student in rows],

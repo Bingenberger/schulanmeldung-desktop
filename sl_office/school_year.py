@@ -187,7 +187,14 @@ def install(app):
 READONLY_EXEMPT_ENDPOINTS = frozenset({
     "admin.school_years", "admin.switch_year", "admin.unlock_year",
     "auth.logout", "auth.login", "auth.login_two_factor", "auth.setup_two_factor",
-    "auth.security", "auth.change_password",
+    "auth.security", "auth.change_password", "auth.first_run",
+    # Das Schulprofil gilt für alle Jahrgänge, nicht für den geöffneten.
+    "admin.school_profile", "admin.school_profile_image", "admin.modules", "admin.templates",
+    # Zurückspielen ersetzt alle Jahrgänge zugleich.
+    "admin.restore_backup",
+    # Der Kriterienkatalog gilt ebenso für alle Jahrgänge.
+    "criteria.index", "criteria.catalog", "criteria.create", "criteria.edit",
+    "criteria.move", "criteria.toggle", "criteria.delete",
 })
 
 
@@ -202,8 +209,6 @@ def install_readonly_guard(app):
     @app.before_request
     def _block_writes_in_closed_years():
         if request.method in ("GET", "HEAD", "OPTIONS"):
-            return None
-        if request.blueprint == "parent_portal":
             return None
         if request.endpoint in READONLY_EXEMPT_ENDPOINTS:
             return None

@@ -47,6 +47,19 @@ class PasswordResetForm(FlaskForm):
     submit = SubmitField("Passwort setzen")
 
 
+class FirstRunForm(FlaskForm):
+    """Das erste Administrationskonto einer neuen Installation."""
+
+    username = StringField("Benutzername", validators=[DataRequired(), Length(max=80)])
+    new_password = PasswordField(
+        "Passwort",
+        validators=[DataRequired(),
+                    Length(min=MIN_PASSWORD_LENGTH,
+                           message=f"Mindestens {MIN_PASSWORD_LENGTH} Zeichen.")])
+    confirm_password = PasswordField("Passwort bestätigen", validators=[DataRequired()])
+    submit = SubmitField("Konto anlegen")
+
+
 class ChangePasswordForm(FlaskForm):
     old_password = PasswordField('Aktuelles Passwort', validators=[DataRequired()])
     new_password = PasswordField('Neues Passwort', validators=[DataRequired()])
@@ -58,25 +71,9 @@ class ChangePasswordForm(FlaskForm):
 class DiagnostikForm(FlaskForm):
     # Skala: 3=++, 2=+, 1=o, 0=-
     CHOICES = [(3, '++'), (2, '+'), (1, 'o'), (0, '-')]
-    
-    wortschatz = RadioField('Wortschatz', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    grammatik = RadioField('Grammatik', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    aussprache = RadioField('Aussprache', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    gespraechsverhalten = RadioField('Gesprächsverhalten', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    saetze_nachsprechen = RadioField('Sätze nachsprechen', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    reimen = RadioField('Reimen', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    pluralbildung = RadioField('Pluralbildung', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    woerter_segmentieren = RadioField('Wörter segmentieren', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    mengenerfassung = RadioField('Mengenerfassung', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    menge_herstellen = RadioField('Menge herstellen', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    zahlen_erkennen = RadioField('Zahlen erkennen', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    rueckwaerts_zaehlen = RadioField('Rückwärts zählen', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    zahlreihe_erzeugen = RadioField('Zahlreihe erzeugen', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    logische_reihe = RadioField('Logische Reihe', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    bild_malen = RadioField('Bild malen', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    komplexe_figur = RadioField('Komplexe Figur', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    
 
+    # Die einzelnen Beobachtungspunkte sind frei anlegbare Kriterien
+    # (sl_office.criteria); hier stehen nur die festen Angaben.
     gesamteindruck_kognitiv = RadioField('Gesamteindruck Kognitiv (Vorschlag)', choices=CHOICES, coerce=int, validators=[InputRequired()])
     gesamteindruck_verhalten = RadioField('Gesamteindruck Verhalten', choices=CHOICES, coerce=int, validators=[InputRequired()])
     
@@ -90,34 +87,7 @@ class DiagnostikForm(FlaskForm):
     submit = SubmitField('Speichern')
 
 class SchulspielForm(FlaskForm):
-    CHOICES = [(3, '++'), (2, '+'), (1, 'o'), (0, '-')]
-    
-    aufgabenverstaendnis = RadioField('Aufgabenverständnis', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    konzentration = RadioField('Konzentration', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    anstrengungsbereitschaft = RadioField('Anstrengungsbereitschaft', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    merkfaehigkeit = RadioField('Merkfähigkeit', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    ausdauer = RadioField('Ausdauer', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    selbstbewusstsein = RadioField('Selbstbewusstsein', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    kontaktfaehigkeit = RadioField('Kontaktfähigkeit', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    regelverhalten = RadioField('Regelverhalten', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    versteht_anweisungen = RadioField('Versteht Anweisungen', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    ausdruck_altersangemessen = RadioField('Ausdruck altersangemessen', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    vollstaendige_saetze = RadioField('Vollständige Sätze', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    richtige_verbformen = RadioField('Richtige Verbformen', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    richtige_artikel = RadioField('Richtige Artikel', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    konzept_von_schrift = RadioField('Konzept von Schrift', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    schreibt_eigenen_namen = RadioField('Schreibt eigenen Namen', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    koerperkoordination = RadioField('Körperkoordination', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    fingerkoordination = RadioField('Fingerkoordination', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    farben_und_formen = RadioField('Farben und Formen', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    figur_grund_wahrnehmung = RadioField('Figur-Grund-Wahrnehmung', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    mengeninvarianz = RadioField('Mengeninvarianz', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    kognition = RadioField('Kognition', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    raum_lage_beziehung = RadioField('Raum-Lage-Beziehung', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    auditive_wahrnehmung = RadioField('Auditive Wahrnehmung', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    silben_segmentieren = RadioField('Silben segmentieren', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    reime_erkennen = RadioField('Reime erkennen', choices=CHOICES, coerce=int, validators=[InputRequired()])
-    
+    # Die Beobachtungspunkte sind frei anlegbare Kriterien (sl_office.criteria).
     pdf_datei = FileField('Schulspiel Scan (PDF)', validators=[FileAllowed(['pdf'], 'Nur PDF-Dateien!')])
     
     bemerkung = TextAreaField('Bemerkungen', validators=[Optional()])
@@ -149,6 +119,13 @@ class SchuelerForm(FlaskForm):
     bemerkung = TextAreaField('Interne Bemerkungen')
     submit = SubmitField('Datensatz Speichern')
 
+class StadtImportForm(FlaskForm):
+    file = FileField('Liste der Stadt (.xlsx oder .csv)', validators=[
+        InputRequired(),
+        FileAllowed(['xlsx', 'csv'], 'Nur XLSX- oder CSV-Dateien erlaubt!')
+    ])
+    submit = SubmitField('Hochladen')
+
 class SchuelerImportForm(FlaskForm):
     file = FileField('Excel-Datei (.xlsx)', validators=[
         InputRequired(),
@@ -157,63 +134,18 @@ class SchuelerImportForm(FlaskForm):
     submit = SubmitField('Importieren')
 
 class SchularztForm(FlaskForm):
-    datum = DateField('Untersuchungsdatum', format='%Y-%m-%d', validators=[Optional()])
-    
-    hoerfaehigkeit = SelectField('Hörfähigkeit/Audiometrie', choices=[
-        ('unauffällig', 'Unauffällig'), ('auffällig', 'Auffällig'), ('beobachten', 'Beobachten')
-    ], validators=[Optional()])
-    
-    sehfaehigkeit = SelectField('Sehfähigkeit', choices=[
-        ('unauffällig', 'unauffällig'),
-        ('auffällig', 'auffällig'),
-        ('Kontrolle empfohlen', 'Kontrolle empfohlen')
-    ], validators=[InputRequired()])
-    
-    haendigkeit = SelectField('Händigkeit', choices=[
-        ('rechts', 'rechts'),
-        ('links', 'links'),
-        ('beidhändig', 'beidhändig')
-    ], validators=[InputRequired()])
-    
-    erstsprache = StringField('Erstsprache', validators=[DataRequired()])
-    
-    ergebnis = SelectField('Ergebnis der Untersuchung', choices=[
-        ('keine Bedenken', 'keine Bedenken'),
-        ('erhebliche Bedenken', 'erhebliche Bedenken'),
-        ('Prüfung Sonderpäd. Förderbedarf', 'Prüfung sonderpädagogischer Förderbedarf empfohlen'),
-        ('vorzeitige Aufnahme nicht empfohlen', 'vorzeitige Aufnahme nicht empfohlen')
-    ], validators=[InputRequired()])
-    
-    # Checkboxen für Förderempfehlungen
-    
-    foerder_grobmotorik = BooleanField('Grobmotorik')
-    foerder_fein_visuomotorik = BooleanField('Fein- und Visuomotorik')
-    foerder_visuelle_wahrnehmung = BooleanField('Visuelle Wahrnehmung')
-    foerder_auditive_wahrnehmung = BooleanField('Auditive Wahrnehmung')
-    foerder_deutschkenntnisse = BooleanField('Deutschkenntnisse')
-    foerder_zahlen_mengen = BooleanField('Zahlen- und Mengenverständnis')
-    foerder_konzentration = BooleanField('Konzentration')
-    foerder_psychosozial = BooleanField('Psychosoziale Entwicklung')
-    
-    # Sprache Multi-Select
-    foerder_sprache = SelectMultipleField('Sprache (Mehrfachauswahl)', choices=[
-        ('Artikulation', 'Artikulation'),
-        ('Grammatik', 'Grammatik'),
-        ('Verständnis', 'Verständnis'),
-        ('Wortschatz', 'Wortschatz')
-    ], option_widget=widgets.CheckboxInput(), widget=widgets.ListWidget(prefix_label=False))
-    
+    # Befund und Förderempfehlungen sind frei anlegbare Kriterien
+    # (sl_office.criteria); hier stehen nur die festen Angaben.
     aosf_verdacht = BooleanField('Verdacht auf AO-SF')
     pdf_datei = FileField('Bericht hochladen (PDF)', validators=[FileAllowed(['pdf'], 'Nur PDF-Dateien!')])
-    
+
     bemerkung = TextAreaField('Sonstige Bemerkungen', validators=[Optional()])
-    
+
     # Gesamteinschätzung (Radio ähnlich Diagnostik)
     CHOICES = [(3, '++'), (2, '+'), (1, 'o'), (0, '-')]
     gesamteinschaetzung = RadioField('Gesamteinschätzung', choices=CHOICES, coerce=int, validators=[InputRequired()], default=3)
-    
-    submit = SubmitField('Speichern')
 
+    submit = SubmitField('Speichern')
 
 class AOSFProzessForm(FlaskForm):
     leitung_user_id = SelectField('Interne Zuständigkeit', coerce=int, validators=[Optional()])

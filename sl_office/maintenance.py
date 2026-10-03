@@ -1,14 +1,12 @@
 """Prüfläufe über den gespeicherten Datenbestand.
 
-Zwei Dinge lassen sich im laufenden Betrieb nicht zuverlässig verhindern und
-müssen deshalb nachträglich prüfbar sein: verwaiste Elternportal-Zeilen aus der
-Zeit, als die Löschung eines Kindes sie stehen ließ (SQLite vergibt die
-freigewordene Zeilennummer neu, ein später angelegtes Kind konnte sie erben),
-und die Kann-Kind-Kennzeichen, die an vielen Stellen fortgeschrieben werden.
+Die Kann-Kind-Kennzeichen werden an vielen Stellen fortgeschrieben und müssen
+deshalb nachträglich prüfbar sein, ebenso Zahlendreher in Geburtsdaten und
+Dubletten aus dem Import.
 
-Beide Kommandos melden zunächst nur; ``--fix`` bzw. ``--delete`` greift ein.
-Ohne Anfrage-Kontext hebt der Jahrgangsfilter aus ``sl_office/school_year`` sich
-selbst auf -- die Prüfung sieht deshalb alle Jahrgänge, nicht nur den offenen.
+Die Kommandos melden zunächst nur; ``--fix`` greift ein. Ohne Anfrage-Kontext
+hebt der Jahrgangsfilter aus ``sl_office/school_year`` sich selbst auf -- die
+Prüfung sieht deshalb alle Jahrgänge, nicht nur den offenen.
 """
 
 import datetime
@@ -16,57 +14,14 @@ import os
 
 import click
 from flask.cli import with_appcontext
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 
 from models import Diagnostik, Schueler, db
-from sl_office.parent_portal.models import (
-    ActivationGrant, AppointmentBooking, ParentAccess, ParentLoginToken, ParentRegistration,
-)
 from sl_office.services.student_classification import ist_kann_kind, stichtag
 
 
 def _ja_nein(wert):
     return "Ja" if wert else "Nein"
-
-
-#: Tabellen, die über ``schueler_id`` an einem Kind hängen.
-_STUDENT_TABLES = (ParentAccess, ActivationGrant, ParentRegistration, AppointmentBooking)
-
-
-def orphaned_portal_records():
-    """Verwaiste Zeilen je Tabelle: {Tabellenname: [Zeilen-ID, ...]}."""
-    known = select(Schueler.id)
-    found = {}
-    for model in _STUDENT_TABLES:
-        ids = list(db.session.scalars(
-            select(model.id).where(model.schueler_id.not_in(known))))
-        if ids:
-            found[model.__tablename__] = ids
-    accesses = select(ParentAccess.id)
-    tokens = list(db.session.scalars(
-        select(ParentLoginToken.id).where(ParentLoginToken.parent_access_id.not_in(accesses))))
-    if tokens:
-        found[ParentLoginToken.__tablename__] = tokens
-    return found
-
-
-def delete_orphaned_portal_records():
-    """Verwaiste Zeilen entfernen; liefert die Zahl je Tabelle."""
-    removed = {}
-    known = select(Schueler.id)
-    # Anmeldelinks zuerst: sie hängen an den Zugängen, die gleich fallen.
-    orphan_accesses = select(ParentAccess.id).where(ParentAccess.schueler_id.not_in(known))
-    count = db.session.execute(delete(ParentLoginToken).where(
-        ParentLoginToken.parent_access_id.in_(orphan_accesses))).rowcount
-    if count:
-        removed[ParentLoginToken.__tablename__] = count
-    for model in _STUDENT_TABLES:
-        count = db.session.execute(
-            delete(model).where(model.schueler_id.not_in(known))).rowcount
-        if count:
-            removed[model.__tablename__] = count
-    db.session.commit()
-    return removed
 
 
 # --- Kann-Kinder ------------------------------------------------------------
@@ -163,51 +118,6 @@ def kann_kind_kennzeichen_richtigstellen(falsch):
     return len(falsch)
 
 
-def kita_mit_elternnamen():
-    """Kinder, bei denen in der Kita-Spalte ein Elternname steht.
-
-    Beim Import der Städteliste lässt sich dieselbe Spalte versehentlich
-    mehrfach zuordnen; dann trägt die Kita den Namen einer erziehungs-
-    berechtigten Person. Auffallen tut das erst spät -- etwa auf dem
-    gedruckten Protokollbogen des Anmeldespiels.
-
-    Liefert ``[(kind, ersatz), ...]``. ``ersatz`` ist die Einrichtung aus dem
-    Anmeldeformular der Eltern, sofern sie sie angegeben haben -- die Familie
-    weiß es besser als jede importierte Spalte.
-    """
-    from sl_office.appointments.protocol_pdf import kita_aus_anmeldung
-
-    befunde = []
-    for kind in db.session.scalars(
-            select(Schueler).order_by(Schueler.einschulungsjahr, Schueler.nachname)):
-        kita = (kind.kita or "").strip()
-        if not kita:
-            continue
-        namen = {(kind.erzb_1_name or "").strip(), (kind.erzb_2_name or "").strip()} - {""}
-        if kita in namen:
-            befunde.append(kind)
-    aus_anmeldung = kita_aus_anmeldung([kind.id for kind in befunde])
-    return [(kind, aus_anmeldung.get(kind.id)) for kind in befunde]
-
-
-def kita_eintraege_richtigstellen(befunde):
-    """Die Angabe der Eltern eintragen, sonst das falsche Feld leeren.
-
-    Liefert ``(ersetzt, geleert)``. Wo die Eltern nichts angegeben haben, bleibt
-    das Feld leer: Die richtige Einrichtung steht dann nirgends in der
-    Anwendung, und ein Elternname wäre schlechter als gar nichts.
-    """
-    ersetzt = geleert = 0
-    for kind, ersatz in befunde:
-        kind.kita = ersatz or None
-        if ersatz:
-            ersetzt += 1
-        else:
-            geleert += 1
-    db.session.commit()
-    return ersetzt, geleert
-
-
 def _kann_kind_hinweis(kind, neues_datum, jahr):
     """Vermerk, wenn eine Datumskorrektur die Einschulungsentscheidung dreht."""
     vorher = ist_kann_kind(kind.geburtsdatum, jahr)
@@ -218,25 +128,6 @@ def _kann_kind_hinweis(kind, neues_datum, jahr):
 
 
 def register_cli(app):
-    @app.cli.command("check-orphans")
-    @click.option("--delete", "remove", is_flag=True,
-                  help="Gefundene Zeilen löschen statt nur zu melden.")
-    @with_appcontext
-    def check_orphans(remove):
-        """Elternportal-Daten ohne zugehöriges Kind suchen (und auf Wunsch löschen)."""
-        found = orphaned_portal_records()
-        if not found:
-            click.echo("Keine verwaisten Datensätze gefunden.")
-            return
-        for table, ids in found.items():
-            click.echo(f"{table}: {len(ids)} verwaiste Zeile(n) -- ids {ids}")
-        if not remove:
-            click.echo("\nZum Entfernen: flask --app app check-orphans --delete")
-            return
-        removed = delete_orphaned_portal_records()
-        for table, count in removed.items():
-            click.echo(f"gelöscht aus {table}: {count}")
-
     @app.cli.command("check-kann-kinder")
     @click.option("--fix", "fix", is_flag=True,
                   help="Falsche Kennzeichen richtigstellen statt nur zu melden.")
@@ -296,33 +187,6 @@ def register_cli(app):
         click.echo(f"\n{kann_kind_kennzeichen_richtigstellen(falsch)} Kennzeichen "
                    "richtiggestellt.")
 
-    @app.cli.command("check-kita")
-    @click.option("--fix", "fix", is_flag=True,
-                  help="Falsche Einträge leeren statt nur zu melden.")
-    @with_appcontext
-    def check_kita(fix):
-        """Kita-Angaben suchen, in denen ein Elternname steht."""
-        befunde = kita_mit_elternnamen()
-        if not befunde:
-            click.echo("Keine Kita-Angabe trägt einen Elternnamen.")
-            return
-        mit_ersatz = sum(1 for _kind, ersatz in befunde if ersatz)
-        click.echo(f"Kita-Angabe ist ein Elternname: {len(befunde)} "
-                   f"({mit_ersatz} davon stehen im Anmeldeformular der Eltern)")
-        for kind, ersatz in befunde:
-            click.echo(f"  id={kind.id:<5} {kind.vorname} {kind.nachname} "
-                       f"(ESJ {kind.einschulungsjahr}): „{kind.kita}“ -> "
-                       + (f"„{ersatz}“" if ersatz else "leer (Eltern haben nichts angegeben)"))
-        if not fix:
-            click.echo("\nZum Richtigstellen: flask --app app check-kita --fix")
-            click.echo("Wo die Eltern nichts angegeben haben, bleibt das Feld leer. Die "
-                       "Einrichtung lässt sich danach über „Liste der Stadt“ mit richtiger "
-                       "Spaltenzuordnung nachtragen.")
-            return
-        ersetzt, geleert = kita_eintraege_richtigstellen(befunde)
-        click.echo(f"\n{ersetzt} Einträge aus dem Anmeldeformular übernommen, "
-                   f"{geleert} geleert.")
-
     @app.cli.command("check-schriften")
     @with_appcontext
     def check_schriften():
@@ -332,7 +196,7 @@ def register_cli(app):
         weicht ReportLab stillschweigend auf eine PDF-Standardschrift aus -- die
         Briefe entstehen dann zwar, sehen aber anders aus als beabsichtigt.
         """
-        from sl_office.parent_portal.letterhead import _CANDIDATES, _FALLBACK, _font_files
+        from sl_office.briefe.letterhead import _CANDIDATES, _FALLBACK, _font_files
 
         dateien = _font_files()
         fehlend = []

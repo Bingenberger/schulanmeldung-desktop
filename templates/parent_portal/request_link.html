@@ -1,4 +1,0 @@
-{% extends 'base.html' %}
-{% block content %}
-<div class="mx-auto" style="max-width: 42rem"><h1>Zugangslink anfordern</h1><p>Geben Sie eine der hinterlegten E-Mail-Adressen ein. Aus Sicherheitsgründen zeigen wir immer dieselbe Rückmeldung.</p><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="mb-3"><label class="form-label">E-Mail-Adresse</label><input class="form-control" type="email" name="email" required maxlength="320"></div><button class="btn btn-primary">Link anfordern</button></form></div>
-{% endblock %}

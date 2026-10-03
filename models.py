@@ -235,15 +235,21 @@ class SchulspielDiagnostik(db.Model):
     reime_erkennen = db.Column(db.Integer)
     
     gesamtwert = db.Column(db.Integer, default=0)
+    #: Erreichbarer Höchstwert beim Speichern; er hängt am Kriterienkatalog.
+    #: Ältere Einträge haben keinen und stammen aus dem Bogen mit 25 Punkten.
+    gesamtwert_max = db.Column(db.Integer, nullable=True)
     pdf_dateiname = db.Column(db.String(255))
     bemerkung = db.Column(db.Text)
-    
+
+    @property
+    def hoechstwert(self):
+        return self.gesamtwert_max or 75
+
     @property
     def gesamttendenz(self):
         if self.gesamtwert is None:
             return None
-        # Max score is 25 * 3 = 75
-        avg = self.gesamtwert / 25
+        avg = self.gesamtwert / (self.hoechstwert / 3)
         if avg >= 2.5:
             return 3  # ++
         elif avg >= 1.5:
@@ -370,3 +376,21 @@ class GlobalSettings(db.Model):
     einschulungsjahr = db.Column(db.Integer,  default=2026) # Default für Laufzeit
     frist_aosf = db.Column(db.Date, nullable=True) # Optional
     anzahl_klassen = db.Column(db.Integer, default=3)
+
+
+def utcnow():
+    return datetime.datetime.now(datetime.UTC)
+
+
+class AuditEvent(db.Model):
+    """Minimal immutable audit record; never store tokens or form payloads here."""
+    __tablename__ = "audit_event"
+    id = db.Column(db.Integer, primary_key=True)
+    occurred_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow, index=True)
+    actor_type = db.Column(db.String(20), nullable=False)
+    actor_id = db.Column(db.Integer)
+    action = db.Column(db.String(80), nullable=False, index=True)
+    object_type = db.Column(db.String(80), nullable=False)
+    object_id = db.Column(db.Integer)
+    outcome = db.Column(db.String(20), nullable=False, default="success")
+    request_id = db.Column(db.String(64))

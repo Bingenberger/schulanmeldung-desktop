@@ -95,140 +95,54 @@
   {# ---- Diagnostik-Übersicht (2 Spalten) ---- #}
   <div class="row g-3 mb-3">
 
-    {# Sprache & Schriftsprache → LRS / Deutsch #}
+    {# Beobachtungen aus den Bögen, so gegliedert wie im Kriterienkatalog #}
+    {% for titel, gruppen, farbe in [('Diagnostik', diag_gruppen, '#0a5299'), ('Schulspiel', spiel_gruppen, '#2a7a2a')] %}
+    {% for gruppe, eintraege in gruppen %}
+    {% if eintraege|selectattr('1', 'ne', none)|list %}
+    <div class="col-md-6">
+      <div class="card h-100 shadow-sm">
+        <div class="card-header py-2 bg-light">
+          <strong style="color:{{ farbe }};">{{ gruppe or titel }}</strong>
+          <small class="text-muted float-end">{{ titel }}</small>
+        </div>
+        <div class="card-body p-2">
+          <table class="table table-sm table-borderless mb-0" style="font-size:.85rem;">
+            {% for k, wert in eintraege %}
+            <tr>
+              <td class="py-0 text-muted">{{ k.bezeichnung }}</td>
+              <td class="py-0 text-end fw-bold">
+                {% if k.typ == 'skala' %}{{ render_score(wert) }}
+                {% elif k.typ == 'janein' %}{{ 'ja' if wert else '–' }}
+                {% elif k.typ == 'mehrfach' %}{{ (wert or [])|join(', ') or '–' }}
+                {% elif k.typ == 'datum' %}{{ wert.strftime('%d.%m.%Y') if wert else '–' }}
+                {% else %}{{ wert or '–' }}{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+    {% endfor %}
+
+    {% if arzt %}
     <div class="col-md-6">
       <div class="card h-100 shadow-sm">
         <div class="card-header py-2" style="background:#fff0eb;">
-          <strong style="color:#b5451b;"><i class="bi bi-chat-text"></i> Sprache & Schriftsprache</strong>
-          <small class="text-muted float-end">→ LRS / Deutsch</small>
+          <strong style="color:#b5451b;"><i class="bi bi-heart-pulse"></i> Förderhinweise Schularzt</strong>
         </div>
-        <div class="card-body p-2">
-          {% if diag %}
-          <table class="table table-sm table-borderless mb-0" style="font-size:.85rem;">
-            {% for label, val in [
-              ('Wortschatz',         diag.wortschatz),
-              ('Grammatik',          diag.grammatik),
-              ('Aussprache',         diag.aussprache),
-              ('Gesprächsverhalten', diag.gespraechsverhalten),
-              ('Sätze nachsprechen', diag.saetze_nachsprechen),
-              ('Reimen',             diag.reimen),
-              ('Pluralbildung',      diag.pluralbildung),
-              ('Wörter segmentieren',diag.woerter_segmentieren),
-            ] %}
-            <tr>
-              <td class="py-0 text-muted">{{ label }}</td>
-              <td class="py-0 text-end fw-bold">{{ render_score(val) }}</td>
-            </tr>
-            {% endfor %}
-          </table>
-          {% if arzt %}
-          <hr class="my-1">
-          <div class="small">
-            <span class="text-muted">Deutsch (Arzt):</span>
-            {% if arzt.foerder_deutschkenntnisse %}<span class="badge bg-danger">Förderbedarf</span>{% else %}<span class="text-success">–</span>{% endif %}
-            {% if arzt.foerder_auditive_wahrnehmung %}<span class="badge bg-danger ms-1">Audit. Wahrn.</span>{% endif %}
-            {% if arzt.foerder_sprache %}
-              {% for item in arzt.foerder_sprache.split(',') %}
-              <span class="badge bg-warning text-dark ms-1">{{ item.strip() }}</span>
-              {% endfor %}
-            {% endif %}
-          </div>
-          {% endif %}
+        <div class="card-body p-2 d-flex flex-wrap gap-1">
+          {% for hinweis in foerderhinweise %}
+          <span class="badge bg-danger">{{ hinweis }}</span>
           {% else %}
-          <span class="text-muted fst-italic small">Keine Diagnostik erfasst.</span>
-          {% endif %}
+          <span class="text-success small">kein Förderbedarf vermerkt</span>
+          {% endfor %}
         </div>
       </div>
     </div>
-
-    {# Mathematik → Mathe #}
-    <div class="col-md-6">
-      <div class="card h-100 shadow-sm">
-        <div class="card-header py-2" style="background:#e8f0fb;">
-          <strong style="color:#0a5299;"><i class="bi bi-calculator"></i> Mathematik</strong>
-          <small class="text-muted float-end">→ Mathe</small>
-        </div>
-        <div class="card-body p-2">
-          {% if diag %}
-          <table class="table table-sm table-borderless mb-0" style="font-size:.85rem;">
-            {% for label, val in [
-              ('Mengenerfassung',   diag.mengenerfassung),
-              ('Menge herstellen',  diag.menge_herstellen),
-              ('Zahlen erkennen',   diag.zahlen_erkennen),
-              ('Rückwärts zählen',  diag.rueckwaerts_zaehlen),
-              ('Zahlreihe erzeugen',diag.zahlreihe_erzeugen),
-              ('Logische Reihe',    diag.logische_reihe),
-            ] %}
-            <tr>
-              <td class="py-0 text-muted">{{ label }}</td>
-              <td class="py-0 text-end fw-bold">{{ render_score(val) }}</td>
-            </tr>
-            {% endfor %}
-          </table>
-          {% if arzt and arzt.foerder_zahlen_mengen %}
-          <hr class="my-1">
-          <span class="badge bg-danger small">Arzt: Zahlen/Mengen Förderbedarf</span>
-          {% endif %}
-          {% else %}
-          <span class="text-muted fst-italic small">Keine Diagnostik erfasst.</span>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-
-    {# Motorik & Wahrnehmung → Sport #}
-    <div class="col-md-6">
-      <div class="card h-100 shadow-sm">
-        <div class="card-header py-2" style="background:#edfaed;">
-          <strong style="color:#2a7a2a;"><i class="bi bi-activity"></i> Motorik & Wahrnehmung</strong>
-          <small class="text-muted float-end">→ Sport</small>
-        </div>
-        <div class="card-body p-2">
-          {% if diag %}
-          <table class="table table-sm table-borderless mb-0" style="font-size:.85rem;">
-            {% for label, val in [
-              ('Bild malen',     diag.bild_malen),
-              ('Komplexe Figur', diag.komplexe_figur),
-            ] %}
-            <tr>
-              <td class="py-0 text-muted">{{ label }}</td>
-              <td class="py-0 text-end fw-bold">{{ render_score(val) }}</td>
-            </tr>
-            {% endfor %}
-          </table>
-          {% endif %}
-          {% if spiel %}
-          <hr class="my-1">
-          <table class="table table-sm table-borderless mb-0" style="font-size:.85rem;">
-            {% for label, val in [
-              ('Körperkoordination', spiel.koerperkoordination),
-              ('Fingerkoordination', spiel.fingerkoordination),
-            ] %}
-            <tr>
-              <td class="py-0 text-muted">{{ label }}</td>
-              <td class="py-0 text-end fw-bold">{{ render_score(val) }}</td>
-            </tr>
-            {% endfor %}
-          </table>
-          {% endif %}
-          {% if arzt %}
-          <hr class="my-1">
-          <div class="small">
-            <span class="text-muted">Arzt:</span>
-            {% if arzt.foerder_grobmotorik %}<span class="badge bg-danger ms-1">Grobmotorik</span>{% endif %}
-            {% if arzt.foerder_fein_visuomotorik %}<span class="badge bg-danger ms-1">Feinmotorik</span>{% endif %}
-            {% if arzt.foerder_visuelle_wahrnehmung %}<span class="badge bg-danger ms-1">Visuell</span>{% endif %}
-            {% if not arzt.foerder_grobmotorik and not arzt.foerder_fein_visuomotorik and not arzt.foerder_visuelle_wahrnehmung %}
-            <span class="text-success">kein Förderbedarf</span>
-            {% endif %}
-          </div>
-          {% endif %}
-          {% if not diag and not spiel and not arzt %}
-          <span class="text-muted fst-italic small">Keine Daten erfasst.</span>
-          {% endif %}
-        </div>
-      </div>
-    </div>
+    {% endif %}
 
     {# Gesamteindrücke #}
     <div class="col-md-6">
@@ -246,7 +160,7 @@
           {% if spiel %}
           <div class="mb-2">
             Schulspiel: <strong>{{ render_score(spiel.gesamttendenz) }}</strong>
-            <span class="text-muted small">({{ spiel.gesamtwert }}/75)</span>
+            <span class="text-muted small">({{ spiel.gesamtwert }}/{{ spiel.hoechstwert }})</span>
           </div>
           {% endif %}
           {% if arzt %}

@@ -1,0 +1,96 @@
+# Baut die Windows-Fassung: Tests, PyInstaller, Setup mit Inno Setup.
+# Bei jedem Push liegt das Ergebnis als Artefakt am Workflow-Lauf; ein Tag
+# "v1.2.3" legt zusätzlich ein Release mit dem Setup an.
+name: Windows-Build
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Abhängigkeiten
+        run: pip install -r requirements.txt -r requirements-desktop.txt
+      - name: Tests
+        env:
+          SL_OFFICE_ENV: testing
+        run: python -m unittest discover -s tests -t .
+
+  build:
+    needs: tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Abhängigkeiten
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-desktop.txt
+
+      - name: Version
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.0.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: PyInstaller
+        run: pyinstaller packaging/sl-office.spec --noconfirm
+
+      - name: Probestart der gebauten Fassung
+        shell: pwsh
+        run: |
+          $env:SL_OFFICE_DATA_DIR = "$env:RUNNER_TEMP\sl-office-probe"
+          $proc = Start-Process -FilePath "dist\SL-Office\SL-Office.exe" -PassThru
+          $ok = $false
+          for ($i = 0; $i -lt 60; $i++) {
+            Start-Sleep -Seconds 1
+            if (Test-Path "$env:SL_OFFICE_DATA_DIR\laufende-instanz.json") {
+              $port = (Get-Content "$env:SL_OFFICE_DATA_DIR\laufende-instanz.json" | ConvertFrom-Json).port
+              try {
+                $antwort = Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:$port/lebenszeichen"
+                if ($antwort.Content.Trim() -eq "SL-Office") { $ok = $true; break }
+              } catch {}
+            }
+          }
+          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          Get-Content "$env:SL_OFFICE_DATA_DIR\sl-office.log" -ErrorAction SilentlyContinue | Select-Object -Last 20
+          if (-not $ok) { throw "SL-Office hat nicht geantwortet." }
+
+      - name: Setup bauen
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=${{ steps.version.outputs.version }}" packaging\sl-office.iss
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SL-Office-Setup-${{ steps.version.outputs.version }}
+          path: dist/SL-Office-Setup-*.exe
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/SL-Office-Setup-*.exe

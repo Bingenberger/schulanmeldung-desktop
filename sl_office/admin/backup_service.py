@@ -60,9 +60,13 @@ def database_snapshot(app):
         staging.unlink(missing_ok=True)
 
 
-def create_backup(app, include_uploads=True):
-    """Write a timestamped folder with the database and the uploads."""
-    name = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
+def create_backup(app, include_uploads=True, prefix=""):
+    """Write a timestamped folder with the database and the uploads.
+
+    ``prefix`` marks automatic backups (``auto-``) so that pruning them never
+    touches the ones made by hand.
+    """
+    name = prefix + datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
     target = backup_root(app) / name
     suffix = 1
     while target.exists():
@@ -110,13 +114,7 @@ def list_backups(app):
 
 def delete_backup(app, name):
     """Remove one backup folder, refusing anything outside the backup root."""
-    root = backup_root(app).resolve()
-    if not name or "/" in name or "\\" in name or name.startswith("."):
-        raise BackupError("Ungültiger Name der Sicherung.")
-    target = (root / name).resolve()
-    if target.parent != root or not target.is_dir():
-        raise BackupError("Diese Sicherung wurde nicht gefunden.")
-    shutil.rmtree(target)
+    shutil.rmtree(_backup_folder(app, name))
 
 
 def human_size(number):
@@ -124,3 +122,111 @@ def human_size(number):
         if number < 1024 or unit == "GB":
             return f"{number:.0f} {unit}" if unit == "B" else f"{number:.1f} {unit}"
         number /= 1024
+
+
+# --- Wiederherstellen -------------------------------------------------------------
+
+#: Vor jedem Zurückspielen wird der aktuelle Stand so gesichert; ein Versehen
+#: lässt sich damit seinerseits wieder zurücknehmen.
+BEFORE_RESTORE_PREFIX = "vor-wiederherstellung-"
+#: Tabellen, an denen eine SL-Office-Datenbank zu erkennen ist.
+REQUIRED_TABLES = {"schueler", "user"}
+
+
+def _backup_folder(app, name):
+    """Den Ordner einer vorhandenen Sicherung, nur innerhalb des Sicherungsordners."""
+    root = backup_root(app).resolve()
+    if not name or "/" in name or "\\" in name or name.startswith("."):
+        raise BackupError("Ungültiger Name der Sicherung.")
+    target = (root / name).resolve()
+    if target.parent != root or not target.is_dir():
+        raise BackupError("Diese Sicherung wurde nicht gefunden.")
+    return target
+
+
+def check_database(path: Path):
+    """Prüft, ob ``path`` eine unbeschädigte SL-Office-Datenbank ist."""
+    try:
+        with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as connection:
+            if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                raise BackupError("Die Datenbank in der Sicherung ist beschädigt.")
+            tables = {row[0] for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'")}
+    except sqlite3.DatabaseError as exc:
+        raise BackupError("Die Datei ist keine SL-Office-Datenbank.") from exc
+    if not REQUIRED_TABLES <= tables:
+        raise BackupError("Die Datei ist keine SL-Office-Datenbank.")
+    return "alembic_version" in tables
+
+
+def _bring_schema_up_to_date(app, versioned):
+    """Eine ältere Sicherung auf den Stand dieser Programmversion bringen."""
+    from models import db
+
+    if versioned:
+        from flask_migrate import upgrade
+        upgrade(directory=str(Path(app.root_path) / "migrations"))
+    else:
+        # Ohne Versionsvermerk (mit create_all angelegt): fehlende Tabellen ergänzen.
+        db.create_all()
+
+
+def _copy_into_live_database(app, source: Path):
+    """Den Inhalt von ``source`` über die Online-Backup-API in die laufende Datenbank schreiben.
+
+    So wird die Datei nicht ersetzt, während die Anwendung sie geöffnet hat;
+    offene Verbindungen werden vorher geschlossen.
+    """
+    from models import db
+
+    target = _database_path(app)
+    db.session.remove()
+    db.engine.dispose()
+    with sqlite3.connect(f"file:{source}?mode=ro", uri=True) as origin, \
+            sqlite3.connect(target) as destination:
+        origin.backup(destination)
+    db.engine.dispose()
+
+
+def _replace_uploads(app, source: Path):
+    uploads = Path(app.config.get("UPLOAD_FOLDER", ""))
+    if not uploads:
+        return
+    if uploads.exists():
+        shutil.rmtree(uploads)
+    shutil.copytree(source, uploads)
+
+
+def restore(app, database: Path, uploads: Path = None):
+    """Datenbank (und, falls vorhanden, Dokumente) zurückspielen.
+
+    Liefert den Ordner der Sicherung, die vom bisherigen Stand angelegt wurde.
+    """
+    versioned = check_database(database)
+    safety = create_backup(app, include_uploads=True, prefix=BEFORE_RESTORE_PREFIX)
+    _copy_into_live_database(app, database)
+    if uploads is not None and uploads.is_dir():
+        _replace_uploads(app, uploads)
+    _bring_schema_up_to_date(app, versioned)
+    return safety
+
+
+def restore_backup(app, name):
+    """Eine Sicherung aus der Liste zurückspielen."""
+    folder = _backup_folder(app, name)
+    database = folder / "database.db"
+    if not database.is_file():
+        raise BackupError("Diese Sicherung enthält keine Datenbank.")
+    return restore(app, database, folder / "uploads")
+
+
+def restore_upload(app, payload: bytes):
+    """Eine heruntergeladene Datenbankdatei zurückspielen; Dokumente bleiben unberührt."""
+    if not payload.startswith(b"SQLite format 3\x00"):
+        raise BackupError("Die Datei ist keine SL-Office-Datenbank.")
+    staging = backup_root(app) / f".upload-{os.getpid()}.db"
+    try:
+        staging.write_bytes(payload)
+        return restore(app, staging)
+    finally:
+        staging.unlink(missing_ok=True)

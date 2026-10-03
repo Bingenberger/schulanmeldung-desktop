@@ -8,21 +8,20 @@
     </div>
 </div>
 
-<!-- Statistik Karten -->
+<!-- Statistik Karten: nur für eingeschaltete Module -->
 
-<!-- Statistik Karten -->
-
-<div class="row mb-4">
-    <div class="col-md-3">
+<div class="row row-cols-1 row-cols-md-4 g-3 mb-4">
+    <div class="col">
         <div class="card bg-primary text-white h-100 shadow-sm">
             <div class="card-body text-center px-1">
                 <h6 class="card-title text-uppercase small mb-2"><i class="bi bi-people-fill"></i> Gesamt</h6>
                 <p class="display-6 fw-bold mb-0">{{ stats.count_total }}</p>
-                <small class="text-white-50">(ohne Rückstellungen)</small>
+                {% if modules.rueckstellung %}<small class="text-white-50">(ohne Rückstellungen)</small>{% endif %}
             </div>
         </div>
     </div>
-    <div class="col-md-3">
+    {% if modules.schulspiel %}
+    <div class="col">
         <div class="card bg-success text-white h-100 shadow-sm">
             <div class="card-body text-center px-1">
                 <h6 class="card-title text-uppercase small mb-2"><i class="bi bi-dice-5"></i> Schulspiel</h6>
@@ -30,7 +29,9 @@
             </div>
         </div>
     </div>
-    <div class="col-md-3">
+    {% endif %}
+    {% if modules.diagnostik %}
+    <div class="col">
         <div class="card bg-warning text-dark h-100 shadow-sm">
             <div class="card-body text-center px-1">
                 <h6 class="card-title text-uppercase small mb-2"><i class="bi bi-clipboard-x"></i> Offene Diag.</h6>
@@ -38,7 +39,9 @@
             </div>
         </div>
     </div>
-    <div class="col-md-3">
+    {% endif %}
+    {% if modules.schularzt %}
+    <div class="col">
         <div class="card bg-danger text-white h-100 shadow-sm">
             <div class="card-body text-center px-1">
                 <h6 class="card-title text-uppercase small mb-2"><i class="bi bi-heart-pulse"></i> Offene Ärzte</h6>
@@ -46,11 +49,13 @@
             </div>
         </div>
     </div>
+    {% endif %}
 </div>
 
-<div class="row mb-5">
-    <!-- AO-SF Stats Combined -->
-    <div class="col-md-6">
+{% if modules.aosf or modules.rueckstellung %}
+<div class="row row-cols-1 row-cols-md-2 g-3 mb-5">
+    {% if modules.aosf %}
+    <div class="col">
         <div class="card bg-info text-dark h-100 shadow-sm">
             <div class="card-body px-2">
                 <h6 class="card-title text-uppercase small mb-3 text-center"><i class="bi bi-folder-fill"></i> AO-SF
@@ -68,8 +73,9 @@
             </div>
         </div>
     </div>
-    <!-- Rückstellung Stats -->
-    <div class="col-md-6">
+    {% endif %}
+    {% if modules.rueckstellung %}
+    <div class="col">
         <div class="card text-white h-100 shadow-sm" style="background-color: #6610f2;">
             <div class="card-body px-2">
                 <h6 class="card-title text-uppercase small mb-3 text-center"><i class="bi bi-arrow-return-left"></i>
@@ -87,7 +93,9 @@
             </div>
         </div>
     </div>
+    {% endif %}
 </div>
+{% endif %}
 
 <!-- Arbeitsbereiche: gleiche Gliederung wie das Menü oben -->
 
@@ -118,29 +126,32 @@
 {% if may_manage %}
 <h4 class="text-muted border-bottom pb-2 mb-3"><i class="bi bi-envelope-paper"></i> Anmeldung</h4>
 <div class="row g-3 mb-5">
-  {{ tile(url_for('admin.parent_letters'), 'bi-envelope-paper-fill', 'Elternbriefe', 'Zugangsschreiben mit Link und QR-Code drucken.', 'danger') }}
-  {{ tile(url_for('appointments.index'), 'bi-calendar-week', 'Termine', 'Gesprächsfenster planen und vergeben.', 'primary') }}
-  {{ tile(url_for('admin.registrations'), 'bi-file-earmark-person', 'Anmeldungen', 'Eingegangene Formulare der Eltern prüfen.', 'info') }}
-  {{ tile(url_for('admin.parent_accesses'), 'bi-envelope-lock', 'Elternzugänge', 'Zugänge einsehen, sperren oder freigeben.', 'secondary') }}
-  {{ tile(url_for('open_day.index'), 'bi-door-open-fill', 'Tag der offenen Tür', 'Rückmeldungen auswerten und Gruppen einteilen.', 'warning') }}
+  {{ tile(url_for('admin.parent_letters'), 'bi-envelope-paper-fill', 'Elternbriefe', 'Einladungen zur Schulanmeldung drucken.', 'danger') }}
+  {% if modules.termine %}{{ tile(url_for('appointments.index'), 'bi-calendar-week', 'Termine', 'Gesprächsfenster planen und vergeben.', 'primary') }}{% endif %}
 </div>
 {% endif %}
 
+{% if modules.diagnostik or modules.schulspiel or modules.schularzt or modules.kita_bericht %}
 <h4 class="text-muted border-bottom pb-2 mb-3"><i class="bi bi-activity"></i> Diagnostik</h4>
 <div class="row g-3 mb-5">
-  {{ tile(url_for('students.select', target='diagnostik'), 'bi-journal-plus', 'Pädagogische Diagnostik', 'Diagnostik für ein Kind erfassen.', 'info') }}
-  {{ tile(url_for('students.select', target='schulspiel'), 'bi-dice-5', 'Schulspiel', 'Diagnostikbogen Schulspiel erfassen.', 'success') }}
-  {{ tile(url_for('students.select', target='schularzt'), 'bi-file-medical-fill', 'Bericht Schularzt', 'Ergebnisse der Untersuchung eintragen.', 'danger') }}
-  {{ tile(url_for('students.select', target='kita_bericht'), 'bi-house-heart-fill', 'Bericht Kita', 'Einschätzung der Kita erfassen.', 'warning') }}
+  {% if modules.diagnostik %}{{ tile(url_for('students.select', target='diagnostik'), 'bi-journal-plus', 'Pädagogische Diagnostik', 'Diagnostik für ein Kind erfassen.', 'info') }}{% endif %}
+  {% if modules.schulspiel %}{{ tile(url_for('students.select', target='schulspiel'), 'bi-dice-5', 'Schulspiel', 'Diagnostikbogen Schulspiel erfassen.', 'success') }}{% endif %}
+  {% if modules.schularzt %}{{ tile(url_for('students.select', target='schularzt'), 'bi-file-medical-fill', 'Bericht Schularzt', 'Ergebnisse der Untersuchung eintragen.', 'danger') }}{% endif %}
+  {% if modules.kita_bericht %}{{ tile(url_for('students.select', target='kita_bericht'), 'bi-house-heart-fill', 'Bericht Kita', 'Einschätzung der Kita erfassen.', 'warning') }}{% endif %}
 </div>
+{% endif %}
 
+{% if modules.klassenbildung or modules.betreuung or modules.foerderkurse %}
 <h4 class="text-muted border-bottom pb-2 mb-3"><i class="bi bi-grid-3x3-gap-fill"></i> Klassenbildung</h4>
 <div class="row g-3 mb-4">
+  {% if modules.klassenbildung %}
   {{ tile(url_for('klassenzusammensetzung'), 'bi-grid-3x3-gap-fill', 'Klassen zusammenstellen', 'Kinder per Drag &amp; Drop den Klassen zuteilen.') }}
   {{ tile(url_for('students.select', target='freunde'), 'bi-people-fill', 'Freundeswünsche', 'Freunde und Negativwünsche erfassen.', 'dark') }}
-  {{ tile(url_for('betreuung_bulk'), 'bi-clock-history', 'Betreuungsformen', 'OGS / ÜMI / Abholung festlegen.', 'success') }}
-  {{ tile(url_for('foerderkurse_bulk'), 'bi-mortarboard-fill', 'Förderkurse', 'LRS / Mathe / Sport / Deutsch zuordnen.', 'primary') }}
+  {% endif %}
+  {% if modules.betreuung %}{{ tile(url_for('betreuung_bulk'), 'bi-clock-history', 'Betreuungsformen', 'OGS / ÜMI / Abholung festlegen.', 'success') }}{% endif %}
+  {% if modules.foerderkurse %}{{ tile(url_for('foerderkurse_bulk'), 'bi-mortarboard-fill', 'Förderkurse', 'LRS / Mathe / Sport / Deutsch zuordnen.', 'primary') }}{% endif %}
 </div>
+{% endif %}
 
 <style>
     .hover-effect:hover {

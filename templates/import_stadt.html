@@ -11,10 +11,15 @@
         {% if not headers %}
         <div class="alert alert-info">
           <h5 class="mb-2"><i class="bi bi-1-circle"></i> Schritt 1: Datei hochladen</h5>
-          <p class="mb-1">Lade die Excel-Datei (.xlsx) der Stadt hoch, so wie du sie bekommen hast.</p>
+          <p class="mb-1">Lade die Liste der Stadt hoch, so wie du sie bekommen hast – als Excel-Datei (.xlsx)
+            oder als CSV-Export.</p>
           <p class="mb-0 small">Die Spaltenüberschriften ordnest du im nächsten Schritt zu — sie dürfen
             also jedes Jahr anders heißen. Enthalten sein sollten Name, Vorname und Geburtsdatum des Kindes,
             möglichst auch Anschrift und die Namen der Erziehungsberechtigten.</p>
+          {% if remembered %}
+          <p class="mb-0 small mt-1"><i class="bi bi-bookmark-check"></i> Die Zuordnung vom letzten Import
+            ist gespeichert und wird vorausgewählt, soweit die Spalten wieder so heißen.</p>
+          {% endif %}
         </div>
         <form method="POST" enctype="multipart/form-data">
           {{ form.hidden_tag() }}

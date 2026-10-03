@@ -44,7 +44,10 @@
     <tbody>
       {% for entry in backups %}
       <tr>
-        <td>{{ entry.created.strftime('%d.%m.%Y  %H:%M') }}</td>
+        <td>{{ entry.created.strftime('%d.%m.%Y  %H:%M') }}
+          {% if entry.name.startswith('auto-') %}<span class="badge bg-light text-muted border">automatisch</span>
+          {% elif entry.name.startswith('vor-wiederherstellung-') %}<span class="badge bg-light text-muted border">vor dem Zurückspielen</span>{% endif %}
+        </td>
         <td class="small">
           {% if entry.has_database %}<span class="badge bg-success">Datenbank</span>{% endif %}
           {% if entry.has_uploads %}<span class="badge bg-info text-dark">Dokumente</span>
@@ -52,12 +55,22 @@
         </td>
         <td>{{ human_size(entry.size) }}</td>
         <td class="text-end">
+          <div class="d-flex gap-2 justify-content-end">
+          {% if current_user.role == 'Administrator' and entry.has_database %}
+          <form method="post" action="{{ url_for('admin.restore_backup') }}"
+                onsubmit="return confirm('Sicherung vom {{ entry.created.strftime('%d.%m.%Y %H:%M') }} zurückspielen?\n\nAlle Änderungen seit diesem Zeitpunkt gehen verloren{{ ' (Datenbank und Dokumente)' if entry.has_uploads else '' }}. Der aktuelle Stand wird vorher gesichert. Danach melden sich alle neu an.')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="name" value="{{ entry.name }}">
+            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-counterclockwise"></i> Zurückspielen</button>
+          </form>
+          {% endif %}
           <form method="post" onsubmit="return confirm('Sicherung vom {{ entry.created.strftime('%d.%m.%Y %H:%M') }} endgültig löschen?')">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="name" value="{{ entry.name }}">
             <button class="btn btn-sm btn-outline-danger">Löschen</button>
           </form>
+          </div>
         </td>
       </tr>
       {% else %}
@@ -67,9 +80,29 @@
   </table>
 </div>
 
+{% if current_user.role == 'Administrator' %}
+<div class="card mt-4">
+  <div class="card-body">
+    <h5><i class="bi bi-upload"></i> Heruntergeladene Datenbank zurückspielen</h5>
+    <p class="text-muted small mb-2">
+      Für eine Datei, die über „Datenbank herunterladen“ gesichert wurde – etwa nach einem
+      Rechnerwechsel. Die hochgeladenen Dokumente bleiben dabei unverändert. Der aktuelle Stand
+      wird vorher gesichert; danach melden sich alle neu an.
+    </p>
+    <form method="post" action="{{ url_for('admin.restore_backup') }}" enctype="multipart/form-data"
+          class="d-flex gap-2 flex-wrap"
+          onsubmit="return confirm('Diese Datenbank zurückspielen? Alle Daten werden durch den Stand der Datei ersetzt.')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input class="form-control" style="max-width:24rem" type="file" name="datenbank" accept=".db,.sqlite,.sqlite3" required>
+      <button class="btn btn-outline-primary"><i class="bi bi-arrow-counterclockwise"></i> Zurückspielen</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
 <div class="alert alert-warning small mt-3">
   <i class="bi bi-exclamation-triangle"></i>
-  Sicherungen liegen auf <strong>demselben Server</strong> wie die Anwendung. Bei einem
+  Sicherungen liegen auf <strong>demselben Rechner</strong> wie die Anwendung. Bei einem
   Plattenausfall oder Diebstahl wären sie mit weg — bitte regelmäßig zusätzlich die Datenbank
   herunterladen und außerhalb ablegen.
 </div>

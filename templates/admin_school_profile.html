@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <h2 class="mb-0"><i class="bi bi-building"></i> Schulprofil</h2>
+  <a class="btn btn-outline-secondary" href="{{ url_for('admin.school_profile_preview') }}" target="_blank">
+    <i class="bi bi-file-earmark-pdf"></i> Briefkopf als Vorschau
+  </a>
+</div>
+
+<p class="text-muted">
+  Diese Angaben stehen im Briefkopf, in den Elternbriefen und auf den Druckstücken.
+  Leere Felder werden im Brief einfach weggelassen.
+</p>
+
+<form method="post" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="card mb-4">
+    <div class="card-header">Angaben zur Schule</div>
+    <div class="card-body row g-3">
+      {% for key, label, hint in text_fields %}
+      <div class="col-md-6">
+        <label class="form-label fw-bold" for="{{ key }}">{{ label }}</label>
+        <input class="form-control" id="{{ key }}" name="{{ key }}" value="{{ values.get(key) or '' }}">
+        {% if hint %}<div class="form-text">{{ hint }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header">Logo und Unterschrift</div>
+    <div class="card-body row g-4">
+      {% for key, label, hint in image_fields %}
+      <div class="col-md-6">
+        <label class="form-label fw-bold" for="{{ key }}">{{ label }}</label>
+        <div class="border rounded p-2 mb-2 text-center bg-light" style="min-height:6rem">
+          {% if stored[key] %}
+          <img src="{{ url_for('admin.school_profile_image', key=key) }}" alt="{{ label }}"
+               style="max-height:6rem; max-width:100%">
+          {% elif images[key] %}
+          <span class="text-muted small">Bild aus der Server-Konfiguration</span>
+          {% else %}
+          <span class="text-muted small">kein Bild hinterlegt</span>
+          {% endif %}
+        </div>
+        <input class="form-control" type="file" id="{{ key }}" name="{{ key }}" accept="image/png,image/jpeg">
+        <div class="form-text">{{ hint }}. PNG oder JPEG, höchstens 2 MB.</div>
+        {% if images[key] %}
+        <button class="btn btn-sm btn-outline-danger mt-2" name="action" value="remove:{{ key }}"
+                formnovalidate>{{ label }} entfernen</button>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <button class="btn btn-primary" name="action" value="save">
+    <i class="bi bi-check-lg"></i> Speichern
+  </button>
+</form>
+{% endblock %}

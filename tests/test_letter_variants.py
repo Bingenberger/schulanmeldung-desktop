@@ -16,10 +16,11 @@ from werkzeug.security import generate_password_hash  # noqa: E402
 
 from app import create_app  # noqa: E402
 from models import Schueler, User, db  # noqa: E402
-from sl_office.appointments.service import assign_slot, book_slot  # noqa: E402
-from sl_office.parent_portal import letters  # noqa: E402
-from sl_office.parent_portal.models import (  # noqa: E402
-    AppointmentEvent, AppointmentSlot, Elternbrief, ParentAccess,
+from sl_office.appointments.service import assign_slot  # noqa: E402
+from sl_office.briefe import letters  # noqa: E402
+from sl_office.appointments.models import AppointmentEvent, AppointmentSlot  # noqa: E402
+from sl_office.briefe.models import (  # noqa: E402
+    Elternbrief,
 )
 
 SCHOOL = {"name": "GGS", "address": "Schulstraße 1", "contact_mail": "buero@example.de"}
@@ -62,9 +63,8 @@ class _LetterFixture:
     def _letters(self, student_ids, **options):
         with self.app.app_context():
             children = [db.session.get(Schueler, sid) for sid in student_ids]
-            buffer, issued = letters.build_letters(
+            buffer = letters.build_letters(
                 children, SCHOOL,
-                lambda token: f"https://schule.example/eltern/aktivieren/{token}",
                 letter_date=datetime.date(2026, 9, 1), school_year="2027/2028",
                 deadline="30. September 2026", period="12. bis 16. Oktober 2026",
                 **options)
@@ -72,7 +72,7 @@ class _LetterFixture:
             # Der Blocksatz legt beim Auslesen jedes Wort in eine eigene Zeile;
             # für den Vergleich mit ganzen Sätzen muss das eingeebnet werden.
             raw = " ".join(page.extract_text() or "" for page in PdfReader(buffer).pages)
-            return " ".join(raw.split()), issued
+            return " ".join(raw.split())
 
 
 class VariantChoiceTests(_LetterFixture, unittest.TestCase):
@@ -80,8 +80,8 @@ class VariantChoiceTests(_LetterFixture, unittest.TestCase):
     def test_a_child_without_an_appointment_is_asked_to_pick_one(self):
         with self.app.app_context():
             self.assertEqual(letters.letter_variant(self.open_id), letters.TEXT_KEY)
-        text, _ = self._letters([self.open_id])
-        self.assertIn("können Sie selbst wählen", text)
+        text = self._letters([self.open_id])
+        self.assertIn("vereinbaren Sie für das Anmeldegespräch einen Termin", text)
         self.assertIn("30. September 2026", text)
         self.assertNotIn("bereits einen Termin", text)
 
@@ -89,33 +89,21 @@ class VariantChoiceTests(_LetterFixture, unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(letters.letter_variant(self.assigned_id),
                              letters.ASSIGNED_TEXT_KEY)
-        text, _ = self._letters([self.assigned_id])
+        text = self._letters([self.assigned_id])
         self.assertIn("bereits einen Termin", text)
         self.assertIn("14.10.2026", text)
         self.assertIn("09:20", text)          # Ortszeit, nicht die gespeicherte UTC
         self.assertIn("Raum 1", text)
-        self.assertNotIn("können Sie selbst wählen", text)
+        self.assertNotIn("vereinbaren Sie für das Anmeldegespräch einen Termin", text)
 
     def test_one_batch_may_carry_both_versions(self):
-        text, issued = self._letters([self.assigned_id, self.open_id])
+        text = self._letters([self.assigned_id, self.open_id])
         self.assertIn("bereits einen Termin", text)
-        self.assertIn("können Sie selbst wählen", text)
-        self.assertEqual(issued, 4)           # zwei Zugänge je Kind
-
-    def test_an_appointment_the_parents_booked_themselves_also_counts(self):
-        # Auch dann nennt der Brief den Termin -- er ist ja vergeben.
-        with self.app.app_context():
-            access = ParentAccess(schueler_id=self.open_id, status="active",
-                                  email_normalized="eltern@example.de", display_name="Eltern")
-            db.session.add(access)
-            db.session.flush()
-            book_slot(self.slot_id, self.open_id, access.id)
-            db.session.commit()
-            self.assertEqual(letters.letter_variant(self.open_id), letters.ASSIGNED_TEXT_KEY)
+        self.assertIn("vereinbaren Sie für das Anmeldegespräch einen Termin", text)
 
     def test_a_cancelled_appointment_returns_the_child_to_the_open_version(self):
         from sl_office.appointments.service import cancel_booking_as_staff
-        from sl_office.parent_portal.models import AppointmentBooking
+        from sl_office.appointments.models import AppointmentBooking
         with self.app.app_context():
             booking = db.session.scalar(db.select(AppointmentBooking))
             cancel_booking_as_staff(booking.id)
@@ -141,17 +129,17 @@ class VariantTextTests(unittest.TestCase):
     def test_the_versions_differ_only_in_the_appointment_paragraph(self):
         # Der gemeinsame Teil steht nur einmal im Quelltext und kann darum
         # nicht auseinanderlaufen.
-        without_self = letters.DEFAULT_TEXT["text"].replace(letters.SELF_BOOKING_PARAGRAPH, "")
+        without_self = letters.DEFAULT_TEXT["text"].replace(letters.SELF_PARAGRAPH, "")
         without_assigned = letters.ASSIGNED_TEXT["text"].replace(letters.ASSIGNED_PARAGRAPH, "")
         self.assertEqual(without_self, without_assigned)
 
     def test_the_assigned_version_must_name_the_appointment(self):
-        problems = letters.check_text("Titel", "Text ohne alles [zugaenge]", "Grüße",
+        problems = letters.check_text("Titel", "Text ohne alles", "Grüße",
                                       key=letters.ASSIGNED_TEXT_KEY)
         self.assertTrue(any("{termin}" in problem for problem in problems))
 
     def test_a_deadline_makes_no_sense_in_the_assigned_version(self):
-        problems = letters.check_text("Titel", "{frist} {termin} [zugaenge]", "Grüße",
+        problems = letters.check_text("Titel", "{frist} {termin} ", "Grüße",
                                       key=letters.ASSIGNED_TEXT_KEY)
         self.assertTrue(any("frist" in problem for problem in problems))
 
@@ -194,7 +182,7 @@ class VariantEditorTests(_LetterFixture, unittest.TestCase):
 
     def test_the_editor_offers_both_versions(self):
         body = self._staff().get("/admin/elternbrief-text").get_data(as_text=True)
-        self.assertIn("Eltern wählen den Termin selbst", body)
+        self.assertIn("Die Eltern vereinbaren einen Termin", body)
         self.assertIn("Die Schule gibt den Termin vor", body)
 
     def test_the_editor_saves_into_the_chosen_version(self):
@@ -213,7 +201,7 @@ class VariantEditorTests(_LetterFixture, unittest.TestCase):
         body = self._staff().get("/admin/elternbriefe").get_data(as_text=True)
         self.assertIn("Termin vorgegeben", body)
         self.assertIn("14.10.2026", body)
-        self.assertIn("Eltern wählen selbst", body)
+        self.assertIn("ohne Termin", body)
 
 
 if __name__ == "__main__":

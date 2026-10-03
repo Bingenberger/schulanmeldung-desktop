@@ -181,8 +181,8 @@ class LoginFlowTests(unittest.TestCase):
             pass
         with self.client.session_transaction() as flask_session:
             secret = flask_session["pending_2fa_secret"]
-        self.client.post("/login/einrichten",
-                         data={"code": pyotp.TOTP(secret, interval=30).now()},
+        self.enrol_code = pyotp.TOTP(secret, interval=30).now()
+        self.client.post("/login/einrichten", data={"code": self.enrol_code},
                          follow_redirects=True)
         return secret
 
@@ -231,12 +231,12 @@ class LoginFlowTests(unittest.TestCase):
         self.assertIn("Fehlversuche", response.get_data(as_text=True))
 
     def test_the_same_code_cannot_be_used_for_a_second_login(self):
-        secret = self._enrol()
+        self._enrol()
         self.client.get("/logout")
         self._password_step()
-        # Deliberately the code from the enrolment window.
-        self.client.post("/login/bestaetigen",
-                         data={"code": pyotp.TOTP(secret, interval=30).now()},
+        # Exactly the code burned at enrolment; recomputing it with now() could
+        # cross into the next time step and yield a fresh, valid code.
+        self.client.post("/login/bestaetigen", data={"code": self.enrol_code},
                          follow_redirects=True)
         self.assertEqual(self.client.get("/liste").status_code, 302)
 

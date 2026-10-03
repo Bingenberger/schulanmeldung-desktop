@@ -78,13 +78,13 @@ class ProxyHeaderTests(unittest.TestCase):
 
         @app.get("/__probe")
         def probe():
-            return f"{url_for('parent_portal.start', _external=True)} {request.remote_addr}"
+            return f"{url_for('auth.login', _external=True)} {request.remote_addr}"
 
         return app.test_client().get("/__probe", headers=self.HEADERS).get_data(as_text=True)
 
     def test_behind_a_proxy_the_forwarded_scheme_and_host_are_used(self):
         result = self._probe(1)
-        self.assertIn("https://anmeldung.example.de/eltern/", result)
+        self.assertIn("https://anmeldung.example.de/login", result)
         self.assertIn("203.0.113.7", result)
 
     def test_without_a_proxy_the_headers_are_ignored(self):
