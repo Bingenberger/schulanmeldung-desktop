@@ -17,7 +17,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.units import cm
 from reportlab.lib.colors import black, lightgrey
 from config import load_config
-from security import init_security
+from security import allow_same_origin_framing, init_security
 from sl_office import school_year
 from document_service import find_managed_document
 from migrations_ext import migrate
@@ -407,7 +407,9 @@ def uploaded_file(filename):
     if find_managed_document(filename) is None:
         from flask import abort
         abort(404)
-    return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename)
+    # Die Schülerakte zeigt die Dokumente in einem eingebetteten Ansichtsfenster.
+    return allow_same_origin_framing(
+        send_from_directory(current_app.config['UPLOAD_FOLDER'], filename))
 
 
 @route('/schueler/<int:id>/rueckstellung', methods=['GET', 'POST'])
