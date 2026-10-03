@@ -35,6 +35,7 @@ def install_template_context(app):
     @app.context_processor
     def _features():
         return {"parent_portal_enabled": parent_portal_enabled(app),
+                "two_factor_required": bool(app.config.get("TWO_FACTOR_REQUIRED", True)),
                 "modules": _LazyModules(app)}
 
 

@@ -34,7 +34,9 @@ Administratorrechte nötig). SL-Office startet einen Webserver nur für diesen
 Rechner und öffnet sich im Browser; ein kleines Fenster zeigt, dass es läuft,
 und beendet es wieder. Beim ersten Start legt man das Administrationskonto an,
 danach geht es über *Verwaltung* weiter: Schulprofil, Module, Kriterien,
-Vorlagen, Benutzer.
+Vorlagen, Benutzer. Angemeldet wird mit Benutzername und Passwort; einen
+zweiten Faktor braucht die lokale Installation nicht
+(`SL_OFFICE_TWO_FACTOR=1` schaltet ihn wieder ein).
 
 **Daten:** alles liegt in `%APPDATA%\SL-Office` – Datenbank
 (`sl-office.db`), hochgeladene Dateien, das Protokoll und unter
@@ -42,6 +44,13 @@ Vorlagen, Benutzer.
 Ein anderer Ort, etwa ein Netzlaufwerk, lässt sich mit der Umgebungsvariablen
 `SL_OFFICE_DATA_DIR` festlegen. Deinstallieren oder Aktualisieren lässt die
 Daten unberührt.
+
+**Zurückspielen:** unter *Verwaltung → Datensicherung* hat jede Sicherung den
+Knopf „Zurückspielen“ (Datenbank und Dokumente); eine über „Datenbank
+herunterladen“ gesicherte Datei lässt sich dort hochladen. Vorher wird der
+aktuelle Stand als `vor-wiederherstellung-…` gesichert, eine ältere Sicherung
+wird auf den Stand der Programmversion gebracht, danach melden sich alle neu
+an. Nur die Administration darf zurückspielen.
 
 **Bauen:** der Workflow `.github/workflows/windows-build.yml` testet, baut mit
 PyInstaller (`packaging/sl-office.spec`), startet die gebaute Fassung einmal

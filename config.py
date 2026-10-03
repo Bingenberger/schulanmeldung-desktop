@@ -52,6 +52,10 @@ class BaseConfig:
     #: braucht einen aus dem Internet erreichbaren Server und ist in der
     #: Desktop-Fassung darum ausgeschaltet; siehe :mod:`sl_office.features`.
     PARENT_PORTAL_ENABLED = _env_bool("SL_OFFICE_PARENT_PORTAL", False)
+    #: Zweiter Faktor (Authenticator-App) bei der Anmeldung. Auf dem Server
+    #: Pflicht; die Desktop-Fassung lauscht nur auf diesem Rechner und kommt
+    #: mit Benutzername und Passwort aus.
+    TWO_FACTOR_REQUIRED = _env_bool("SL_OFFICE_TWO_FACTOR", True)
     MAIL_SERVER = os.getenv("SL_OFFICE_MAIL_SERVER", "localhost")
     MAIL_PORT = int(os.getenv("SL_OFFICE_MAIL_PORT", "25"))
     MAIL_USE_TLS = _env_bool("SL_OFFICE_MAIL_USE_TLS", False)
@@ -169,6 +173,10 @@ class DesktopConfig(BaseConfig):
     """
     ENV_NAME = "desktop"
     AUTO_CREATE_DB = False
+    TWO_FACTOR_REQUIRED = _env_bool("SL_OFFICE_TWO_FACTOR", False)
+    #: Lokal gibt es keinen Grund für knappe Grenzen: eine Datenbank zum
+    #: Zurückspielen oder das Material zum Anmeldespiel darf größer sein.
+    MAX_CONTENT_LENGTH = int(os.getenv("SL_OFFICE_MAX_UPLOAD_BYTES", 200 * 1024 * 1024))
     FIRST_RUN_SETUP = True
     SESSION_COOKIE_SECURE = False
 

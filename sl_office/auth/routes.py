@@ -60,8 +60,11 @@ def first_run():
             db.session.flush()
             record("first_admin_created", "user", user.id, actor_type="system")
             db.session.commit()
-            flash("Das Konto ist angelegt. Bitte melden Sie sich jetzt an; danach richten Sie "
-                  "die Bestätigung per Authenticator-App ein.")
+            if current_app.config.get("TWO_FACTOR_REQUIRED", True):
+                flash("Das Konto ist angelegt. Bitte melden Sie sich jetzt an; danach richten Sie "
+                      "die Bestätigung per Authenticator-App ein.")
+            else:
+                flash("Das Konto ist angelegt. Bitte melden Sie sich jetzt an.")
             return redirect(url_for("auth.login"))
     return render_template("first_run.html", form=form)
 
@@ -125,6 +128,9 @@ def login():
                 return render_template("login.html", form=form)
         if user and check_password_hash(user.password_hash, form.password.data):
             _begin_pending(user)
+            if not current_app.config.get("TWO_FACTOR_REQUIRED", True):
+                # Desktop-Fassung: nur dieser Rechner, kein zweiter Faktor.
+                return _complete_login(user)
             if user.two_factor_active:
                 return redirect(url_for("auth.login_two_factor"))
             flash("Bitte richten Sie zuerst die Zwei-Faktor-Anmeldung ein.")

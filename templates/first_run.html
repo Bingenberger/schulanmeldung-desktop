@@ -11,8 +11,8 @@
         <p>Diese Installation hat noch kein Benutzerkonto. Legen Sie jetzt das erste Konto für die
           <strong>Administration</strong> an. Alle weiteren Kolleginnen und Kollegen bekommen ihre
           Zugänge danach unter <em>Verwaltung → Benutzerverwaltung</em>.</p>
-        <p class="small text-muted">Nach der ersten Anmeldung richten Sie eine Authenticator-App als
-          zweiten Faktor ein. Anschließend empfiehlt sich der Weg über
+        <p class="small text-muted">{% if two_factor_required %}Nach der ersten Anmeldung richten Sie eine
+          Authenticator-App als zweiten Faktor ein. {% endif %}Anschließend empfiehlt sich der Weg über
           <em>Schulprofil</em>, <em>Module</em> und <em>Kriterien</em>.</p>
         <form method="post">
           {{ form.hidden_tag() }}

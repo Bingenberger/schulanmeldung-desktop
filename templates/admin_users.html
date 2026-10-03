@@ -10,7 +10,7 @@
     <tr>
       <th>Benutzername</th>
       <th>Rolle</th>
-      <th>Zwei-Faktor</th>
+      <th>{{ 'Zwei-Faktor' if two_factor_required else 'Status' }}</th>
       <th>Zuletzt angemeldet</th>
       <th></th>
     </tr>
@@ -21,10 +21,14 @@
       <td>{{ user.username }}</td>
       <td>{{ user.role }}</td>
       <td>
+        {% if two_factor_required %}
         {% if user.two_factor_active %}
         <span class="badge bg-success"><i class="bi bi-shield-check"></i> aktiv</span>
         {% else %}
         <span class="badge bg-warning text-dark">noch nicht eingerichtet</span>
+        {% endif %}
+        {% elif not user.locked_until %}
+        <span class="badge bg-light text-dark border">aktiv</span>
         {% endif %}
         {% if user.locked_until %}
         <span class="badge bg-danger ms-1" title="Nach zu vielen Fehlversuchen gesperrt">gesperrt</span>
@@ -39,12 +43,12 @@
              href="{{ url_for('admin.reset_user_password', user_id=user.id) }}">
             <i class="bi bi-key"></i> Passwort
           </a>
-          {% if user.two_factor_active or user.locked_until %}
+          {% if (two_factor_required and user.two_factor_active) or user.locked_until %}
           <form method="post" action="{{ url_for('admin.reset_user_two_factor', user_id=user.id) }}"
-                onsubmit="return confirm('Zwei-Faktor-Anmeldung für {{ user.username }} zurücksetzen? Die Person richtet sie beim nächsten Login neu ein.')">
+                onsubmit="return confirm('{{ ('Zwei-Faktor-Anmeldung für ' ~ user.username ~ ' zurücksetzen? Die Person richtet sie beim nächsten Login neu ein.') if two_factor_required else ('Sperre für ' ~ user.username ~ ' aufheben?') }}')">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="btn btn-sm btn-outline-danger">
-              <i class="bi bi-arrow-counterclockwise"></i> 2FA zurücksetzen
+              <i class="bi bi-arrow-counterclockwise"></i> {{ '2FA zurücksetzen' if two_factor_required else 'Sperre aufheben' }}
             </button>
           </form>
           {% endif %}

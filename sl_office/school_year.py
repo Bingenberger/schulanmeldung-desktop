@@ -190,6 +190,8 @@ READONLY_EXEMPT_ENDPOINTS = frozenset({
     "auth.security", "auth.change_password", "auth.first_run",
     # Das Schulprofil gilt für alle Jahrgänge, nicht für den geöffneten.
     "admin.school_profile", "admin.school_profile_image", "admin.modules", "admin.templates",
+    # Zurückspielen ersetzt alle Jahrgänge zugleich.
+    "admin.restore_backup",
     # Der Kriterienkatalog gilt ebenso für alle Jahrgänge.
     "criteria.index", "criteria.catalog", "criteria.create", "criteria.edit",
     "criteria.move", "criteria.toggle", "criteria.delete",

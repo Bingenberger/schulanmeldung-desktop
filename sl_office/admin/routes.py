@@ -3,8 +3,8 @@
 import datetime
 from io import BytesIO
 
-from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, send_file, url_for
-from flask_login import current_user
+from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, send_file, session, url_for
+from flask_login import current_user, logout_user
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.security import generate_password_hash
@@ -38,8 +38,11 @@ def reset_user_two_factor(user_id):
     two_factor.clear_failed_attempts(user)
     record("staff_2fa_reset", "user", user.id, actor_type="staff", actor_id=current_user.id)
     db.session.commit()
-    flash(f"Zwei-Faktor-Anmeldung für {user.username} zurückgesetzt. "
-          "Beim nächsten Login wird sie neu eingerichtet.")
+    if current_app.config.get("TWO_FACTOR_REQUIRED", True):
+        flash(f"Zwei-Faktor-Anmeldung für {user.username} zurückgesetzt. "
+              "Beim nächsten Login wird sie neu eingerichtet.")
+    else:
+        flash(f"Die Sperre für {user.username} ist aufgehoben.")
     return redirect(url_for("admin.users"))
 
 
@@ -422,6 +425,46 @@ def backups():
         entries, error = [], str(exc)
     return render_template("admin_backups.html", backups=entries, error=error,
                            human_size=backup_service.human_size)
+
+
+@admin_bp.post("/datensicherung/wiederherstellen", endpoint="restore_backup")
+@role_required(["Administrator"])
+def restore_backup():
+    """Eine Sicherung zurückspielen -- aus der Liste oder als hochgeladene Datenbank.
+
+    Vorher wird der aktuelle Stand gesichert. Danach meldet sich jede Person neu
+    an: die zurückgespielten Benutzerkonten können andere sein.
+    """
+    try:
+        upload = request.files.get("datenbank")
+        if upload and upload.filename:
+            payload = upload.read(current_app.config["MAX_CONTENT_LENGTH"] + 1)
+            safety = backup_service.restore_upload(current_app, payload)
+            quelle = upload.filename
+        else:
+            name = request.form.get("name", "")
+            safety = backup_service.restore_backup(current_app, name)
+            quelle = name
+    except backup_service.BackupError as exc:
+        db.session.rollback()
+        flash(str(exc), "error")
+        return redirect(url_for("admin.backups"))
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Restore failed")
+        flash("Die Sicherung konnte nicht zurückgespielt werden. Der vorherige Stand liegt "
+              "unter den Sicherungen mit dem Namen „vor-wiederherstellung-…“.", "error")
+        return redirect(url_for("admin.backups"))
+
+    actor = current_user.id
+    record("backup_restored", "backup", None, actor_type="staff", actor_id=actor)
+    db.session.commit()
+    current_app.logger.info("Backup restored", extra={"source": quelle, "safety": safety.name})
+    logout_user()
+    session.clear()
+    flash(f"Die Sicherung „{quelle}“ wurde zurückgespielt. Der vorherige Stand ist als "
+          f"„{safety.name}“ gesichert. Bitte melden Sie sich neu an.")
+    return redirect(url_for("auth.login"))
 
 
 @admin_bp.get("/datensicherung/datenbank")

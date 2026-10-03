@@ -190,8 +190,10 @@
             </a>
             <ul class="dropdown-menu dropdown-menu-end">
               <li><h6 class="dropdown-header">Angemeldet als {{ current_user.role }}</h6></li>
+              {% if two_factor_required %}
               <li><a class="dropdown-item" href="{{ url_for('auth.security') }}">
                 <i class="bi bi-shield-check me-2"></i>Anmeldesicherheit</a></li>
+              {% endif %}
               <li><a class="dropdown-item" href="{{ url_for('auth.change_password') }}">
                 <i class="bi bi-key me-2"></i>Passwort ändern</a></li>
               {% if current_user.role in ['Administrator', 'Schulleitung'] %}
