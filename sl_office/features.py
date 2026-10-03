@@ -1,41 +1,12 @@
-"""Abschaltbare Teile der Anwendung.
+"""Abschaltbare Teile der Anwendung (Module)."""
 
-Die Desktop-Fassung läuft auf einem Rechner in der Schule und ist aus dem
-Internet nicht erreichbar. Das Elternportal ergibt dort keinen Sinn und ist
-darum ohne ``SL_OFFICE_PARENT_PORTAL=1`` abgeschaltet: seine Seiten werden
-nicht geladen, die Verwaltung blendet die Punkte dazu aus und die Elternbriefe
-kommen ohne Zugangslinks aus.
-"""
-
-from functools import wraps
-
-from flask import abort, current_app, has_app_context
-
-
-def parent_portal_enabled(app=None):
-    """Ob das Elternportal in dieser Anwendung läuft."""
-    if app is None:
-        if not has_app_context():
-            return False
-        app = current_app
-    return bool(app.config.get("PARENT_PORTAL_ENABLED"))
-
-
-def portal_required(view):
-    """Verwaltungsseiten, die nur mit Elternportal einen Sinn haben."""
-    @wraps(view)
-    def wrapper(*args, **kwargs):
-        if not parent_portal_enabled():
-            abort(404)
-        return view(*args, **kwargs)
-    return wrapper
+from flask import abort
 
 
 def install_template_context(app):
     @app.context_processor
     def _features():
-        return {"parent_portal_enabled": parent_portal_enabled(app),
-                "two_factor_required": bool(app.config.get("TWO_FACTOR_REQUIRED", True)),
+        return {"two_factor_required": bool(app.config.get("TWO_FACTOR_REQUIRED", True)),
                 "modules": _LazyModules(app)}
 
 
@@ -68,12 +39,9 @@ class _LazyModules:
 # bleiben stehen; eingeschaltet ist alles wieder da.
 
 class Module:
-    def __init__(self, key, label, description, endpoints=(), prefixes=(), targets=(),
-                 needs_portal=False):
+    def __init__(self, key, label, description, endpoints=(), prefixes=(), targets=()):
         self.key, self.label, self.description = key, label, description
         self.endpoints, self.prefixes, self.targets = set(endpoints), tuple(prefixes), set(targets)
-        #: Ohne Elternportal ist das Modul anfangs aus, lässt sich aber einschalten.
-        self.needs_portal = needs_portal
 
     def covers(self, endpoint, view_args):
         if not endpoint:
@@ -85,12 +53,8 @@ class Module:
 
 MODULES = (
     Module("termine", "Terminplanung",
-           "Gesprächstermine planen, Kindern zuweisen und Protokollbögen drucken.",
+           "Gesprächstermine planen, Kindern zuweisen und Laufzettel drucken.",
            prefixes=("appointments.",)),
-    Module("tag_der_offenen_tuer", "Tag der offenen Tür",
-           "Rückmeldungen der Eltern auswerten und Gruppen einteilen. Die Eltern melden "
-           "sich über das Elternportal zurück.",
-           prefixes=("open_day.",), needs_portal=True),
     Module("diagnostik", "Pädagogische Diagnostik",
            "Beobachtungen beim Anmeldegespräch erfassen.",
            endpoints=("diagnostik",), targets=("diagnostik",)),
@@ -118,17 +82,12 @@ MODULES = (
 MODULE_KEYS = tuple(module.key for module in MODULES)
 
 
-def _default(module, app):
-    return not module.needs_portal or parent_portal_enabled(app)
-
-
 def module_states(app=None):
     """{Schlüssel: an?} für alle Module; gespeicherte Schalter gehen vor."""
     from sl_office.school_profile import Schulprofil
     from models import db
 
-    app = app or current_app
-    states = {module.key: _default(module, app) for module in MODULES}
+    states = {module.key: True for module in MODULES}
     rows = db.session.scalars(db.select(Schulprofil).where(
         Schulprofil.key.in_([_storage_key(key) for key in MODULE_KEYS])))
     for row in rows:

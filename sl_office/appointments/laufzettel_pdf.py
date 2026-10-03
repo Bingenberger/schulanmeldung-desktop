@@ -1,14 +1,11 @@
-"""Der Laufzettel für den Verwaltungsteil der Anmeldung.
+"""Der Laufzettel für die Anmeldung.
 
 Der Bogen wird selbst gesetzt -- mit demselben Briefkopf wie die
 Elternschreiben. Er besteht nur aus einer Checkliste, und die gewinnt deutlich,
-wenn sie echte Ankreuzfelder, Gruppen und Schreiblinien bekommt statt
-getippter "O" und Tabulatoren.
+wenn sie echte Ankreuzfelder, Gruppen und Schreiblinien bekommt.
 
 Die Checkliste pflegt jede Schule unter „Verwaltung → Vorlagen“
-(:mod:`sl_office.vorlagen`); vorbelegt ist der Wortlaut aus
-``Protokoll_Verwaltungsanmeldung.odt``. Die Seite richtet sich von selbst
-nach der Liste.
+(:mod:`sl_office.vorlagen`). Die Seite richtet sich von selbst nach der Liste.
 """
 
 from io import BytesIO
@@ -18,16 +15,18 @@ from reportlab.lib.units import cm
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
-from models import db
-from sl_office.appointments.service import slot_label
-from sl_office.parent_portal.letterhead import (
+from sqlalchemy import select
+
+from models import Schueler, db
+from sl_office.appointments.models import AppointmentBooking, AppointmentSlot
+from sl_office.appointments.service import active_booking_for_student, slot_label
+from sl_office.briefe.letterhead import (
     HEADING_RULE, INK, MARGIN_X, MUTED, RULE, TEXT_W, Flow,
 )
-from sl_office.parent_portal.models import ParentRegistration
 from sl_office.vorlagen import Reihe, Zwischenwort, laufzettel_abschnitte
 
 
-TITEL = "Protokoll Verwaltungsanmeldung"
+TITEL = "Laufzettel Anmeldung"
 TEXT_GROESSE = 11.0
 #: Zeilenhöhe der Ankreuzpunkte. Zusammen mit den Abschnittsabständen ist sie
 #: so bemessen, dass die Liste samt Notizblock und Unterschrift auf **eine**
@@ -139,26 +138,10 @@ def _termin_text(appointment):
     return slot_label(slot, event)
 
 
-def hinweise(student):
-    """Kleine Vermerke, die der Verwaltung die Entscheidung abnehmen.
-
-    Beim ersten Punkt steht, ob die Eltern das Formular elektronisch
-    übermittelt haben -- davon hängt ab, ob er gilt oder der Punkt darunter.
-    """
-    anmeldung = db.session.scalar(
-        db.select(ParentRegistration).where(ParentRegistration.schueler_id == student.id))
-    if anmeldung is None or anmeldung.status == "draft":
-        return {}
-    wann = (f" am {anmeldung.submitted_at.strftime('%d.%m.%Y')}"
-            if anmeldung.submitted_at else "")
-    return {"digital": f"(elektronisch übermittelt{wann})"}
-
-
 def _bogen(flow, student, appointment):
     flow.title_bar(TITEL)
     _kopfzeile(flow, "Name des Kindes", f"{student.vorname} {student.nachname}".strip())
     _kopfzeile(flow, "Anmeldetermin", _termin_text(appointment))
-    vermerke = hinweise(student)
     for titel, punkte in laufzettel_abschnitte(schule=flow.school):
         if titel:
             _abschnitt(flow, titel)
@@ -173,12 +156,12 @@ def _bogen(flow, student, appointment):
                 _punkt(flow, punkt.text)
                 _optionen(flow, punkt.optionen, einzug=KASTEN_SEITE + 0.3 * cm)
             else:
-                _punkt(flow, punkt.text, vermerke.get(punkt.schluessel, ""))
+                _punkt(flow, punkt.text)
     _notizen(flow, "Weitere Beratungspunkte", NOTIZ_ZEILEN)
     _unterschrift(flow, "Unterschrift Mitarbeiter:in Schule")
 
 
-def build_many(eintraege, school, title="Verwaltungsanmeldung", doppelseitig=True):
+def build_many(eintraege, school, title="Laufzettel Anmeldung", doppelseitig=True):
     """Je Kind ein Bogen; ``eintraege`` sind (Kind, Termin)-Paare.
 
     ``doppelseitig`` hängt an jeden Bogen eine leere Seite, damit beim
@@ -201,12 +184,28 @@ def build_many(eintraege, school, title="Verwaltungsanmeldung", doppelseitig=Tru
 def build(student, school, appointment=None):
     """Ein einzelner Bogen -- ohne Leerseite, er wird ja allein gedruckt."""
     return build_many([(student, appointment)], school,
-                      title=f"Verwaltungsanmeldung {student.vorname} {student.nachname}",
+                      title=f"Laufzettel Anmeldung {student.vorname} {student.nachname}",
                       doppelseitig=False)
 
 
 def fuer_veranstaltung(event):
-    """Dieselbe Reihenfolge wie beim Protokoll des Anmeldespiels."""
-    from sl_office.appointments.protocol_pdf import fuer_veranstaltung as reihenfolge
+    """Alle Kinder mit Termin dieser Veranstaltung, nach Terminzeit sortiert.
 
-    return reihenfolge(event)
+    Kinder ohne Termin stehen am Ende: Auch sie brauchen einen Laufzettel, wenn
+    sie kurzfristig erscheinen, aber einsortieren lassen sie sich nicht.
+    """
+    gebucht = db.session.execute(
+        select(Schueler, AppointmentSlot)
+        .join(AppointmentBooking, AppointmentBooking.schueler_id == Schueler.id)
+        .join(AppointmentSlot, AppointmentSlot.id == AppointmentBooking.slot_id)
+        .where(AppointmentBooking.event_id == event.id,
+               AppointmentBooking.status == "confirmed")
+        .order_by(AppointmentSlot.starts_at, Schueler.nachname, Schueler.vorname)).all()
+    eintraege = [(student, (None, slot, event)) for student, slot in gebucht]
+    versorgt = {student.id for student, _ in eintraege}
+    uebrige = select(Schueler).order_by(Schueler.nachname, Schueler.vorname)
+    if versorgt:
+        uebrige = uebrige.where(Schueler.id.not_in(versorgt))
+    eintraege += [(student, active_booking_for_student(student.id))
+                  for student in db.session.scalars(uebrige)]
+    return eintraege

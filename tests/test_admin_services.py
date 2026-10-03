@@ -8,7 +8,6 @@ from werkzeug.security import generate_password_hash
 
 from app import create_app
 from models import GlobalSettings, Schueler, User, db
-from sl_office.parent_portal.models import ActivationGrant, ParentRegistration
 from sl_office.services.student_classification import recalculate_kann_kind
 
 
@@ -185,47 +184,10 @@ class AdminServiceTests(unittest.TestCase):
         with self.app.app_context():
             self.assertIsNone(Schueler.query.filter_by(nachname="Lang").first())
 
-    def test_secretariat_can_review_parent_registration(self):
-        self.login_as("Sekretariat")
-        with self.app.app_context():
-            student = Schueler(vorname="Digital", nachname="Kind")
-            db.session.add(student)
-            db.session.flush()
-            registration = ParentRegistration(schueler_id=student.id, data={"kind_vorname": "Digital"}, status="submitted", version=1)
-            db.session.add(registration)
-            db.session.commit()
-            registration_id = registration.id
-        response = self.client.get("/admin/anmeldungen")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Digital", response.data)
-        response = self.client.post(f"/admin/anmeldungen/{registration_id}", data={"status": "in_review"}, follow_redirects=False)
-        self.assertEqual(response.status_code, 302)
-        with self.app.app_context():
-            self.assertEqual(db.session.get(ParentRegistration, registration_id).status, "in_review")
-
-    def test_support_teacher_cannot_review_parent_registration(self):
-        self.login_as("Foerderlehrkraft")
-        response = self.client.get("/admin/anmeldungen", follow_redirects=False)
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers["Location"], "/")
-
-    def test_secretariat_can_generate_parent_letter_link(self):
-        self.login_as("Sekretariat")
-        with self.app.app_context():
-            student = Schueler(vorname="Brief", nachname="Kind")
-            db.session.add(student)
-            db.session.commit()
-            student_id = student.id
-        response = self.client.post("/admin/elternzugänge", data={"student_id": student_id, "purpose": "first_access"})
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Brief-Link", response.data)
-        with self.app.app_context():
-            self.assertEqual(ActivationGrant.query.count(), 1)
-
-    def test_support_teacher_cannot_generate_parent_letter_link(self):
-        self.login_as("Foerderlehrkraft")
-        response = self.client.get("/admin/elternzug\u00e4nge", follow_redirects=False)
-        self.assertEqual(response.status_code, 302)
+    def test_portal_pages_are_gone(self):
+        self.login_as("Administrator")
+        for pfad in ("/admin/anmeldungen", "/admin/elternzugänge", "/eltern/"):
+            self.assertEqual(self.client.get(pfad).status_code, 404, pfad)
 
 
 if __name__ == "__main__":

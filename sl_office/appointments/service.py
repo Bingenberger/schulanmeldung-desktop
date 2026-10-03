@@ -11,10 +11,8 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 
-from models import Schueler, db
-from sl_office.parent_portal.models import (
-    ActivationGrant, AppointmentBooking, AppointmentEvent, AppointmentSlot, ParentAccess, utcnow,
-)
+from models import Schueler, db, utcnow
+from sl_office.appointments.models import AppointmentBooking, AppointmentEvent, AppointmentSlot
 
 #: Slots start on a ten minute grid; the planner snaps to the same raster.
 GRID_MINUTES = 10
@@ -249,41 +247,11 @@ def _existing_booking(event_id, student_id):
     ))
 
 
-def book_slot(slot_id, student_id, parent_access_id):
-    """Book a slot from the parent portal while holding its row lock."""
-    slot, event = _load_bookable_slot(slot_id, require_published=True)
-    now = naive_utc(utcnow())
-    if event.booking_opens_at and now < naive_utc(event.booking_opens_at):
-        raise SlotUnavailable("Die Terminbuchung ist noch nicht geöffnet.")
-    if event.booking_closes_at and now > naive_utc(event.booking_closes_at):
-        raise SlotUnavailable("Die Terminbuchung ist bereits geschlossen.")
-
-    access = db.session.get(ParentAccess, parent_access_id)
-    if access is None or access.schueler_id != student_id or access.status != "active":
-        raise BookingError("Der Elternzugang ist für dieses Kind nicht berechtigt.")
-
-    existing = _existing_booking(event.id, student_id)
-    if existing:
-        if existing.slot_id == slot.id:
-            return existing
-        raise StudentAlreadyBooked("Für dieses Kind besteht bereits ein Termin.")
-    _assert_capacity_left(slot)
-
-    booking = AppointmentBooking(
-        event_id=event.id, slot_id=slot.id, schueler_id=student_id,
-        parent_access_id=parent_access_id, source="parent", status="confirmed",
-    )
-    db.session.add(booking)
-    db.session.flush()
-    return booking
-
-
 def assign_slot(slot_id, student_id):
-    """Assign a slot to a child from the staff side, without a parent access.
+    """Einem Kind ein Gesprächsfenster geben.
 
-    Used for families who do not book themselves. Unlike parent booking this
-    works while the event is still a draft, since planning happens before the
-    booking period opens.
+    Geht auch, solange die Veranstaltung noch ein Entwurf ist: geplant wird,
+    bevor die Briefe hinausgehen.
     """
     slot, event = _load_bookable_slot(slot_id, require_published=False)
     existing = _existing_booking(event.id, student_id)
@@ -294,50 +262,9 @@ def assign_slot(slot_id, student_id):
     _assert_capacity_left(slot)
     booking = AppointmentBooking(
         event_id=event.id, slot_id=slot.id, schueler_id=student_id,
-        parent_access_id=None, source="staff", status="confirmed",
+        source="staff", status="confirmed",
     )
     db.session.add(booking)
-    db.session.flush()
-    return booking
-
-
-class AssignedByStaff(BookingError):
-    """Ein von der Schule vergebener Termin; die Eltern lösen ihn nicht auf."""
-
-
-#: Was die Eltern zu hören bekommen, wenn sie einen vorgegebenen Termin
-#: stornieren wollen. Auch die Oberfläche zeigt diesen Satz, statt den
-#: Knopf überhaupt anzubieten.
-ASSIGNED_NOTICE = ("Diesen Termin hat die Schule für Sie vorgesehen. Wenn er Ihnen nicht "
-                   "möglich ist, wenden Sie sich bitte an die Schule.")
-
-
-def cancel_booking(booking_id, parent_access_id):
-    """Cancel from the parent portal, honouring the cancellation deadline.
-
-    Berechtigt ist, wer einen aktiven Zugang zu diesem Kind hat -- nicht nur,
-    wer die Buchung selbst angelegt hat. Sonst könnte die zweite
-    sorgeberechtigte Person den gemeinsamen Termin nicht auflösen.
-    """
-    booking = db.session.scalar(
-        select(AppointmentBooking).where(AppointmentBooking.id == booking_id).with_for_update()
-    )
-    access = db.session.get(ParentAccess, parent_access_id)
-    if booking is None or access is None or booking.schueler_id != access.schueler_id:
-        raise BookingError("Terminbuchung nicht gefunden.")
-    if booking.status != "confirmed":
-        return booking
-    if booking.source == "staff":
-        # Die Schule hat den Termin geplant; ein stiller Rückzug daraus würde
-        # ihr eine Lücke hinterlassen, von der sie nichts erfährt.
-        raise AssignedByStaff(ASSIGNED_NOTICE)
-    slot = db.session.get(AppointmentSlot, booking.slot_id)
-    event = db.session.get(AppointmentEvent, booking.event_id)
-    deadline = naive_utc(slot.starts_at) - datetime.timedelta(hours=event.cancellation_deadline_hours)
-    if naive_utc(utcnow()) > deadline:
-        raise BookingError("Die Stornierungsfrist ist abgelaufen.")
-    booking.status = "cancelled"
-    booking.cancelled_at = utcnow()
     db.session.flush()
     return booking
 
@@ -427,20 +354,12 @@ def cancel_booking_as_staff(booking_id):
 #: ``zugang``: Eltern könnten selbst buchen, haben es aber nicht getan -> erinnern.
 #: ``brief``: Brief ist raus, der Zugang aber nie eingerichtet -> nachfragen.
 #: ``kein_brief``: Es gibt noch nicht einmal ein Anschreiben -> Brief drucken.
-OHNE_TERMIN_GRUENDE = {
-    "zugang": "Zugang eingerichtet, aber nicht gebucht",
-    "brief": "Brief erhalten, Zugang nicht eingerichtet",
-    "kein_brief": "Noch kein Brief erstellt",
-}
-
-
 def students_without_appointment():
     """Kinder des geöffneten Jahrgangs ohne bestätigten Termin.
 
-    Weder selbst gebucht noch von der Schule vergeben. Je Kind kommt mit, wie weit
-    die Eltern sind (siehe :data:`OHNE_TERMIN_GRUENDE`) und ob schon einmal ein
-    Termin bestand, der storniert wurde -- das ist ein anderer Fall als eine
-    Familie, die sich nie gerührt hat.
+    Je Kind kommt mit, ob schon einmal ein Termin bestand, der storniert wurde
+    -- das ist ein anderer Fall als eine Familie, mit der noch nichts
+    vereinbart ist.
 
     Der Jahrgangsfilter aus ``sl_office/school_year`` greift auf ``Schueler``, die
     Liste zeigt also nur Kinder des Jahrgangs, an dem gerade gearbeitet wird.
@@ -453,24 +372,9 @@ def students_without_appointment():
     ids = [kind.id for kind in kinder]
     if not ids:
         return []
-
-    zugaenge = {}
-    for access in db.session.scalars(select(ParentAccess).where(
-            ParentAccess.schueler_id.in_(ids), ParentAccess.status == "active")
-            .order_by(ParentAccess.created_at)):
-        zugaenge.setdefault(access.schueler_id, []).append(access)
-    mit_brief = set(db.session.scalars(select(ActivationGrant.schueler_id).where(
-        ActivationGrant.schueler_id.in_(ids), ActivationGrant.revoked_at.is_(None))))
     storniert = dict(db.session.execute(
         select(AppointmentBooking.schueler_id, func.max(AppointmentBooking.cancelled_at))
         .where(AppointmentBooking.schueler_id.in_(ids),
                AppointmentBooking.status == "cancelled")
         .group_by(AppointmentBooking.schueler_id)).all())
-
-    zeilen = []
-    for kind in kinder:
-        eltern = zugaenge.get(kind.id, [])
-        grund = "zugang" if eltern else "brief" if kind.id in mit_brief else "kein_brief"
-        zeilen.append({"kind": kind, "grund": grund, "eltern": eltern,
-                       "storniert_am": storniert.get(kind.id)})
-    return zeilen
+    return [{"kind": kind, "storniert_am": storniert.get(kind.id)} for kind in kinder]

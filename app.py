@@ -26,17 +26,14 @@ from sl_office.auth.routes import install_first_run_redirect
 from sl_office.admin import admin_bp
 from sl_office.students import students_bp
 from sl_office.appointments import appointments_bp
-from sl_office.appointments.cli import register_cli as register_appointment_cli
 from sl_office.maintenance import register_cli as register_maintenance_cli
-from sl_office.open_day import open_day_bp
-from sl_office.parent_portal import parent_portal_bp
 from sl_office import features
 from sl_office.criteria import service as criteria
 from sl_office.criteria.routes import criteria_bp
 import sl_office.criteria.models  # noqa: F401, E402
 # Import new domain models so SQLAlchemy and Alembic include their metadata.
-import sl_office.parent_portal.models  # noqa: F401, E402
-import sl_office.open_day.models  # noqa: F401, E402
+import sl_office.appointments.models  # noqa: F401, E402
+import sl_office.briefe.models  # noqa: F401, E402
 import sl_office.school_profile  # noqa: F401, E402
 from sl_office.authorization import role_required
 from sl_office.services.student_classification import recalculate_kann_kind
@@ -1796,14 +1793,10 @@ def create_app(environment=None, config_overrides=None):
     flask_app.register_blueprint(admin_bp)
     flask_app.register_blueprint(students_bp)
     flask_app.register_blueprint(appointments_bp)
-    flask_app.register_blueprint(open_day_bp)
     flask_app.register_blueprint(criteria_bp)
-    if features.parent_portal_enabled(flask_app):
-        flask_app.register_blueprint(parent_portal_bp)
     features.install_template_context(flask_app)
     features.install_module_guard(flask_app)
     install_first_run_redirect(flask_app)
-    register_appointment_cli(flask_app)
     register_maintenance_cli(flask_app)
 
     # The year scope is registered once on the shared Session class; the

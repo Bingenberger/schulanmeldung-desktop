@@ -18,9 +18,6 @@ daten = [
     (str(ROOT / "assets"), "assets"),
     (str(ROOT / "migrations"), "migrations"),
 ]
-# Das Anmeldeformular braucht nur das Elternportal; liegt es vor, kommt es mit.
-if (ROOT / "Schulanmeldung.pdf").exists():
-    daten.append((str(ROOT / "Schulanmeldung.pdf"), "."))
 
 versteckt = (
     collect_submodules("sl_office")

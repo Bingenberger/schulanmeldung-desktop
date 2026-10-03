@@ -1,7 +1,7 @@
 # Briefkopf der Elternschreiben
 
 Diese Schriften setzen den Briefkopf. Sie werden von
-`sl_office/parent_portal/letterhead.py` gelesen.
+`sl_office/briefe/letterhead.py` gelesen.
 
 Logo und Unterschrift liegen nicht im Projekt: jede Schule lädt ihre eigenen
 unter **Verwaltung → Schulprofil** hoch, dort liegen sie in der Datenbank.

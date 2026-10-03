@@ -88,21 +88,6 @@ def _uid(booking_id):
     return f"anmeldetermin-{booking_id}@sl-office"
 
 
-def parent_entry(booking, slot, event, student, school_name="", instructions=""):
-    """Der Termin einer Familie, aus Sicht der Eltern."""
-    return {
-        "uid": _uid(booking.id),
-        "starts_at": slot.starts_at,
-        "ends_at": slot.ends_at,
-        "summary": f"Schulanmeldung {student.vorname} {student.nachname}",
-        "location": slot.location or school_name,
-        "description": instructions or (
-            f"Anmeldegespräch für {student.vorname} {student.nachname}"
-            + (f" an der {school_name}" if school_name else "")
-            + ". Bitte bringen Sie Ihr Kind mit."),
-    }
-
-
 def staff_entry(booking, slot, event, student, school_name=""):
     """Derselbe Termin aus Sicht der Schule: Nachname zuerst, mit Herkunft."""
     source = "von den Eltern gebucht" if booking.source == "parent" else "von der Schule vergeben"

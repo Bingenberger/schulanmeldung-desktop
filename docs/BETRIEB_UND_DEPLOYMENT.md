@@ -1,5 +1,11 @@
 # Betrieb und Deployment
 
+> **Hinweis zur Desktop-Fassung:** Dieses Dokument stammt aus der Serverfassung
+> (`Bingenberger/schulanmeldung`). In der Desktop-Fassung sind Elternportal,
+> Tag der offenen Tür, Mailversand, Terminerinnerungen und der Druck der
+> Protokollbögen ausgebaut; Abschnitte dazu gelten hier nicht. Für Installation
+> und Betrieb der Windows-Fassung siehe die README.
+
 Die Anwendung läuft als systemd-Dienst hinter nginx. Änderungen kommen per
 `git push` auf den Server.
 

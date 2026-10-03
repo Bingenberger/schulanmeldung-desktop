@@ -210,8 +210,6 @@ def install_readonly_guard(app):
     def _block_writes_in_closed_years():
         if request.method in ("GET", "HEAD", "OPTIONS"):
             return None
-        if request.blueprint == "parent_portal":
-            return None
         if request.endpoint in READONLY_EXEMPT_ENDPOINTS:
             return None
         if not is_readonly():

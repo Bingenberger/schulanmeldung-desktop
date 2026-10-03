@@ -36,7 +36,7 @@ class DesktopConfigTests(_DataDir, unittest.TestCase):
         self.assertEqual(app.config["UPLOAD_FOLDER"], str(self.data_dir / "uploads"))
         self.assertEqual(app.config["BACKUP_FOLDER"], str(self.data_dir / "Datensicherungen"))
         self.assertTrue(app.config["SQLALCHEMY_DATABASE_URI"].endswith("sl-office.db"))
-        self.assertFalse(app.config["PARENT_PORTAL_ENABLED"])
+        self.assertFalse(app.config["TWO_FACTOR_REQUIRED"])
         self.assertEqual(app.config["ENV_NAME"], "desktop")
 
     def test_the_secret_key_survives_a_restart(self):

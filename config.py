@@ -48,29 +48,10 @@ class BaseConfig:
     #: Anzahl vorgeschalteter Reverse Proxys. 0 = direkt erreichbar, dann
     #: werden X-Forwarded-*-Kopfzeilen ignoriert. Hinter nginx: 1.
     TRUSTED_PROXIES = int(os.getenv("SL_OFFICE_TRUSTED_PROXIES", "0"))
-    #: Elternportal mit Aktivierungslinks, Formular und Terminbuchung. Es
-    #: braucht einen aus dem Internet erreichbaren Server und ist in der
-    #: Desktop-Fassung darum ausgeschaltet; siehe :mod:`sl_office.features`.
-    PARENT_PORTAL_ENABLED = _env_bool("SL_OFFICE_PARENT_PORTAL", False)
     #: Zweiter Faktor (Authenticator-App) bei der Anmeldung. Auf dem Server
     #: Pflicht; die Desktop-Fassung lauscht nur auf diesem Rechner und kommt
     #: mit Benutzername und Passwort aus.
     TWO_FACTOR_REQUIRED = _env_bool("SL_OFFICE_TWO_FACTOR", True)
-    MAIL_SERVER = os.getenv("SL_OFFICE_MAIL_SERVER", "localhost")
-    MAIL_PORT = int(os.getenv("SL_OFFICE_MAIL_PORT", "25"))
-    MAIL_USE_TLS = _env_bool("SL_OFFICE_MAIL_USE_TLS", False)
-    MAIL_USERNAME = os.getenv("SL_OFFICE_MAIL_USERNAME")
-    MAIL_PASSWORD = os.getenv("SL_OFFICE_MAIL_PASSWORD")
-    MAIL_FROM = os.getenv("SL_OFFICE_MAIL_FROM", "noreply@example.invalid")
-    #: Empfänger der Terminbenachrichtigungen an die Schule. Leer = kein Versand.
-    #: Ohne eigene Angabe geht die Nachricht an die Kontaktadresse der Schule.
-    NOTIFY_MAIL = os.getenv("SL_OFFICE_NOTIFY_MAIL", "")
-    #: Vorlauf der Terminerinnerung an die Eltern, in Stunden.
-    APPOINTMENT_REMINDER_HOURS = int(os.getenv("SL_OFFICE_REMINDER_HOURS", "24"))
-    #: Öffentliche Adresse der Anwendung, z. B. "https://anmeldung.example.de".
-    #: Nur der Erinnerungsdienst braucht sie: er läuft ohne Anfrage und kann
-    #: den Link zum Elternbereich sonst nicht bauen.
-    PUBLIC_BASE_URL = os.getenv("SL_OFFICE_PUBLIC_BASE_URL", "").rstrip("/")
 
     # Briefkopf der Elternschreiben. Die Schule pflegt die Angaben unter
     # „Verwaltung → Schulprofil“ (siehe sl_office.school_profile); was dort
@@ -95,7 +76,6 @@ class BaseConfig:
     #: Pfade zu Logo und Unterschrift; im Schulprofil hochgeladene Bilder gehen vor.
     SCHOOL_LOGO = os.getenv("SL_OFFICE_SCHOOL_LOGO", "")
     SCHOOL_SIGNATURE = os.getenv("SL_OFFICE_SCHOOL_SIGNATURE", "")
-    MAIL_SUPPRESS_SEND = False
 
 
 class DevelopmentConfig(BaseConfig):
@@ -112,10 +92,6 @@ class TestingConfig(BaseConfig):
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     WTF_CSRF_ENABLED = False
     AUTO_CREATE_DB = True
-    MAIL_SUPPRESS_SEND = True
-    # Die übernommenen Tests prüfen das Portal mit; die Desktop-Fassung ohne
-    # Portal hat eigene Tests, die den Schalter ausdrücklich setzen.
-    PARENT_PORTAL_ENABLED = True
 
 
 class ProductionConfig(BaseConfig):
@@ -168,14 +144,13 @@ class DesktopConfig(BaseConfig):
     """Eigenständige Anwendung auf einem Schulrechner (siehe desktop.py).
 
     Der Server lauscht nur auf 127.0.0.1; Datenbank, hochgeladene Dateien,
-    Sicherungen und der Sitzungsschlüssel liegen im Datenordner. Mails gehen
-    nur hinaus, wenn ein Mailserver eingetragen ist.
+    Sicherungen und der Sitzungsschlüssel liegen im Datenordner.
     """
     ENV_NAME = "desktop"
     AUTO_CREATE_DB = False
     TWO_FACTOR_REQUIRED = _env_bool("SL_OFFICE_TWO_FACTOR", False)
     #: Lokal gibt es keinen Grund für knappe Grenzen: eine Datenbank zum
-    #: Zurückspielen oder das Material zum Anmeldespiel darf größer sein.
+    #: Zurückspielen darf größer sein.
     MAX_CONTENT_LENGTH = int(os.getenv("SL_OFFICE_MAX_UPLOAD_BYTES", 200 * 1024 * 1024))
     FIRST_RUN_SETUP = True
     SESSION_COOKIE_SECURE = False
@@ -191,7 +166,6 @@ class DesktopConfig(BaseConfig):
             "SQLALCHEMY_DATABASE_URI": "sqlite:///" + str(data_dir / "sl-office.db").replace("\\", "/"),
             "UPLOAD_FOLDER": str(data_dir / "uploads"),
             "BACKUP_FOLDER": str(data_dir / "Datensicherungen"),
-            "MAIL_SUPPRESS_SEND": not os.getenv("SL_OFFICE_MAIL_SERVER"),
         }
 
 

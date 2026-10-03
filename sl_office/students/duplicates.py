@@ -8,15 +8,13 @@ Geburtsdatum.
 
 Aufgelöst wird das gegen die Originalliste: sie sagt, welches Datum stimmt.
 Bestehen bleibt aber nicht zwangsläufig der richtig datierte Datensatz, sondern
-der, an dem bereits Arbeit hängt -- Diagnostik, Schulspiel, Elternzugang,
+der, an dem bereits Arbeit hängt -- Diagnostik, Schulspiel, Kriterien,
 Termine. Sein Geburtsdatum wird berichtigt, der leere Zweitdatensatz entfällt.
 Tragen beide Daten, entscheidet niemand automatisch.
 """
 
 from models import Schueler, db
-from sl_office.parent_portal.models import (
-    ActivationGrant, AppointmentBooking, ParentAccess, ParentRegistration,
-)
+from sl_office.appointments.models import AppointmentBooking
 from sl_office.services.student_classification import recalculate_kann_kind
 from sl_office.services.student_deletion import delete_student
 from sl_office.criteria.models import KriteriumWert
@@ -75,9 +73,6 @@ def datenspuren(kind):
             spuren.append(bezeichnung)
 
     for bezeichnung, modell in (("Erfasste Kriterien", KriteriumWert),
-                                ("Elternzugang", ParentAccess),
-                                ("Elternanmeldung", ParentRegistration),
-                                ("Freischaltung", ActivationGrant),
                                 ("Terminbuchung", AppointmentBooking)):
         if modell.query.filter_by(schueler_id=kind.id).first():
             spuren.append(bezeichnung)

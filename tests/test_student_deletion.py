@@ -14,17 +14,14 @@ from werkzeug.security import generate_password_hash  # noqa: E402
 
 from app import create_app  # noqa: E402
 from models import Schueler, User, db  # noqa: E402
-from sl_office import maintenance  # noqa: E402
-from sl_office.parent_portal.access_service import (  # noqa: E402
-    create_activation_grant, create_login_token,
-)
-from sl_office.parent_portal.models import (  # noqa: E402
-    ActivationGrant, AppointmentBooking, AppointmentEvent, AppointmentSlot, ParentAccess,
-    ParentLoginToken, ParentRegistration,
+from sl_office.appointments.models import (  # noqa: E402
+    AppointmentBooking, AppointmentEvent, AppointmentSlot,
 )
 from sl_office.appointments.service import (  # noqa: E402
-    SlotHasBookings, assign_slot, assignable_slots, book_slot, confirmed_booking_count, move_slot,
+    SlotHasBookings, assign_slot, assignable_slots, confirmed_booking_count, move_slot,
 )
+from sl_office.criteria import service as criteria  # noqa: E402
+from sl_office.criteria.models import KriteriumWert  # noqa: E402
 from sl_office.services.student_deletion import (  # noqa: E402
     delete_all_students, delete_student,
 )
@@ -82,87 +79,62 @@ class StudentDeletionTests(unittest.TestCase):
         self.assertEqual(self.client.get(f"/schueler/{self.student_id}").status_code, 200)
 
 
-class PortalDataDeletionTests(unittest.TestCase):
-    """Beim Löschen eines Kindes müssen auch seine Elternportal-Daten verschwinden.
+class DependentDataDeletionTests(unittest.TestCase):
+    """Beim Löschen eines Kindes verschwinden auch Termin und erfasste Kriterien.
 
-    Sonst bleiben sie als Waisen liegen, und weil SQLite die freigewordene
-    Zeilennummer neu vergibt, erbt sie das nächste angelegte Kind.
+    Sonst blieben sie als Waisen liegen, und weil SQLite die freigewordene
+    Zeilennummer neu vergibt, erbte sie das nächste angelegte Kind.
     """
 
     def setUp(self):
         self.app = create_app("testing")
         with self.app.app_context():
             student = Schueler(vorname="Test", nachname="Mustermann")
-            db.session.add(student)
-            db.session.flush()
-            _, self.token = create_activation_grant(student.id, "first_access")
             event = AppointmentEvent(title="Anmeldung", school_year=2027, status="published")
-            db.session.add(event)
+            db.session.add_all([student, event])
             db.session.flush()
-            start = datetime.datetime.now(datetime.UTC).replace(tzinfo=None, minute=0, second=0,
-                                                                microsecond=0) + datetime.timedelta(days=7)
+            start = datetime.datetime(2026, 10, 14, 7, 0)
             slot = AppointmentSlot(event_id=event.id, starts_at=start,
                                    ends_at=start + datetime.timedelta(minutes=40))
             db.session.add(slot)
+            db.session.flush()
+            assign_slot(slot.id, student.id)
+            kriterium = criteria.kriterien("diagnostik")[0]
+            db.session.add(KriteriumWert(kriterium_id=kriterium.id, schueler_id=student.id, wert="3"))
             db.session.commit()
-            self.student_id, self.slot_id = student.id, slot.id
+            self.student_id = student.id
 
     def tearDown(self):
         with self.app.app_context():
             db.session.remove()
             db.drop_all()
 
-    def _set_up_parent(self):
-        """Zugang aktivieren, Formular anlegen, Termin buchen, Anmeldelink erzeugen."""
-        client = self.app.test_client()
-        client.post(f"/eltern/aktivieren/{self.token}",
-                    data={"email": "eltern@example.de", "display_name": "Familie Mustermann"},
-                    follow_redirects=True)
-        client.get("/eltern/formular")
-        client.post("/eltern/formular/kind",
-                    data={"kind_vorname": "Test", "kind_nachname": "Mustermann", "action": "save"},
-                    follow_redirects=True)
-        client.post(f"/eltern/termine/{self.slot_id}/buchen", follow_redirects=True)
-        with self.app.app_context():
-            access = db.session.scalar(db.select(ParentAccess))
-            create_login_token(access.id)
-            db.session.commit()
-
     def _counts(self):
         with self.app.app_context():
-            return {model.__tablename__: db.session.query(model).count()
-                    for model in (ParentAccess, ActivationGrant, ParentRegistration,
-                                  AppointmentBooking, ParentLoginToken)}
+            return (db.session.query(AppointmentBooking).count(),
+                    db.session.query(KriteriumWert).count())
 
     def _delete(self):
         with self.app.app_context():
-            student = db.session.get(Schueler, self.student_id)
-            delete_student(student, self.app.config["UPLOAD_FOLDER"])
+            delete_student(db.session.get(Schueler, self.student_id),
+                           self.app.config["UPLOAD_FOLDER"])
 
-    def test_the_setup_really_creates_portal_data(self):
-        self._set_up_parent()
-        self.assertEqual(self._counts(), {"parent_access": 1, "activation_grant": 1,
-                                          "parent_registration": 1, "appointment_booking": 1,
-                                          "parent_login_token": 1})
+    def test_the_setup_really_creates_dependent_data(self):
+        self.assertEqual(self._counts(), (1, 1))
 
-    def test_deleting_the_student_takes_the_portal_data_with_it(self):
-        self._set_up_parent()
+    def test_deleting_the_student_takes_the_dependent_data_with_it(self):
         self._delete()
-        self.assertEqual(set(self._counts().values()), {0})
+        self.assertEqual(self._counts(), (0, 0))
 
     def test_a_new_student_inherits_nothing_from_the_reused_id(self):
-        self._set_up_parent()
         self._delete()
         with self.app.app_context():
-            successor = Schueler(vorname="Anderes", nachname="Mustermann")
+            successor = Schueler(vorname="Neu", nachname="Kind")
             db.session.add(successor)
             db.session.commit()
-            # SQLite vergibt die freigewordene Zeilennummer erneut.
-            self.assertEqual(successor.id, self.student_id)
-            self.assertIsNone(db.session.scalar(db.select(ParentAccess).where(
-                ParentAccess.schueler_id == successor.id)))
-            self.assertIsNone(db.session.scalar(db.select(ParentRegistration).where(
-                ParentRegistration.schueler_id == successor.id)))
+            self.assertEqual(criteria.werte(successor.id, "diagnostik"), {})
+            self.assertIsNone(db.session.scalar(db.select(AppointmentBooking).where(
+                AppointmentBooking.schueler_id == successor.id)))
 
     def test_sqlite_actually_enforces_foreign_keys(self):
         # Zweite Verteidigungslinie: ohne diese Einstellung bleibt jedes
@@ -170,19 +142,6 @@ class PortalDataDeletionTests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(
                 db.session.execute(db.text("PRAGMA foreign_keys")).scalar(), 1)
-
-    def test_the_cleanup_command_finds_and_removes_leftovers(self):
-        self._set_up_parent()
-        with self.app.app_context():
-            # Ein Kind so löschen, wie es die alte Fassung tat: ohne die Portaldaten.
-            db.session.execute(db.text("PRAGMA foreign_keys=OFF"))
-            db.session.delete(db.session.get(Schueler, self.student_id))
-            db.session.commit()
-            self.assertEqual(set(maintenance.orphaned_portal_records()),
-                             {"parent_access", "activation_grant", "parent_registration",
-                              "appointment_booking"})
-            maintenance.delete_orphaned_portal_records()
-            self.assertEqual(maintenance.orphaned_portal_records(), {})
 
 
 class SlotReleaseTests(unittest.TestCase):
@@ -201,8 +160,6 @@ class SlotReleaseTests(unittest.TestCase):
             start = (now + datetime.timedelta(days=10)).replace(minute=0, second=0, microsecond=0)
             event = AppointmentEvent(
                 title="Anmeldung", school_year=2027, status="published",
-                booking_opens_at=now - datetime.timedelta(days=1),
-                booking_closes_at=start + datetime.timedelta(days=5),
                 slot_days_from=start.date(), slot_days_until=start.date(),
             )
             leaving = Schueler(vorname="Weg", nachname="Damit")
@@ -211,15 +168,12 @@ class SlotReleaseTests(unittest.TestCase):
             db.session.flush()
             slot = AppointmentSlot(event_id=event.id, capacity=1, starts_at=start,
                                    ends_at=start + datetime.timedelta(minutes=40))
-            access = ParentAccess(schueler_id=waiting.id, status="active",
-                                  email_normalized="wartet@example.de", display_name="Wartende")
-            db.session.add_all([slot, access])
+            db.session.add(slot)
             db.session.flush()
             assign_slot(slot.id, leaving.id)
             db.session.commit()
             self.event_id, self.slot_id = event.id, slot.id
             self.leaving_id, self.waiting_id = leaving.id, waiting.id
-            self.access_id = access.id
 
     def tearDown(self):
         with self.app.app_context():
@@ -250,10 +204,10 @@ class SlotReleaseTests(unittest.TestCase):
             self.assertIsNotNone(db.session.get(AppointmentSlot, self.slot_id))
             self.assertEqual(db.session.query(AppointmentBooking).count(), 0)
 
-    def test_another_family_can_book_the_freed_slot(self):
+    def test_another_child_can_get_the_freed_slot(self):
         self._delete_leaving()
         with self.app.app_context():
-            booking = book_slot(self.slot_id, self.waiting_id, self.access_id)
+            booking = assign_slot(self.slot_id, self.waiting_id)
             db.session.commit()
             self.assertEqual(booking.status, "confirmed")
 

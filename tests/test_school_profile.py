@@ -13,7 +13,7 @@ from werkzeug.security import generate_password_hash  # noqa: E402
 from app import create_app  # noqa: E402
 from models import User, db  # noqa: E402
 from sl_office import school_profile  # noqa: E402
-from sl_office.parent_portal import letterhead  # noqa: E402
+from sl_office.briefe import letterhead  # noqa: E402
 
 
 def _png(color=(200, 30, 30)):

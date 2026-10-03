@@ -5,7 +5,7 @@ import datetime
 from flask import Blueprint, current_app, flash, redirect, render_template, request, send_file, session, url_for
 from flask_login import login_required
 
-from forms import SchuelerForm, SchuelerImportForm, StadtImportForm
+from forms import SchuelerForm, StadtImportForm
 from models import AOSF, Diagnostik, Rueckstellung, SchulaerztlicheUntersuchung, Schueler, db
 from sl_office.authorization import role_required
 from sl_office.services.student_classification import recalculate_kann_kind

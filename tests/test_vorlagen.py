@@ -1,4 +1,4 @@
-"""Vorlagen der Schule und der verbesserte Import der Liste der Stadt."""
+"""Laufzettel der Schule und der verbesserte Import der Liste der Stadt."""
 
 import os
 import unittest
@@ -89,36 +89,6 @@ class LaufzettelTests(_Fixture, unittest.TestCase):
         self.assertIn("keinen einzigen Punkt", response.get_data(as_text=True))
         with self.app.app_context():
             self.assertTrue(vorlagen.ist_standard())
-
-
-class MaterialTests(_Fixture, unittest.TestCase):
-
-    def _hochladen(self, payload, name="Material.pdf"):
-        return self.client.post("/admin/vorlagen", data={
-            "action": "material", "material": (BytesIO(payload), name)},
-            content_type="multipart/form-data", follow_redirects=True)
-
-    def test_material_is_embedded_in_the_protocol(self):
-        self._hochladen(_pdf(3, "Gesprächsleitfaden"))
-        page = self.client.get("/admin/vorlagen").get_data(as_text=True)
-        self.assertIn("3 Seiten", page)
-        text = _text(self.client.get("/admin/vorlagen/vorschau/protokoll").data)
-        self.assertIn("Gesprächsleitfaden 3", text)
-        self.assertIn("Mia", text)
-
-        self.client.post("/admin/vorlagen", data={"action": "material_entfernen"})
-        text = _text(self.client.get("/admin/vorlagen/vorschau/protokoll").data)
-        self.assertNotIn("Gesprächsleitfaden", text)
-
-    def test_non_pdf_files_are_refused(self):
-        response = self._hochladen(b"keine PDF-Datei", "notiz.pdf")
-        self.assertIn("PDF-Datei", response.get_data(as_text=True))
-        with self.app.app_context():
-            self.assertIsNone(vorlagen.material())
-
-    def test_broken_pdfs_are_refused(self):
-        response = self._hochladen(b"%PDF-1.4 kaputt", "kaputt.pdf")
-        self.assertIn("beschädigt", response.get_data(as_text=True))
 
 
 CSV_SEMIKOLON = (

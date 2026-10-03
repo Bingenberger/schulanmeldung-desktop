@@ -247,7 +247,7 @@ def import_rows(staged, mapping):
         raise InvalidWorkbook("Die Zuordnung passt nicht zur hochgeladenen Datei.")
     # Eine Spalte zweimal zuzuordnen ist immer ein Versehen -- und ein teures:
     # So stand im Jahrgang 2027 der Name des Vaters in der Kita-Spalte, und das
-    # fiel erst Monate später auf einem gedruckten Protokollbogen auf.
+    # fiel erst Monate später auf einem gedruckten Bogen auf.
     belegt = {}
     for feld, spalte in mapping.items():
         if spalte:

@@ -18,11 +18,6 @@
       <span>
         <strong>{{ module.label }}</strong><br>
         <span class="small text-muted">{{ module.description }}</span>
-        {% if module.needs_portal and not parent_portal_enabled %}
-        <br><span class="small text-warning-emphasis">
-          <i class="bi bi-exclamation-triangle"></i> Ohne Elternportal kommen hier keine Rückmeldungen an.
-        </span>
-        {% endif %}
       </span>
     </label>
     {% endfor %}

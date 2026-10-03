@@ -14,7 +14,7 @@ from werkzeug.security import check_password_hash, generate_password_hash  # noq
 
 from app import create_app  # noqa: E402
 from models import AOSF, RecoveryCode, Schueler, User, db  # noqa: E402
-from sl_office.parent_portal.models import AuditEvent  # noqa: E402
+from models import AuditEvent  # noqa: E402
 
 NEW_PASSWORD = "neues-sicheres-passwort"
 

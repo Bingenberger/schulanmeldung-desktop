@@ -13,13 +13,10 @@ from forms import MIN_PASSWORD_LENGTH, PasswordResetForm, SettingsForm, UserAddF
 from models import Einschulungsjahr, GlobalSettings, User, db
 from sl_office.authorization import role_required
 from sl_office import features
-from sl_office.features import parent_portal_enabled, portal_required
 from sl_office import school_profile, vorlagen
 from sl_office.services.student_classification import recalculate_kann_kind
 from sl_office.services.student_deletion import delete_all_students
-from sl_office.parent_portal.models import ParentAccess, ParentRegistration
-from sl_office.parent_portal.access_service import create_activation_grant
-from sl_office.parent_portal import letterhead, letters, registration_form, registration_pdf
+from sl_office.briefe import letterhead, letters
 from sl_office.auth import two_factor
 from sl_office import school_year
 from sl_office.admin import backup_service
@@ -250,7 +247,7 @@ def modules_page():
 @admin_bp.route("/vorlagen", methods=["GET", "POST"], endpoint="templates")
 @role_required(["Administrator", "Schulleitung"])
 def templates_page():
-    """Laufzettel der Verwaltungsanmeldung und Material zum Anmeldespiel."""
+    """Laufzettel der Anmeldung."""
     text = None
     if request.method == "POST":
         aktion = request.form.get("action", "")
@@ -262,15 +259,6 @@ def templates_page():
             elif aktion == "laufzettel_standard":
                 vorlagen.laufzettel_zuruecksetzen()
                 meldung = "Der Laufzettel entspricht wieder der Vorbelegung."
-            elif aktion == "material":
-                upload = request.files.get("material")
-                if not upload or not upload.filename:
-                    raise vorlagen.VorlagenFehler("Bitte eine PDF-Datei auswählen.")
-                seiten = vorlagen.material_speichern(upload.read(), upload.filename)
-                meldung = f"Das Material ({seiten} Seiten) wird jetzt in jedes Protokoll eingebunden."
-            elif aktion == "material_entfernen":
-                vorlagen.material_entfernen()
-                meldung = "Das Material wurde entfernt."
             else:
                 abort(400)
         except vorlagen.VorlagenFehler as exc:
@@ -284,28 +272,19 @@ def templates_page():
     return render_template(
         "admin_templates.html",
         laufzettel=text if text is not None else vorlagen.laufzettel_text(),
-        ist_standard=vorlagen.ist_standard(), material=vorlagen.material_info())
+        ist_standard=vorlagen.ist_standard())
 
 
-@admin_bp.get("/vorlagen/vorschau/<art>", endpoint="template_preview")
+@admin_bp.get("/vorlagen/vorschau/laufzettel", endpoint="template_preview")
 @role_required(["Administrator", "Schulleitung"])
-def template_preview(art):
-    """Laufzettel oder Protokoll mit einem Beispielkind, ohne etwas zu speichern."""
+def template_preview():
+    """Der Laufzettel mit einem Beispielkind, ohne etwas zu speichern."""
     from types import SimpleNamespace
-    from sl_office.appointments import admin_protocol_pdf, protocol_pdf
+    from sl_office.appointments import laufzettel_pdf
 
-    beispiel = SimpleNamespace(
-        id=0, vorname="Mia", nachname="Musterkind", strasse="Musterweg 7", plz="12345",
-        ort="Musterstadt", geburtsdatum=datetime.date(datetime.date.today().year - 6, 3, 14),
-        kita="Kita Sonnenschein", kann_kind=False)
-    if art == "laufzettel":
-        payload = admin_protocol_pdf.build(beispiel, letterhead.branding())
-    elif art == "protokoll":
-        payload = protocol_pdf.build(beispiel)
-    else:
-        abort(404)
-    return send_file(BytesIO(payload), mimetype="application/pdf",
-                     download_name=f"Vorschau_{art}.pdf")
+    beispiel = SimpleNamespace(id=0, vorname="Mia", nachname="Musterkind")
+    return send_file(BytesIO(laufzettel_pdf.build(beispiel, letterhead.branding())),
+                     mimetype="application/pdf", download_name="Vorschau_Laufzettel.pdf")
 
 
 # --- Einschulungsjahre ------------------------------------------------------
@@ -497,138 +476,10 @@ def delete_all_students_route():
     return redirect(url_for("admin.settings"))
 
 
-@admin_bp.get("/anmeldungen")
-@role_required(["Administrator", "Schulleitung", "Sekretariat"])
-@portal_required
-def registrations():
-    status = request.args.get("status")
-    query = db.session.query(ParentRegistration, Schueler).join(Schueler, Schueler.id == ParentRegistration.schueler_id)
-    if status in {"draft", "submitted", "in_review", "completed"}:
-        query = query.filter(ParentRegistration.status == status)
-    entries = query.order_by(ParentRegistration.updated_at.desc()).all()
-    return render_template("admin_registrations.html", entries=entries, selected_status=status)
-
-
-@admin_bp.route("/anmeldungen/<int:registration_id>", methods=["GET", "POST"])
-@role_required(["Administrator", "Schulleitung", "Sekretariat"])
-@portal_required
-def registration_detail(registration_id):
-    registration = db.get_or_404(ParentRegistration, registration_id)
-    student = db.get_or_404(Schueler, registration.schueler_id)
-    if request.method == "POST":
-        status = request.form.get("status")
-        if status not in {"draft", "submitted", "in_review", "completed"}:
-            flash("Ungültiger Bearbeitungsstatus.", "error")
-        else:
-            registration.status = status
-            # Der Vorgang ist wieder in der Hand der Schule: ein erneuter
-            # Hinweis auf eine Änderung der Eltern ist damit wieder fällig.
-            registration.change_notified_at = None
-            record("registration_status_changed", "parent_registration", registration.id, actor_type="staff", actor_id=current_user.id)
-            db.session.commit()
-            flash("Bearbeitungsstatus gespeichert.")
-            return redirect(url_for("admin.registration_detail", registration_id=registration.id))
-    submitted_by = (db.session.get(ParentAccess, registration.submitted_by_access_id)
-                    if registration.submitted_by_access_id else None)
-    return render_template("admin_registration_detail.html", registration=registration,
-                           student=student, submitted_by=submitted_by,
-                           summary=registration_form.summary(registration.data or {}))
-
-
-@admin_bp.get("/anmeldungen/<int:registration_id>/formular.pdf")
-@role_required(["Administrator", "Schulleitung", "Sekretariat"])
-@portal_required
-def registration_printout(registration_id):
-    """Die Angaben der Eltern auf der amtlichen Vorlage, zum Ausdrucken.
-
-    Wird zur Ansicht ausgeliefert statt als Download: aus dem PDF-Betrachter
-    des Browsers geht der Ausdruck direkt, ohne Umweg über die Ablage.
-    """
-    registration = db.get_or_404(ParentRegistration, registration_id)
-    student = db.get_or_404(Schueler, registration.schueler_id)
-    try:
-        payload = registration_pdf.build(registration.data or {}, student)
-    except Exception:
-        current_app.logger.exception("Registration printout failed",
-                                     extra={"registration_id": registration.id})
-        flash("Das Formular konnte nicht erzeugt werden.", "error")
-        return redirect(url_for("admin.registration_detail", registration_id=registration.id))
-    record("registration_printed", "parent_registration", registration.id,
-           actor_type="staff", actor_id=current_user.id)
-    db.session.commit()
-    name = f"{student.nachname}_{student.vorname}".replace(" ", "-")
-    return send_file(
-        BytesIO(payload), mimetype="application/pdf", as_attachment=False,
-        download_name=f"Schulanmeldung_{name}.pdf",
-    )
-
-
-@admin_bp.get("/anmeldungen/formulare.pdf")
-@role_required(["Administrator", "Schulleitung", "Sekretariat"])
-@portal_required
-def registration_printouts():
-    """Alle übermittelten Anmeldungen in einem PDF, nach Namen sortiert.
-
-    Entwürfe bleiben außen vor -- sie sind noch in Arbeit und taugen nicht zum
-    Abheften. Mit ``?status=`` lässt sich genau das herunterladen, was die
-    Übersicht gerade zeigt.
-    """
-    status = request.args.get("status")
-    query = (db.session.query(ParentRegistration, Schueler)
-             .join(Schueler, Schueler.id == ParentRegistration.schueler_id))
-    if status in {"draft", "submitted", "in_review", "completed"}:
-        query = query.filter(ParentRegistration.status == status)
-    else:
-        query = query.filter(ParentRegistration.status != "draft")
-    eintraege = query.order_by(Schueler.nachname, Schueler.vorname).all()
-    if not eintraege:
-        flash("Es liegen keine übermittelten Anmeldungen zum Drucken vor.")
-        return redirect(url_for("admin.registrations", status=status))
-    try:
-        payload = registration_pdf.build_many(
-            [(registration.data or {}, student) for registration, student in eintraege],
-            title=f"Anmeldeformulare ({len(eintraege)})")
-    except Exception:
-        current_app.logger.exception("Bulk registration printout failed")
-        flash("Die Formulare konnten nicht erzeugt werden.", "error")
-        return redirect(url_for("admin.registrations", status=status))
-    for registration, _student in eintraege:
-        record("registration_printed", "parent_registration", registration.id,
-               actor_type="staff", actor_id=current_user.id)
-    db.session.commit()
-    return send_file(BytesIO(payload), mimetype="application/pdf", as_attachment=True,
-                     download_name=f"Anmeldeformulare_{len(eintraege)}.pdf")
-
-
-@admin_bp.route("/elternzugänge", methods=["GET", "POST"])
-@role_required(["Administrator", "Schulleitung", "Sekretariat"])
-@portal_required
-def parent_accesses():
-    generated_link = None
-    if request.method == "POST":
-        try:
-            student_id = int(request.form["student_id"])
-            purpose = request.form.get("purpose", "first_access")
-            if purpose not in {"first_access", "second_access"}:
-                raise ValueError
-            grant, token = create_activation_grant(student_id, purpose, created_by_user_id=current_user.id)
-            db.session.commit()
-            record("activation_grant_created", "activation_grant", grant.id, actor_type="staff", actor_id=current_user.id)
-            db.session.commit()
-            generated_link = url_for("parent_portal.activate", token=token, _external=True)
-            flash("Brief-Link erzeugt. Er wird nur jetzt im Klartext angezeigt.")
-        except (KeyError, ValueError):
-            db.session.rollback()
-            flash("Bitte ein gültiges Kind und einen gültigen Zugangstyp auswählen.", "error")
-    students = Schueler.query.order_by(Schueler.nachname, Schueler.vorname).all()
-    accesses = db.session.query(ParentAccess, Schueler).join(Schueler, Schueler.id == ParentAccess.schueler_id).order_by(ParentAccess.created_at.desc()).all()
-    return render_template("admin_parent_accesses.html", students=students, accesses=accesses, generated_link=generated_link)
-
-
 @admin_bp.route("/elternbriefe", methods=["GET", "POST"])
 @role_required(["Administrator", "Schulleitung", "Sekretariat"])
 def parent_letters():
-    """Print invitation letters carrying two personal access links each."""
+    """Einladungen zur Schulanmeldung drucken, je Kind die passende Fassung."""
     students = Schueler.query.order_by(Schueler.nachname, Schueler.vorname).all()
     if request.method == "POST":
         selection = request.form.getlist("student_ids", type=int)
@@ -637,41 +488,32 @@ def parent_letters():
             flash("Bitte mindestens ein Kind auswählen.", "error")
             return redirect(url_for("admin.parent_letters"))
         year = school_year.active_year()
-        reissue = request.form.get("reissue") == "1"
         try:
-            buffer, issued = letters.build_letters(
+            buffer = letters.build_letters(
                 chosen,
                 letterhead.branding(),
-                (lambda token: url_for("parent_portal.activate", token=token, _external=True))
-                if parent_portal_enabled() else None,
-                created_by_user_id=current_user.id,
                 deadline=request.form.get("deadline", "").strip() or None,
                 period=request.form.get("period", "").strip() or None,
                 school_year=f"{year}/{year + 1}" if year else None,
-                reissue=reissue,
             )
-            record("parent_letters_reissued" if reissue else "parent_letters_created",
-                   "schueler", None, actor_type="staff", actor_id=current_user.id)
+            record("parent_letters_created", "schueler", None,
+                   actor_type="staff", actor_id=current_user.id)
             db.session.commit()
         except Exception:
             db.session.rollback()
             current_app.logger.exception("Parent letter generation failed")
             flash("Die Briefe konnten nicht erzeugt werden.", "error")
             return redirect(url_for("admin.parent_letters"))
-        current_app.logger.info(
-            "Parent letters created",
-            extra={"children": len(chosen), "tokens": issued, "reissue": reissue})
+        current_app.logger.info("Parent letters created", extra={"children": len(chosen)})
         return send_file(
             buffer, as_attachment=True, mimetype="application/pdf",
             download_name=f"Elternschreiben_{datetime.date.today():%Y%m%d}.pdf",
         )
 
-    pending = {student.id for student in letters.students_without_access(students)}
-    redeemed = {student.id: letters.redeemed_purposes(student.id) for student in students}
     # Kinder mit vergebenem Termin bekommen die Fassung, die ihn nennt.
     appointments = {student.id: letters.appointment_label(student.id) for student in students}
     return render_template(
-        "admin_parent_letters.html", students=students, pending=pending, redeemed=redeemed,
+        "admin_parent_letters.html", students=students,
         appointments={key: value for key, value in appointments.items() if value},
     )
 
@@ -685,7 +527,7 @@ def parent_letter_text():
     bearbeitet wird, steht in ``variante``; beide werden getrennt gespeichert.
     """
     key = request.values.get("variante", letters.TEXT_KEY)
-    if key not in letters.variants():
+    if key not in letters.VARIANTS:
         key = letters.TEXT_KEY
     text = letters.stored_text(key)
     problems = []
@@ -722,23 +564,7 @@ def parent_letter_text():
 
     return render_template(
         "admin_parent_letter_text.html", text=text, problems=problems,
-        fields=letters.variant(key)["fields"], marker=letters.ACCESS_MARKER,
+        fields=letters.variant(key)["fields"],
         is_default=text == letters.variant(key)["default"],
-        variants=letters.variants(), current_key=key,
+        variants=letters.VARIANTS, current_key=key,
     )
-
-
-@admin_bp.post("/elternzugänge/<int:access_id>/<action>")
-@role_required(["Administrator", "Schulleitung", "Sekretariat"])
-@portal_required
-def parent_access_action(access_id, action):
-    access = db.get_or_404(ParentAccess, access_id)
-    if action not in {"lock", "revoke", "activate"}:
-        flash("Ungültige Aktion.", "error")
-    else:
-        access.status = {"lock": "locked", "revoke": "revoked", "activate": "active"}[action]
-        access.security_version += 1
-        record("parent_access_" + action, "parent_access", access.id, actor_type="staff", actor_id=current_user.id)
-        db.session.commit()
-        flash("Elternzugang aktualisiert.")
-    return redirect(url_for("admin.parent_accesses"))

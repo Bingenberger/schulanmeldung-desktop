@@ -7,9 +7,9 @@
 >
 > Unterschiede bisher:
 >
-> - **Kein Elternportal:** ohne `SL_OFFICE_PARENT_PORTAL=1` sind Elternseiten,
->   Elternzugänge und eingegangene Anmeldungen abgeschaltet; die Elternbriefe
->   laden ohne Zugangslinks zur Terminvereinbarung ein.
+> - **Kein Elternportal, kein Tag der offenen Tür:** beides ist ausgebaut. Die
+>   Elternbriefe laden ohne Zugangslinks zur Terminvereinbarung ein, Termine
+>   vergibt die Schule.
 > - **Schulprofil in der Anwendung:** Name, Anschrift, Schulleitung, Logo und
 >   Unterschrift pflegt jede Schule unter *Verwaltung → Schulprofil*.
 > - **Module:** unter *Verwaltung → Module* schaltet jede Schule ab, was sie
@@ -20,9 +20,9 @@
 >   Mehrfachauswahl, Freitext, Datum). Vorbelegt ist der bisherige Katalog;
 >   Werte aus den alten festen Spalten werden dabei übernommen.
 > - **Vorlagen:** unter *Verwaltung → Vorlagen* pflegt jede Schule die
->   Checkliste des Laufzettels und lädt ihr Material zum Anmeldespiel als PDF
->   hoch; die Liste der Stadt darf auch eine CSV-Datei sein, die
->   Spaltenzuordnung wird für das nächste Jahr gemerkt.
+>   Checkliste des Laufzettels Anmeldung. Protokollbögen druckt die Anwendung
+>   nicht – das handhabt jede Schule anders. Die Liste der Stadt darf auch eine
+>   CSV-Datei sein, die Spaltenzuordnung wird für das nächste Jahr gemerkt.
 >
 > Fehlerbehebungen aus der Serverfassung lassen sich über den Remote `upstream`
 > mit `git cherry-pick` übernehmen.
@@ -79,47 +79,27 @@ hinter nginx; Änderungen kommen per `git push` auf den Server.
 
 ## Funktionsumfang
 
-**Interne Verwaltung** (Anmeldung mit Benutzername, Passwort und
-Zwei-Faktor-Bestätigung)
+Anmeldung mit Benutzername und Passwort (auf dem Server zusätzlich mit
+Zwei-Faktor-Bestätigung).
 
 - Schülerliste mit Filtern, Einzelansicht, Anlegen und Bearbeiten
-- Import aus Excel-Listen und aus den Stadtlisten
-- Diagnostik, Schulanmeldespiel, Kita-Bericht, Freundeswünsche
-- Schulärztliche Untersuchung mit Gutachten-Upload
+- Import aus Excel-Listen und aus den Listen der Stadt (XLSX oder CSV)
+- Pädagogische Diagnostik, Schulspiel, Schularzt mit frei anlegbaren
+  Kriterien; Kita-Bericht, Freundeswünsche
 - AO-SF-Verfahren und Rückstellung, jeweils mit Dokumenten
 - Klassenbildung mit Zuweisung und Klassenmappe als PDF
 - Förderkurse einzeln und im Stapel, Betreuung im Stapel
 - PDF-Karteikarten, Klassenmappe, Förderkursliste; Klassenlisten als Excel
 - Einschulungsjahre: alle Daten sind auf ein Schuljahr eingegrenzt, ältere
   Jahrgänge lassen sich lesend ansehen
-- Administration: Benutzer, Einstellungen, Datensicherung, Elternbriefe und
-  deren Text, Elternzugänge, eingegangene Anmeldungen
-- Benutzerverwaltung: Zugänge anlegen und löschen, Passwort zurücksetzen,
-  Zwei-Faktor-Anmeldung zurücksetzen
-- Elternbrief in zwei Fassungen: Eltern wählen den Termin selbst, oder die
-  Schule gibt ihn vor — je Kind wird beim Druck die passende gesetzt
-- eingegangene Anmeldungen als ausgefülltes `Schulanmeldung.pdf` zum Ausdrucken
-  für den Termin vor Ort — einzeln oder alle übermittelten in einem PDF
-- Protokollbögen für das Anmeldespiel: Deckblatt mit Termin, Namen, Anschrift
-  und Kita, das eigene Material der Schule und ein Auswertungsbogen aus den
-  Kriterien — alle auf einmal, nach Termin sortiert
-- Laufzettel für die Verwaltungsanmeldung, im Briefkopf der Schule gesetzt, mit
-  Name, Termin und einem Vermerk zur elektronisch übermittelten Anmeldung
-
-**Elternportal** (`/eltern`)
-
-- Aktivierung über einen Besitzlink aus dem Elternbrief, danach dauerhafter
-  Zugang an einer bestätigten E-Mail-Adresse
-- mehrstufiges Anmeldeformular, das intern geprüft und erst dann übernommen wird
-- beide Sorgeberechtigten bearbeiten dasselbe Formular; sie sehen, wer es
-  abgesendet hat, und eine Änderung danach setzt den Vorgang zurück auf
-  „Übermittelt“ und meldet sich per Mail bei der Schule
-- Terminbuchung für das Anmeldegespräch, mit Bestätigung per Mail samt
-  Kalenderdatei und einer Erinnerung am Vortag
-- selbst gebuchte Termine lassen sich bis zur Frist stornieren; von der Schule
-  vorgegebene nicht — dort verweist das Portal an die Schule
-- Anmeldezeitraum und Gesprächstage werden getrennt festgelegt: gebucht wird
-  regelmäßig Wochen vor dem Gespräch
+- Terminplanung für das Anmeldegespräch: Gesprächstage, Zeitfenster,
+  Vergabe an die Kinder, Liste der Kinder ohne Termin, Kalenderexport
+- Elternbrief in zwei Fassungen: mit vergebenem Termin oder mit der Bitte,
+  einen Termin zu vereinbaren — je Kind wird beim Druck die passende gesetzt
+- Laufzettel Anmeldung, im Briefkopf der Schule gesetzt, mit Name und Termin —
+  einzeln oder für alle Kinder nach Termin sortiert
+- Administration: Benutzer, Einstellungen, Schulprofil, Module, Kriterien,
+  Vorlagen, Datensicherung mit Zurückspielen
 
 ## Aufbau
 
@@ -128,22 +108,27 @@ Zwei-Faktor-Bestätigung)
 | `app.py` | Anwendungsfabrik `create_app`, historische Routen (Diagnostik, Klassen, Exporte) |
 | `models.py` | Schüler, Diagnostik, AO-SF, Rückstellung, Benutzer, Einschulungsjahr |
 | `forms.py` | WTForms-Formulare der internen Oberfläche |
-| `config.py` | Konfigurationsprofile `development`, `testing`, `production` |
+| `config.py` | Konfigurationsprofile `development`, `testing`, `production`, `desktop` |
+| `desktop.py` | Starter der Windows-Fassung |
 | `security.py` | CSRF-Schutz und Sicherheitskopfzeilen |
 | `document_service.py` | Auflösung hochgeladener Dateien über ihren Fachdatensatz |
 | `sl_office/auth/` | Anmeldung, Zwei-Faktor-Verfahren, Wiederherstellungscodes |
 | `sl_office/students/` | Import, Auswahl, Anlegen und Bearbeiten von Schülern |
 | `sl_office/admin/` | Administration einschließlich Datensicherung |
-| `sl_office/appointments/` | Terminserien, Zeitfenster und Buchungen |
-| `sl_office/parent_portal/` | Elternportal, Elternbriefe, Briefkopf, Mailversand |
+| `sl_office/appointments/` | Terminserien, Zeitfenster, Vergabe, Laufzettel |
+| `sl_office/briefe/` | Elternbriefe und Briefkopf |
+| `sl_office/criteria/` | frei anlegbare Kriterien der Bögen |
+| `sl_office/features.py` | abschaltbare Module |
+| `sl_office/school_profile.py`, `sl_office/vorlagen.py` | Schulprofil und Laufzettel-Vorlage |
 | `sl_office/school_year.py` | zentrale Eingrenzung aller Abfragen auf ein Einschulungsjahr |
 | `sl_office/authorization.py` | `role_required` für die vier Rollen |
 | `sl_office/audit.py` | Protokollierung sicherheitsrelevanter Vorgänge |
-| `templates/`, `assets/` | Oberfläche, Briefkopf-Logo, Unterschrift, Schriften |
+| `templates/`, `static/`, `assets/` | Oberfläche, mitgelieferte Bibliotheken, Schriften |
+| `packaging/` | PyInstaller-Bauplan und Inno-Setup-Skript |
 | `migrations/` | Alembic-Migrationen |
 | `tests/` | Tests (unittest) |
 | `deploy/` | nginx-Vorlage, Git-Hook, sudoers-Regel |
-| `docs/` | Architektur- und Sicherheitskonzept, Betrieb, Migrationen |
+| `docs/` | Architektur- und Sicherheitskonzept, Betrieb, Migrationen (Serverfassung) |
 
 Rollen: `Administrator`, `Schulleitung`, `Foerderlehrkraft`, `Sekretariat`.
 

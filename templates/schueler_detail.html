@@ -99,11 +99,8 @@
             <div class="d-flex gap-2">
                 {% if current_user.role in ['Administrator', 'Schulleitung', 'Sekretariat'] %}
                 <a class="btn btn-sm btn-outline-danger" target="_blank"
-                   href="{{ url_for('appointments.protocol', student_id=schueler.id) }}">
-                    <i class="bi bi-file-earmark-pdf"></i> Protokollbogen</a>
-                <a class="btn btn-sm btn-outline-danger" target="_blank"
-                   href="{{ url_for('appointments.admin_protocol', student_id=schueler.id) }}">
-                    <i class="bi bi-file-earmark-pdf"></i> Verwaltungsanmeldung</a>
+                   href="{{ url_for('appointments.laufzettel', student_id=schueler.id) }}">
+                    <i class="bi bi-file-earmark-pdf"></i> Laufzettel</a>
                 {% endif %}
                 {% if appointment_event %}
                 <a class="btn btn-sm btn-outline-secondary"
@@ -116,11 +113,6 @@
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div>
                     <span class="fs-5 fw-semibold">{{ appointment_label }}</span>
-                    {% if appointment.source == 'staff' %}
-                    <span class="badge bg-secondary ms-2"><i class="bi bi-person-badge"></i> von uns zugewiesen</span>
-                    {% else %}
-                    <span class="badge bg-primary ms-2"><i class="bi bi-house-door"></i> selbst gebucht</span>
-                    {% endif %}
                 </div>
                 {% if current_user.role in ['Administrator', 'Schulleitung', 'Sekretariat'] %}
                 <form method="post" action="{{ url_for('appointments.cancel', booking_id=appointment.id) }}"

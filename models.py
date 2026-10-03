@@ -376,3 +376,21 @@ class GlobalSettings(db.Model):
     einschulungsjahr = db.Column(db.Integer,  default=2026) # Default für Laufzeit
     frist_aosf = db.Column(db.Date, nullable=True) # Optional
     anzahl_klassen = db.Column(db.Integer, default=3)
+
+
+def utcnow():
+    return datetime.datetime.now(datetime.UTC)
+
+
+class AuditEvent(db.Model):
+    """Minimal immutable audit record; never store tokens or form payloads here."""
+    __tablename__ = "audit_event"
+    id = db.Column(db.Integer, primary_key=True)
+    occurred_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow, index=True)
+    actor_type = db.Column(db.String(20), nullable=False)
+    actor_id = db.Column(db.Integer)
+    action = db.Column(db.String(80), nullable=False, index=True)
+    object_type = db.Column(db.String(80), nullable=False)
+    object_id = db.Column(db.Integer)
+    outcome = db.Column(db.String(20), nullable=False, default="success")
+    request_id = db.Column(db.String(64))

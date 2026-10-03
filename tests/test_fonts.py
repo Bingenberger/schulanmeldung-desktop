@@ -15,7 +15,7 @@ os.environ["SL_OFFICE_ENV"] = "testing"
 
 from pypdf import PdfReader  # noqa: E402
 
-from sl_office.parent_portal import letterhead  # noqa: E402
+from sl_office.briefe import letterhead  # noqa: E402
 
 
 class MitgelieferteSchriftenTests(unittest.TestCase):
@@ -59,7 +59,7 @@ class MitgelieferteSchriftenTests(unittest.TestCase):
             self._leeren()
             schule = {"name": "Musterschule", "town": "Niederkassel", "head": "A. Leitung",
                       "contact_mail": "info@example.de"}
-            from sl_office.parent_portal import letters
+            from sl_office.briefe import letters
             puffer = letters.build_preview(schule, letters.DEFAULT_TEXT,
                                            period="27. bis 30. Oktober")
             daten = puffer.getvalue()

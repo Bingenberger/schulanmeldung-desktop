@@ -46,14 +46,6 @@ class ModuleTests(unittest.TestCase):
         for module in features.MODULES:
             self.assertIn(module.label, page)
 
-    def test_open_day_starts_switched_off_without_portal(self):
-        app = create_app("testing", {"PARENT_PORTAL_ENABLED": False})
-        with app.app_context():
-            states = features.module_states()
-            self.assertFalse(states["tag_der_offenen_tuer"])
-            self.assertTrue(states["schulspiel"])
-            db.drop_all()
-
     def test_switched_off_modules_disappear(self):
         everything_but = [key for key in features.MODULE_KEYS
                           if key not in {"schulspiel", "aosf", "klassenbildung"}]
