@@ -7,6 +7,7 @@ läuft, und beendet es wieder.
 
     python desktop.py                 # Entwicklung
     SL-Office.exe                     # gebaute Windows-Fassung (siehe packaging/)
+    SL-Office.app                     # gebaute macOS-Fassung
 
 Wird SL-Office ein zweites Mal gestartet, öffnet sich nur der Browser auf der
 schon laufenden Instanz.
@@ -17,6 +18,7 @@ import json
 import logging
 import os
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -163,7 +165,8 @@ def fenster(url, data_dir, beenden):
     root.resizable(False, False)
     rahmen = ttk.Frame(root, padding=16)
     rahmen.grid()
-    ttk.Label(rahmen, text="SL-Office läuft.", font=("Segoe UI", 12, "bold")).grid(
+    schrift = "Segoe UI" if os.name == "nt" else "TkDefaultFont"
+    ttk.Label(rahmen, text="SL-Office läuft.", font=(schrift, 12, "bold")).grid(
         column=0, row=0, columnspan=3, sticky="w")
     ttk.Label(rahmen, text=f"Adresse: {url}\nDaten: {data_dir}", justify="left").grid(
         column=0, row=1, columnspan=3, sticky="w", pady=(4, 12))
@@ -171,6 +174,8 @@ def fenster(url, data_dir, beenden):
     def ordner_oeffnen():
         if os.name == "nt":
             os.startfile(data_dir)  # noqa: S606 -- Windows-Explorer, fester Pfad
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", data_dir])  # noqa: S603, S607 -- Finder, fester Pfad
         else:
             webbrowser.open(Path(data_dir).as_uri())
 
@@ -183,6 +188,9 @@ def fenster(url, data_dir, beenden):
     ttk.Button(rahmen, text="Datenordner", command=ordner_oeffnen).grid(column=1, row=2, padx=6)
     ttk.Button(rahmen, text="Beenden", command=schliessen).grid(column=2, row=2, padx=(6, 0))
     root.protocol("WM_DELETE_WINDOW", schliessen)
+    if sys.platform == "darwin":
+        # Cmd+Q und "Beenden" im Dock sollen genauso aufräumen wie der Knopf.
+        root.createcommand("::tk::mac::Quit", schliessen)
     root.mainloop()
 
 

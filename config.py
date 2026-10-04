@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import secrets
+import sys
 from datetime import timedelta
 from pathlib import Path
 
@@ -115,14 +116,17 @@ def desktop_data_dir() -> Path:
     """Wo die Desktop-Fassung ihre Daten ablegt.
 
     Unter Windows ``%APPDATA%\\SL-Office`` -- das gehört der angemeldeten
-    Person und wird von der Schul-IT meist mitgesichert. ``SL_OFFICE_DATA_DIR``
-    legt einen anderen Ort fest, etwa ein Netzlaufwerk.
+    Person und wird von der Schul-IT meist mitgesichert. Unter macOS
+    ``~/Library/Application Support/SL-Office``. ``SL_OFFICE_DATA_DIR`` legt
+    einen anderen Ort fest, etwa ein Netzlaufwerk.
     """
     configured = os.getenv("SL_OFFICE_DATA_DIR")
     if configured:
         return Path(configured).expanduser()
     if os.name == "nt" and os.getenv("APPDATA"):
         return Path(os.environ["APPDATA"]) / "SL-Office"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "SL-Office"
     return Path(os.getenv("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "sl-office"
 
 

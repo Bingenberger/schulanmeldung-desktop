@@ -1,7 +1,8 @@
-# Baut die Windows-Fassung: Tests, PyInstaller, Setup mit Inno Setup.
-# Bei jedem Push liegt das Ergebnis als Artefakt am Workflow-Lauf; ein Tag
-# "v1.2.3" legt zusätzlich ein Release mit dem Setup an.
-name: Windows-Build
+# Baut die Desktop-Fassungen: Tests, dann PyInstaller unter Windows (Setup mit
+# Inno Setup) und unter macOS (Disk-Image, je eines für Apple Silicon und Intel).
+# Bei jedem Push liegen die Ergebnisse als Artefakte am Workflow-Lauf; ein Tag
+# "v1.2.3" legt zusätzlich ein Release mit Setup und Disk-Images an.
+name: Desktop-Build
 
 on:
   push:
@@ -29,7 +30,7 @@ jobs:
           SL_OFFICE_ENV: testing
         run: python -m unittest discover -s tests -t .
 
-  build:
+  windows:
     needs: tests
     runs-on: windows-latest
     steps:
@@ -94,3 +95,76 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/SL-Office-Setup-*.exe
+
+  macos:
+    needs: tests
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Abhängigkeiten
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-desktop.txt
+
+      - name: Version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.0.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: PyInstaller
+        env:
+          SL_OFFICE_VERSION: ${{ steps.version.outputs.version }}
+        run: pyinstaller packaging/sl-office.spec --noconfirm
+
+      - name: Probestart der gebauten Fassung
+        run: |
+          export SL_OFFICE_DATA_DIR="$RUNNER_TEMP/sl-office-probe"
+          dist/SL-Office.app/Contents/MacOS/SL-Office &
+          pid=$!
+          ok=0
+          for i in $(seq 60); do
+            sleep 1
+            datei="$SL_OFFICE_DATA_DIR/laufende-instanz.json"
+            if [[ -f "$datei" ]]; then
+              port=$(python -c "import json,sys; print(json.load(open(sys.argv[1]))['port'])" "$datei")
+              if [[ "$(curl -fs "http://127.0.0.1:$port/lebenszeichen")" == "SL-Office" ]]; then
+                ok=1
+                break
+              fi
+            fi
+          done
+          kill "$pid" 2>/dev/null || true
+          tail -n 20 "$SL_OFFICE_DATA_DIR/sl-office.log" 2>/dev/null || true
+          if [[ "$ok" != 1 ]]; then echo "SL-Office hat nicht geantwortet."; exit 1; fi
+
+      - name: Disk-Image bauen
+        run: packaging/macos-dmg.sh "${{ steps.version.outputs.version }}" "${{ matrix.arch }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SL-Office-${{ steps.version.outputs.version }}-macOS-${{ matrix.arch }}
+          path: dist/SL-Office-*.dmg
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/SL-Office-*.dmg

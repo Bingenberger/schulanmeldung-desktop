@@ -39,6 +39,13 @@ class DesktopConfigTests(_DataDir, unittest.TestCase):
         self.assertFalse(app.config["TWO_FACTOR_REQUIRED"])
         self.assertEqual(app.config["ENV_NAME"], "desktop")
 
+    def test_macos_keeps_its_data_in_application_support(self):
+        with mock.patch.dict(os.environ), mock.patch("config.sys.platform", "darwin"), \
+                mock.patch("config.os.name", "posix"):
+            del os.environ["SL_OFFICE_DATA_DIR"]
+            self.assertEqual(desktop_data_dir(),
+                             Path.home() / "Library" / "Application Support" / "SL-Office")
+
     def test_the_secret_key_survives_a_restart(self):
         erster = create_app("desktop").config["SECRET_KEY"]
         zweiter = create_app("desktop").config["SECRET_KEY"]

@@ -5,8 +5,8 @@ Anmeldung bis zur Klassenbildung: Stammdaten, Pädagogische Diagnostik,
 Schulspiel, schulärztliche Untersuchung, AO-SF und Rückstellung, Förderkurse
 und Betreuung, Terminvergabe für das Anmeldegespräch und Elternbriefe.
 
-Diese Fassung läuft als eigenständige Windows-Anwendung auf einem Rechner der
-Schule und lässt sich von jeder Schule selbst einrichten: Schulprofil, Module,
+Diese Fassung läuft als eigenständige Anwendung unter Windows oder macOS auf
+einem Rechner der Schule und lässt sich von jeder Schule selbst einrichten: Schulprofil, Module,
 Kriterien und Vorlagen werden in der Anwendung gepflegt, nicht im Quelltext.
 
 > Entstanden ist sie aus [`schulanmeldung`](https://github.com/Bingenberger/schulanmeldung),
@@ -17,9 +17,12 @@ Kriterien und Vorlagen werden in der Anwendung gepflegt, nicht im Quelltext.
 
 ## Installieren und starten
 
-1. `SL-Office-Setup-<Version>.exe` ausführen – Administratorrechte sind nicht
-   nötig. Das Setup steht unter *Releases* bzw. als Artefakt des Workflows
-   „Windows-Build“.
+1. **Windows:** `SL-Office-Setup-<Version>.exe` ausführen – Administratorrechte
+   sind nicht nötig.
+   **macOS:** `SL-Office-<Version>-macOS-<arm64|x86_64>.dmg` öffnen und SL-Office
+   in den Ordner „Programme“ ziehen (`arm64` für Macs mit Apple-Chip, `x86_64`
+   für Macs mit Intel-Prozessor).
+   Beides steht unter *Releases* bzw. als Artefakt des Workflows „Desktop-Build“.
 2. SL-Office starten. Es öffnet sich im Browser; ein kleines Fenster zeigt, dass
    es läuft, und beendet es wieder. Der eingebaute Webserver ist nur von diesem
    Rechner aus erreichbar (`127.0.0.1`, Port 5050–5059).
@@ -63,7 +66,8 @@ das handhabt jede Schule anders.
 
 ## Daten und Datensicherung
 
-Alles liegt in `%APPDATA%\SL-Office`:
+Alles liegt in `%APPDATA%\SL-Office`, unter macOS in
+`~/Library/Application Support/SL-Office`:
 
 | Pfad | Inhalt |
 | --- | --- |
@@ -94,7 +98,7 @@ Administration darf zurückspielen.
 ```bash
 python3 -m venv venv
 ./venv/bin/pip install -r requirements.txt -r requirements-desktop.txt
-./venv/bin/python desktop.py               # wie die Windows-Fassung, mit Steuerfenster
+./venv/bin/python desktop.py               # wie die gebaute Fassung, mit Steuerfenster
 ```
 
 `desktop.py` legt die Daten unter Linux in `~/.local/share/sl-office` ab (oder
@@ -117,12 +121,14 @@ Das Schema wird ausschließlich über Alembic-Migrationen geändert:
 Hinweise zu älteren Datenbanken aus der Zeit vor den Migrationen stehen in
 [docs/DATENBANKMIGRATIONEN.md](docs/DATENBANKMIGRATIONEN.md).
 
-## Windows-Setup bauen
+## Windows-Setup und macOS-Image bauen
 
-Der Workflow `.github/workflows/windows-build.yml` läuft bei jedem Push: Tests
-unter Linux, dann unter Windows Bau mit PyInstaller (`packaging/sl-office.spec`),
-ein Probestart der gebauten `SL-Office.exe` und das Setup mit Inno Setup
-(`packaging/sl-office.iss`). Das Setup hängt als Artefakt am Workflow-Lauf.
+Der Workflow `.github/workflows/desktop-build.yml` läuft bei jedem Push: Tests
+unter Linux, dann Bau mit PyInstaller (`packaging/sl-office.spec`) und ein
+Probestart der gebauten Fassung – unter Windows mit anschließendem Setup aus
+Inno Setup (`packaging/sl-office.iss`), unter macOS mit einem Disk-Image
+(`packaging/macos-dmg.sh`), je eines für Apple-Chip und Intel. Setup und
+Disk-Images hängen als Artefakte am Workflow-Lauf.
 
 **Neue Version veröffentlichen:** auf `main` einen Tag setzen und pushen, etwa
 
@@ -131,7 +137,8 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-Der Workflow legt dann ein Release mit `SL-Office-Setup-1.0.0.exe` an.
+Der Workflow legt dann ein Release mit `SL-Office-Setup-1.0.0.exe` und den
+beiden Disk-Images an.
 
 Von Hand unter Windows:
 
@@ -141,14 +148,25 @@ pyinstaller packaging\sl-office.spec --noconfirm
 iscc /DAppVersion=1.0.0 packaging\sl-office.iss
 ```
 
+Von Hand unter macOS (baut für den Prozessor des eigenen Rechners):
+
+```bash
+pip install -r requirements.txt -r requirements-desktop.txt
+SL_OFFICE_VERSION=1.0.0 pyinstaller packaging/sl-office.spec --noconfirm
+packaging/macos-dmg.sh 1.0.0
+```
+
 Das Setup ist nicht signiert; Windows SmartScreen warnt deshalb beim ersten
-Start („Weitere Informationen“ → „Trotzdem ausführen“).
+Start („Weitere Informationen“ → „Trotzdem ausführen“). Auch die macOS-Fassung
+ist weder signiert noch notarisiert: macOS verweigert den ersten Start, bis
+SL-Office unter *Systemeinstellungen → Datenschutz & Sicherheit* mit „Dennoch
+öffnen“ freigegeben wird.
 
 ## Aufbau
 
 | Pfad | Inhalt |
 | --- | --- |
-| `desktop.py` | Starter der Windows-Fassung: lokaler Server, Migrationen, Sicherung, Steuerfenster |
+| `desktop.py` | Starter der Desktop-Fassung: lokaler Server, Migrationen, Sicherung, Steuerfenster |
 | `app.py` | Anwendungsfabrik `create_app`, historische Routen (Diagnostik, Klassen, Exporte) |
 | `config.py` | Konfigurationsprofile `desktop`, `development`, `testing`, `production` |
 | `models.py` | Schüler, Diagnostik, AO-SF, Rückstellung, Benutzer, Einschulungsjahr |
@@ -166,7 +184,7 @@ Start („Weitere Informationen“ → „Trotzdem ausführen“).
 | `sl_office/school_year.py` | Eingrenzung aller Abfragen auf ein Einschulungsjahr |
 | `sl_office/authorization.py`, `sl_office/audit.py` | Rollenprüfung, Protokollierung |
 | `templates/`, `static/`, `assets/` | Oberfläche, mitgelieferte Bibliotheken, Schriften |
-| `packaging/` | PyInstaller-Bauplan und Inno-Setup-Skript |
+| `packaging/` | PyInstaller-Bauplan, Inno-Setup-Skript, Disk-Image für macOS |
 | `migrations/` | Alembic-Migrationen |
 | `tests/` | Tests (unittest) |
 | `deploy/`, `docs/` | Betrieb als Server und dessen Dokumentation (aus der Serverfassung übernommen) |
@@ -177,7 +195,7 @@ Der Code kann weiterhin auch als Webanwendung hinter nginx laufen
 (`SL_OFFICE_ENV=production`, Vorlage in `.env.example`, Skripte in `deploy/`).
 Anleitung und Sicherheitskonzept in `docs/` stammen aus der Serverfassung;
 Abschnitte zu Elternportal, Mailversand und Erinnerungen gelten hier nicht.
-Für den Einsatz an einer einzelnen Schule ist die Windows-Fassung der
+Für den Einsatz an einer einzelnen Schule ist die Desktop-Fassung der
 vorgesehene Weg.
 
 ## Datenschutz
@@ -185,7 +203,7 @@ vorgesehene Weg.
 SL-Office verarbeitet personenbezogene Daten von Kindern. Die Desktop-Fassung
 ist nur vom eigenen Rechner aus erreichbar; Benutzerkonten mit Rollen,
 serverseitige Rechteprüfung und Protokollierung bleiben erhalten. Rechner,
-Windows-Benutzerkonto und Sicherungen sind entsprechend zu schützen.
+Benutzerkonto am Rechner und Sicherungen sind entsprechend zu schützen.
 
 Nicht ins Repository gehören (und sind in `.gitignore` ausgenommen): `.env`,
 `instance/`, `uploads/`, `backups/` sowie alle Datenbankdateien.
@@ -193,3 +211,4 @@ Nicht ins Repository gehören (und sind in `.gitignore` ausgenommen): `.env`,
 ## Offen vor einer Weitergabe an andere Schulen
 
 - Setup signieren, damit SmartScreen nicht warnt
+- macOS-Fassung signieren und notarisieren (Apple-Developer-Konto nötig)

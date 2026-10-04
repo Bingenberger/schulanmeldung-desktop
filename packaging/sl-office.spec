@@ -1,11 +1,17 @@
-# PyInstaller-Bauplan für die Windows-Fassung.
+# PyInstaller-Bauplan für die Windows- und die macOS-Fassung.
 #
 #     pyinstaller packaging/sl-office.spec --noconfirm
 #
-# Ergebnis: dist/SL-Office/SL-Office.exe samt Ordner. Ein Ordner statt einer
-# einzelnen EXE: so startet SL-Office schneller und Virenscanner beanstanden
-# es seltener. Das Setup baut anschließend packaging/sl-office.iss.
+# Ergebnis unter Windows: dist/SL-Office/SL-Office.exe samt Ordner. Ein Ordner
+# statt einer einzelnen EXE: so startet SL-Office schneller und Virenscanner
+# beanstanden es seltener. Das Setup baut anschließend packaging/sl-office.iss.
+#
+# Ergebnis unter macOS: zusätzlich dist/SL-Office.app; die Versionsnummer kommt
+# aus der Umgebungsvariablen SL_OFFICE_VERSION. Das Disk-Image baut anschließend
+# packaging/macos-dmg.sh.
 
+import os
+import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_submodules
@@ -48,3 +54,20 @@ exe = EXE(
     icon=str(ROOT / "packaging" / "sl-office.ico") if (ROOT / "packaging" / "sl-office.ico").exists() else None,
 )
 coll = COLLECT(exe, a.binaries, a.datas, name="SL-Office")
+
+if sys.platform == "darwin":
+    version = os.environ.get("SL_OFFICE_VERSION", "0.0.0")
+    app = BUNDLE(
+        coll,
+        name="SL-Office.app",
+        icon=str(ROOT / "packaging" / "sl-office.icns") if (ROOT / "packaging" / "sl-office.icns").exists() else None,
+        bundle_identifier="de.sl-office.desktop",
+        version=version,
+        info_plist={
+            "CFBundleDisplayName": "SL-Office",
+            "CFBundleShortVersionString": version,
+            "CFBundleVersion": version,
+            "NSHighResolutionCapable": True,
+            "CFBundleDevelopmentRegion": "de",
+        },
+    )
