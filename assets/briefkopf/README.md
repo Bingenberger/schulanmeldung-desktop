@@ -18,8 +18,10 @@ Ersatzweise lassen sich Pfade über `SL_OFFICE_SCHOOL_LOGO` bzw.
 
 ReportLab kann nur TrueType-Umrisse einbetten. `FrenteH1-Regular.ttf` ist deshalb
 die aus der systemweit installierten `FrenteH1-Regular.otf` erzeugte
-TrueType-Fassung derselben Schrift. `Calligraffiti.ttf` ist die Google-Font
-(Apache License 2.0).
+TrueType-Fassung derselben Schrift. Frente H1 stammt von Rodrigo Brod (Estudio
+Frente) und steht unter Creative Commons BY-SA (`FrenteH1-LIZENZ.txt`), darf
+also mit Namensnennung und unter derselben Lizenz mitgeliefert werden.
+`Calligraffiti.ttf` ist die Google-Font (Apache License 2.0).
 
 Die Fließtextschrift ist **Carlito** und liegt hier im Projekt. Sie ist metrisch
 mit Calibri deckungsgleich – Zeilen brechen also genau wie in der Writer-Vorlage –

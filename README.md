@@ -192,5 +192,4 @@ Nicht ins Repository gehören (und sind in `.gitignore` ausgenommen): `.env`,
 
 ## Offen vor einer Weitergabe an andere Schulen
 
-- Lizenz der Hausschrift `FrenteH1` klären
 - Setup signieren, damit SmartScreen nicht warnt

@@ -1,0 +1,11 @@
+Frente H1 (Frente Handwritten 01)
+Copyright 2013 Rodrigo Brod - Estudio Frente, http://frente.cc
+
+Lizenz: Creative Commons Attribution-ShareAlike 4.0 International
+http://creativecommons.org/licenses/by-sa/4.0/
+(so in der Schriftdatei selbst vermerkt; Font Squirrel führt die Schrift
+unter CC BY-SA 3.0: https://www.fontsquirrel.com/fonts/frente-h1)
+
+Änderung gegenüber dem Original: FrenteH1-Regular.ttf ist die aus
+FrenteH1-Regular.otf erzeugte TrueType-Fassung; die Zeichenformen sind
+unverändert. Die umgewandelte Datei steht unter derselben Lizenz.
