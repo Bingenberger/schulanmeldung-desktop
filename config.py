@@ -50,8 +50,8 @@ class BaseConfig:
     #: werden X-Forwarded-*-Kopfzeilen ignoriert. Hinter nginx: 1.
     TRUSTED_PROXIES = int(os.getenv("SL_OFFICE_TRUSTED_PROXIES", "0"))
     #: Zweiter Faktor (Authenticator-App) bei der Anmeldung. Auf dem Server
-    #: Pflicht; die Desktop-Fassung lauscht nur auf diesem Rechner und kommt
-    #: mit Benutzername und Passwort aus.
+    #: Pflicht; die Desktop-Fassung lauscht in der Regel nur auf diesem Rechner
+    #: und kommt mit Benutzername und Passwort aus.
     TWO_FACTOR_REQUIRED = _env_bool("SL_OFFICE_TWO_FACTOR", True)
 
     # Briefkopf der Elternschreiben. Die Schule pflegt die Angaben unter
@@ -147,8 +147,9 @@ def _persistent_secret(path: Path) -> str:
 class DesktopConfig(BaseConfig):
     """Eigenständige Anwendung auf einem Schulrechner (siehe desktop.py).
 
-    Der Server lauscht nur auf 127.0.0.1; Datenbank, hochgeladene Dateien,
-    Sicherungen und der Sitzungsschlüssel liegen im Datenordner.
+    Der Server lauscht auf 127.0.0.1, auf Wunsch im lokalen Netz (siehe
+    desktop.py); Datenbank, hochgeladene Dateien, Sicherungen und der
+    Sitzungsschlüssel liegen im Datenordner.
     """
     ENV_NAME = "desktop"
     AUTO_CREATE_DB = False

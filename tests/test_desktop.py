@@ -3,6 +3,7 @@
 import os
 import shutil
 import tempfile
+import urllib.request
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -92,6 +93,69 @@ class DesktopConfigTests(_DataDir, unittest.TestCase):
         self.assertGreater(port, 0)
 
 
+class NetzwerkTests(_DataDir, unittest.TestCase):
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch.dict(os.environ)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        os.environ.pop("SL_OFFICE_NETZWERK", None)
+
+    def test_only_this_computer_unless_chosen(self):
+        self.assertFalse(desktop.netzwerk_gewuenscht(self.data_dir))
+        desktop.netzwerk_merken(self.data_dir, True)
+        self.assertTrue(desktop.netzwerk_gewuenscht(self.data_dir))
+        desktop.netzwerk_merken(self.data_dir, False)
+        self.assertFalse(desktop.netzwerk_gewuenscht(self.data_dir))
+        (self.data_dir / "einstellungen.json").write_text("kaputt", encoding="utf-8")
+        self.assertFalse(desktop.netzwerk_gewuenscht(self.data_dir))
+
+    def test_the_environment_variable_overrides_the_remembered_choice(self):
+        desktop.netzwerk_merken(self.data_dir, True)
+        os.environ["SL_OFFICE_NETZWERK"] = "0"
+        self.assertFalse(desktop.netzwerk_gewuenscht(self.data_dir))
+        os.environ["SL_OFFICE_NETZWERK"] = "1"
+        desktop.netzwerk_merken(self.data_dir, False)
+        self.assertTrue(desktop.netzwerk_gewuenscht(self.data_dir))
+
+    def test_requests_from_outside_private_networks_are_refused(self):
+        for adresse in ("127.0.0.1", "192.168.1.20", "10.0.0.5", "172.16.3.4", "169.254.1.1"):
+            self.assertTrue(desktop.aus_lokalem_netz(adresse), adresse)
+        for adresse in ("8.8.8.8", "93.184.216.34", "", "unsinn"):
+            self.assertFalse(desktop.aus_lokalem_netz(adresse), adresse)
+        app = create_app("testing")
+        app.wsgi_app = desktop.nur_lokales_netz(app.wsgi_app)
+        client = app.test_client()
+        self.assertEqual(client.get("/lebenszeichen").status_code, 200)
+        self.assertEqual(
+            client.get("/lebenszeichen", environ_base={"REMOTE_ADDR": "8.8.8.8"}).status_code, 403)
+        with app.app_context():
+            db.drop_all()
+
+    def test_the_server_switches_between_this_computer_and_the_network(self):
+        app = create_app("testing")
+        port = desktop.freier_port(desktop.NETZ_HOST)
+        url = f"http://{desktop.HOST}:{port}/lebenszeichen"
+        server = desktop.server_starten(app, port)
+        try:
+            self.assertEqual(server.effective_host, desktop.HOST)
+            self.assertEqual(urllib.request.urlopen(url, timeout=5).read(), b"SL-Office")
+            desktop.server_anhalten(server)
+            server = desktop.server_starten(app, port, netzwerk=True)
+            self.assertEqual(server.effective_host, desktop.NETZ_HOST)
+            self.assertEqual(urllib.request.urlopen(url, timeout=5).read(), b"SL-Office")
+            desktop.server_anhalten(server)
+            server = desktop.server_starten(app, port)
+            self.assertEqual(urllib.request.urlopen(url, timeout=5).read(), b"SL-Office")
+        finally:
+            desktop.server_anhalten(server)
+        with self.assertRaises(OSError):
+            urllib.request.urlopen(url, timeout=2)
+        with app.app_context():
+            db.drop_all()
+
+
 class FirstRunTests(unittest.TestCase):
     def setUp(self):
         self.app = create_app("testing", {"FIRST_RUN_SETUP": True})
@@ -107,6 +171,16 @@ class FirstRunTests(unittest.TestCase):
         self.assertIn("/einrichtung", self.client.get("/login").headers["Location"])
         self.assertEqual(self.client.get("/lebenszeichen").get_data(as_text=True), "SL-Office")
         self.assertEqual(self.client.get("/static/vendor/bootstrap/LICENSE").status_code, 200)
+
+    def test_the_setup_is_only_offered_on_the_computer_itself(self):
+        fremd = {"REMOTE_ADDR": "192.168.1.20"}
+        self.assertEqual(self.client.get("/", environ_base=fremd).status_code, 403)
+        self.assertEqual(self.client.get("/einrichtung", environ_base=fremd).status_code, 403)
+        self.client.post("/einrichtung", environ_base=fremd, data={
+            "username": "fremd", "new_password": "lang-genug-123", "confirm_password": "lang-genug-123"})
+        with self.app.app_context():
+            self.assertEqual(User.query.count(), 0)
+        self.assertEqual(self.client.get("/lebenszeichen", environ_base=fremd).status_code, 200)
 
     def test_the_first_account_is_an_administrator(self):
         response = self.client.post("/einrichtung", data={

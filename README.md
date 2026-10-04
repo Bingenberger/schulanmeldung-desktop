@@ -25,7 +25,8 @@ Kriterien und Vorlagen werden in der Anwendung gepflegt, nicht im Quelltext.
    Beides steht unter *Releases* bzw. als Artefakt des Workflows „Desktop-Build“.
 2. SL-Office starten. Es öffnet sich im Browser; ein kleines Fenster zeigt, dass
    es läuft, und beendet es wieder. Der eingebaute Webserver ist nur von diesem
-   Rechner aus erreichbar (`127.0.0.1`, Port 5050–5059).
+   Rechner aus erreichbar (`127.0.0.1`, Port 5050–5059) – es sei denn, SL-Office
+   wird [im lokalen Netz bereitgestellt](#im-lokalen-netz-bereitstellen).
 3. Beim ersten Start das Administrationskonto anlegen.
 4. Unter *Verwaltung* die Schule einrichten:
    - **Schulprofil** – Name, Anschrift, Kontakt, Schulleitung, Logo, Unterschrift
@@ -37,6 +38,32 @@ Kriterien und Vorlagen werden in der Anwendung gepflegt, nicht im Quelltext.
 
 Angemeldet wird mit Benutzername und Passwort. Wer trotzdem einen zweiten
 Faktor möchte, setzt die Umgebungsvariable `SL_OFFICE_TWO_FACTOR=1`.
+
+## Im lokalen Netz bereitstellen
+
+Sollen mehrere Rechner mit denselben Daten arbeiten, läuft SL-Office auf einem
+davon und die anderen greifen im Browser darauf zu. Dazu im Steuerfenster
+**„Im lokalen Netz bereitstellen“** ankreuzen. Das Fenster zeigt dann unter
+„Im Netz“ die Adresse für die anderen Rechner, etwa `http://192.168.1.23:5050`.
+Die Wahl bleibt bis zum Abschalten bestehen, auch über einen Neustart hinweg;
+wer gerade angemeldet ist, bleibt es beim Umschalten.
+
+- Die Firewall fragt beim ersten Einschalten nach: unter Windows den Zugriff für
+  **private Netzwerke** zulassen (dafür können Administratorrechte nötig sein),
+  unter macOS eingehende Verbindungen **erlauben**.
+- SL-Office muss auf dem bereitstellenden Rechner laufen, solange die anderen
+  damit arbeiten. Eine feste Adresse (DHCP-Reservierung im Router) erspart, dass
+  sich die Adresse ändert.
+- Die Verbindung ist **nicht verschlüsselt** (HTTP). Nur in einem
+  vertrauenswürdigen Netz einschalten, etwa dem Verwaltungsnetz – nicht im
+  Schüler- oder Gäste-WLAN. Empfohlen ist dann der zweite Faktor
+  (`SL_OFFICE_TWO_FACTOR=1`).
+- Anfragen von außerhalb privater Netze weist SL-Office ab, und das erste
+  Administrationskonto lässt sich nur am Rechner selbst anlegen.
+
+Ohne Steuerfenster oder fest vorgegeben: die Umgebungsvariable
+`SL_OFFICE_NETZWERK=1` schaltet die Bereitstellung ein, `0` aus; das Häkchen
+ist dann gesperrt.
 
 ## Funktionsumfang
 
@@ -75,6 +102,7 @@ Alles liegt in `%APPDATA%\SL-Office`, unter macOS in
 | `uploads\` | hochgeladene Dokumente |
 | `Datensicherungen\` | automatische Sicherung je Tag, die letzten 14 bleiben |
 | `sl-office.log` | Protokoll |
+| `einstellungen.json` | Wahl aus dem Steuerfenster (Bereitstellung im Netz) |
 
 Ein anderer Ort, etwa ein Netzlaufwerk, lässt sich mit der Umgebungsvariablen
 `SL_OFFICE_DATA_DIR` festlegen. Aktualisieren oder Deinstallieren lässt die
@@ -201,7 +229,8 @@ vorgesehene Weg.
 ## Datenschutz
 
 SL-Office verarbeitet personenbezogene Daten von Kindern. Die Desktop-Fassung
-ist nur vom eigenen Rechner aus erreichbar; Benutzerkonten mit Rollen,
+ist nur vom eigenen Rechner aus erreichbar, solange sie nicht ausdrücklich im
+lokalen Netz bereitgestellt wird; Benutzerkonten mit Rollen,
 serverseitige Rechteprüfung und Protokollierung bleiben erhalten. Rechner,
 Benutzerkonto am Rechner und Sicherungen sind entsprechend zu schützen.
 

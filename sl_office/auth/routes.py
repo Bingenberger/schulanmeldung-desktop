@@ -5,6 +5,7 @@ parks the user id in the session; ``login_user`` runs after the code check, so
 a stolen password alone never yields a usable session.
 """
 
+import ipaddress
 from functools import wraps
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, session, url_for
@@ -33,14 +34,27 @@ def _needs_setup():
             and db.session.scalar(db.select(User.id).limit(1)) is None)
 
 
+def _from_this_computer():
+    """Im lokalen Netz bereitgestellt, darf nur der Rechner selbst das erste Konto anlegen."""
+    try:
+        return ipaddress.ip_address(request.remote_addr or "").is_loopback
+    except ValueError:
+        return False
+
+
 def install_first_run_redirect(app):
     """Solange es kein Konto gibt, führt jede Seite zur Einrichtung."""
     @app.before_request
     def _first_run():
-        if request.endpoint in {"auth.first_run", "static", "lebenszeichen"}:
+        if request.endpoint in {"static", "lebenszeichen"}:
             return None
         if _needs_setup():
-            return redirect(url_for("auth.first_run"))
+            if not _from_this_computer():
+                return ("SL-Office ist noch nicht eingerichtet. Das erste Konto wird am Rechner "
+                        "angelegt, auf dem SL-Office läuft.", 403,
+                        {"Content-Type": "text/plain; charset=utf-8"})
+            if request.endpoint != "auth.first_run":
+                return redirect(url_for("auth.first_run"))
         return None
 
 
